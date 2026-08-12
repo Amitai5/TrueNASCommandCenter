@@ -194,10 +194,15 @@ public sealed class UpdateCoordinator(
             await SaveRunAsync(run, CancellationToken.None);
             logger.LogWarning("Run {RunId} failed with {ReasonCode}", run.Id, code);
 
-            var eventType = exception is TrueNasClientException or InvalidOperationException
-                ? NotificationEventType.TrueNasConnectionFailed
-                : NotificationEventType.ScheduledCheckFailed;
-            if (trigger == RunTrigger.Scheduled && eventType == NotificationEventType.TrueNasConnectionFailed)
+            if (exception is TrueNasClientException or InvalidOperationException)
+            {
+                await DispatchSystemEventAsync(
+                    NotificationEventType.TrueNasConnectionFailed,
+                    code,
+                    message,
+                    CancellationToken.None);
+            }
+            else if (trigger == RunTrigger.Scheduled)
             {
                 await DispatchSystemEventAsync(
                     NotificationEventType.ScheduledCheckFailed,
@@ -206,7 +211,6 @@ public sealed class UpdateCoordinator(
                     CancellationToken.None);
             }
 
-            await DispatchSystemEventAsync(eventType, code, message, CancellationToken.None);
             return ToResult(run, message);
         }
     }
