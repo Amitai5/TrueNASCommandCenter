@@ -1,2 +1,148 @@
-# TrueNASAutoUpdater
-A lightweight TrueNAS app update manager with per-app update policies, scheduled checks, approval-based updates, history tracking, and email/webhook notifications.
+# TrueNAS App Update Manager
+
+A single-container update manager for TrueNAS SCALE / Community Edition 25.10+. It discovers installed apps, applies explicit per-app policies, schedules safe checks and updates, records history, and sends email or generic webhook notifications.
+
+TrueNAS remains the lifecycle authority. Every catalog upgrade, image refresh, and rollback uses the TrueNAS JSON-RPC 2.0 middleware API. The manager never invokes Docker directly.
+
+## V1 features
+
+- Blazor Web App on ASP.NET Core .NET 10
+- SQLite persistence at `/data/app.db`
+- TrueNAS JSON-RPC 2.0 over `ws(s)://…/api/current`
+- Unconfigured, Auto Update, Notify Only, and Ignore app policies
+- Conservative Any / Minor + Patch / Patch version scope
+- Catalog upgrades and image-only refreshes
+- Internal 5-field cron scheduling with IANA timezones
+- Sequential updates with TrueNAS job waiting and post-update verification
+- Manual rollback only to versions returned by TrueNAS
+- Deduplicated Email and Generic Webhook notifications
+- Encrypted API, SMTP, Authorization, and secret-header values
+- Run, attempt, skip, failure, rollback, and notification history
+- Responsive light-first UI
+- Liveness and readiness endpoints
+
+## Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8080` and complete the first-launch wizard. The example uses a named volume and contains no server-specific hostnames, schedules, policies, recipients, endpoints, or host paths.
+
+For a published image, replace `build` and `image` in `compose.yaml` with the image reference used by the TrueNAS Custom App.
+
+### Required container settings
+
+| Setting | Value |
+| --- | --- |
+| Internal port | `8080/tcp` |
+| Persistent mount | `/data` |
+| `ASPNETCORE_URLS` | `http://0.0.0.0:8080` |
+| `DATA_PATH` | `/data` |
+| `APP_ENCRYPTION_KEY` | Optional, base64-encoded 32-byte key |
+| `TRUENAS_APP_ID` | Optional manager app ID used to block self-update |
+
+Do not enable privileged mode, mount `/var/run/docker.sock`, use host PID, or grant filesystem access beyond `/data`. The supplied Compose configuration drops all Linux capabilities and supports a read-only root filesystem.
+
+## TrueNAS account and URL
+
+Create a scoped TrueNAS account/API key with the practical minimum roles:
+
+- `APPS_READ`
+- `APPS_WRITE`
+
+Use `wss://<server>/api/current`. TLS verification is enabled by default. `ws://` and certificate bypass each require an explicit warning-backed opt-in.
+
+Connection Test opens the WebSocket, authenticates with `auth.login_ex`, calls `core.ping`, and calls `app.query`. It reports missing app roles when the authentication response exposes them.
+
+## First-launch behavior
+
+No connection, schedule, timezone, policy, hostname, notification target, or notification event is preconfigured. Discovery creates every app with an **Unconfigured** policy. Unconfigured apps are visible and checked, but do not update automatically and do not generate policy-based update notifications.
+
+The wizard covers:
+
+1. TrueNAS connection and test
+2. Optional schedule and timezone
+3. Optional Email/Webhook providers and explicitly selected events
+4. Read-only discovery followed by policy review
+
+## Update and schedule safety
+
+- Only one check/update run is active at a time. Overlapping triggers are skipped and recorded.
+- Scheduled and Check & Update runs process apps sequentially.
+- Check Now never executes updates.
+- `action_required` always blocks unattended execution.
+- RUNNING apps may auto-update. STOPPED and CRASHED apps require manual confirmation; transitional states are skipped.
+- Version parsing fails closed outside Any Version scope.
+- Image-only updates are not classified as semantic versions.
+- Restart calculates the next future cron occurrence and does not replay missed runs.
+- TrueNAS job success is followed by state/version/image verification before success is persisted.
+- Persistence failure stops unattended execution before a lifecycle call.
+
+## Notifications and retention
+
+V1 includes exactly Email and Generic Webhook providers. HTTP `2xx` is success; webhooks retry transient network failures, `408`, `429`, and `5xx` responses with bounded backoff. Secret headers and Authorization values are never logged.
+
+Update notification deduplication uses event type, app ID, target version or image set, and reason code. Connection failures use a configurable cooldown.
+
+History is retained indefinitely by default. Set **History retention (days)** under Advanced / Safety to enable cleanup after scheduled runs.
+
+## Secret encryption
+
+Secrets are encrypted with AES-GCM before SQLite persistence and are never returned as settings values. Entering a blank secret leaves the saved value unchanged.
+
+For stronger key separation, set `APP_ENCRYPTION_KEY` to a base64-encoded 32-byte key:
+
+```bash
+openssl rand -base64 32
+```
+
+If the variable is absent, the app creates `/data/.encryption-key` with owner-only permissions. Storing both encrypted data and its generated key in the same volume protects against casual database disclosure but does not provide the same separation as an external key.
+
+Back up the external key with the database. Losing it makes saved secrets unrecoverable.
+
+## Security exposure
+
+V1 has no built-in user accounts or RBAC. Expose the UI only on a trusted LAN/VPN or behind an authenticated reverse proxy. Restrict the TrueNAS API key to the required app roles.
+
+The UI uses ASP.NET antiforgery protection, restrictive response headers, URL scheme validation, masked secret inputs, and sanitized integration errors.
+
+## Health endpoints
+
+- `/health/live` — process liveness; independent of TrueNAS
+- `/health/ready` — application initialization and SQLite connectivity
+
+Temporary TrueNAS downtime does not make readiness fail.
+
+## Development
+
+Requires the .NET 10 SDK.
+
+```bash
+dotnet restore TrueNasUpdateManager.slnx
+dotnet build TrueNasUpdateManager.slnx --no-restore
+dotnet test TrueNasUpdateManager.slnx --no-build
+```
+
+The tests are hermetic and use fake transports, HTTP handlers, SMTP message construction, SQLite files under temporary directories, and deterministic `TimeProvider` values. They do not require TrueNAS, Docker, Internet, SMTP, webhooks, or wall-clock waits.
+
+## TrueNAS API methods
+
+Discovery and status:
+
+- `app.query`
+- `app.get_instance`
+- `app.outdated_docker_images`
+- `app.upgrade_summary`
+- `app.rollback_versions`
+
+Execution and jobs:
+
+- `app.upgrade`
+- `app.pull_images`
+- `app.rollback`
+- `core.job_wait`
+- `core.ping`
+- `auth.login_ex`
+
+API DTOs are intentionally narrow. Validate installed TrueNAS API schemas when upgrading across TrueNAS releases.

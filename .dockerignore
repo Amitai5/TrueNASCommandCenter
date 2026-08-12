@@ -1,0 +1,12 @@
+**/bin
+**/obj
+**/TestResults
+.git
+.gitignore
+.vs
+.vscode
+*.db
+*.db-shm
+*.db-wal
+*.user
+mockups

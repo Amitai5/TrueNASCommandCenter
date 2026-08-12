@@ -1,0 +1,25 @@
+services:
+  truenas-update-manager:
+    build:
+      context: .
+    image: truenas-update-manager:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DATA_PATH: /data
+      # APP_ENCRYPTION_KEY: "base64-encoded-32-byte-key"
+      # TRUENAS_APP_ID: "the-manager-app-id"
+    volumes:
+      - update-manager-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  update-manager-data:

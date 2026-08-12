@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -162,7 +164,7 @@ public sealed class TrueNasJsonRpcClient(
             options.Username,
             options.VerifyTls,
             options.AllowInsecureWebSocket,
-            options.ApiKey.GetHashCode(StringComparison.Ordinal));
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(options.ApiKey))));
 
         if (transport?.State == WebSocketState.Open &&
             authenticated &&
@@ -189,18 +191,37 @@ public sealed class TrueNasJsonRpcClient(
             {
                 await transport.ConnectAsync(options, cancellationToken);
                 receiveTask = ReceiveLoopAsync(transport, receiveCancellation.Token);
-                var auth = await SendRequestAsync<TrueNasAuthResponseDto>(
-                    "auth.login_ex",
-                    [
-                        new
-                        {
-                            mechanism = "API_KEY_PLAIN",
-                            username = options.Username,
-                            api_key = options.ApiKey,
-                            login_options = new { user_info = true, reconnect_token = false }
-                        }
-                    ],
-                    cancellationToken);
+                TrueNasAuthResponseDto auth;
+                try
+                {
+                    auth = await SendRequestAsync<TrueNasAuthResponseDto>(
+                        "auth.login_ex",
+                        [
+                            new
+                            {
+                                mechanism = "API_KEY_PLAIN",
+                                username = options.Username,
+                                api_key = options.ApiKey,
+                                login_options = new { user_info = true, reconnect_token = false }
+                            }
+                        ],
+                        cancellationToken);
+                }
+                catch (TrueNasClientException exception) when (exception.Code == "-32602")
+                {
+                    // TrueNAS 25.10 API_KEY_PLAIN predates the required username field.
+                    auth = await SendRequestAsync<TrueNasAuthResponseDto>(
+                        "auth.login_ex",
+                        [
+                            new
+                            {
+                                mechanism = "API_KEY_PLAIN",
+                                api_key = options.ApiKey,
+                                login_options = new { user_info = true, reconnect_token = false }
+                            }
+                        ],
+                        cancellationToken);
+                }
 
                 if (!string.Equals(auth.ResponseType, "SUCCESS", StringComparison.Ordinal))
                 {
