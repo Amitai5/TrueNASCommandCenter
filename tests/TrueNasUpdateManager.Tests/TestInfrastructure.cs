@@ -76,6 +76,61 @@ internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+internal sealed class ImmediateTimeProvider : TimeProvider
+{
+    public override ITimer CreateTimer(
+        TimerCallback callback,
+        object? state,
+        TimeSpan dueTime,
+        TimeSpan period) =>
+        new ImmediateTimer(callback, state, dueTime);
+
+    private sealed class ImmediateTimer : ITimer
+    {
+        private readonly TimerCallback callback;
+        private readonly object? state;
+        private bool disposed;
+
+        public ImmediateTimer(TimerCallback callback, object? state, TimeSpan dueTime)
+        {
+            this.callback = callback;
+            this.state = state;
+            Schedule(dueTime);
+        }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            Schedule(dueTime);
+            return !disposed;
+        }
+
+        public void Dispose()
+        {
+            disposed = true;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        private void Schedule(TimeSpan dueTime)
+        {
+            if (!disposed && dueTime != Timeout.InfiniteTimeSpan)
+            {
+                _ = Task.Run(() =>
+                {
+                    if (!disposed)
+                    {
+                        callback(state);
+                    }
+                });
+            }
+        }
+    }
+}
+
 internal sealed class FakeEmailSender : IEmailNotificationSender
 {
     public int Calls { get; private set; }
@@ -211,6 +266,14 @@ internal sealed class FakeWebSocketTransportFactory(FakeWebSocketTransport trans
     : IWebSocketTransportFactory
 {
     public IWebSocketTransport Create() => transport;
+}
+
+internal sealed class SequenceWebSocketTransportFactory(params FakeWebSocketTransport[] transports)
+    : IWebSocketTransportFactory
+{
+    private readonly Queue<FakeWebSocketTransport> transports = new(transports);
+
+    public IWebSocketTransport Create() => transports.Dequeue();
 }
 
 internal static class TestClientFactory

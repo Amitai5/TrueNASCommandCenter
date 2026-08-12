@@ -5,6 +5,7 @@
 @inject IScheduleService ScheduleService
 @inject SettingsService SettingsService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <PageTitle>Apps · TrueNAS Update Manager</PageTitle>
 
@@ -172,6 +173,10 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+        if (_settings is not null && !_settings.OnboardingCompleted)
+        {
+            Navigation.NavigateTo("/onboarding");
+        }
     }
 
     private async Task LoadAsync()

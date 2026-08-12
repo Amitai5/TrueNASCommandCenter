@@ -24,6 +24,7 @@ public interface IUpdateCoordinator
 public sealed class UpdateCoordinator(
     RunLock runLock,
     IAppDiscoveryService discoveryService,
+    ITrueNasClient trueNasClient,
     IUpdatePolicyEvaluator policyEvaluator,
     IUpdateExecutor updateExecutor,
     INotificationDispatcher notifications,
@@ -59,8 +60,9 @@ public sealed class UpdateCoordinator(
                 : [await discoveryService.DiscoverAppAsync(appId, cancellationToken)];
             run.CheckedCount = apps.Count;
 
-            foreach (var app in apps)
+            for (var appIndex = 0; appIndex < apps.Count; appIndex++)
             {
+                var app = apps[appIndex];
                 cancellationToken.ThrowIfCancellationRequested();
                 var manual = trigger == RunTrigger.UpdateNow;
                 var target = app.CatalogUpdateAvailable ? app.LatestVersion : null;
@@ -73,6 +75,16 @@ public sealed class UpdateCoordinator(
                     manual,
                     riskyStateConfirmed,
                     managerAppId);
+                if (decision.Kind == UpdateDecisionKind.Eligible &&
+                    executeUpdates &&
+                    trueNasClient.HasWriteAccess is false)
+                {
+                    decision = new UpdateDecision(
+                        UpdateDecisionKind.Blocked,
+                        "MISSING_WRITE_ACCESS",
+                        "The authenticated TrueNAS account does not expose APPS_WRITE.",
+                        target);
+                }
 
                 if (decision.Kind == UpdateDecisionKind.Eligible && executeUpdates)
                 {
@@ -102,6 +114,25 @@ public sealed class UpdateCoordinator(
                             outcome.Message,
                             target,
                             cancellationToken);
+                        if (IsServerWideFailure(outcome.ReasonCode))
+                        {
+                            for (var skippedIndex = appIndex + 1; skippedIndex < apps.Count; skippedIndex++)
+                            {
+                                var skippedApp = apps[skippedIndex];
+                                run.SkippedCount++;
+                                await RecordDecisionAsync(
+                                    run.Id,
+                                    skippedApp,
+                                    new UpdateDecision(
+                                        UpdateDecisionKind.Blocked,
+                                        "SERVER_CONDITION",
+                                        "Skipped because a server-wide failure made further updates unsafe.",
+                                        skippedApp.LatestVersion),
+                                    cancellationToken);
+                            }
+
+                            break;
+                        }
                     }
 
                     continue;
@@ -257,7 +288,8 @@ public sealed class UpdateCoordinator(
         UpdateDecision decision,
         CancellationToken cancellationToken)
     {
-        var status = decision.Kind == UpdateDecisionKind.Blocked
+        var status = decision.Kind == UpdateDecisionKind.Blocked &&
+                     decision.ReasonCode != "SERVER_CONDITION"
             ? AttemptStatus.Blocked
             : AttemptStatus.Skipped;
         var attempt = new UpdateAttempt
@@ -380,6 +412,13 @@ public sealed class UpdateCoordinator(
             DbUpdateException => ("DATABASE_ERROR", "The run stopped because audit state could not be persisted."),
             _ => ("RUN_FAILED", "The run failed unexpectedly.")
         };
+
+    private static bool IsServerWideFailure(string reasonCode) =>
+        reasonCode is "NETWORK_ERROR" or
+            "CONNECTION_CLOSED" or
+            "AUTHENTICATION_FAILED" or
+            "TLS_FAILURE" or
+            "TIMEOUT";
 
     private static string Truncate(string value) => value.Length <= 1024 ? value : value[..1024];
 }

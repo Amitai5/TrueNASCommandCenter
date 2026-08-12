@@ -4,6 +4,7 @@
 @inject ITrueNasClient TrueNasClient
 @inject IEmailNotificationSender EmailSender
 @inject IWebhookNotificationSender WebhookSender
+@inject IUpdateCoordinator Coordinator
 
 <PageTitle>Settings · TrueNAS Update Manager</PageTitle>
 
@@ -116,6 +117,8 @@
 
             <div class="actions" style="margin-top:1rem">
                 <button @onclick="PreviewSchedule">Validate &amp; preview</button>
+                <button disabled="@_busy" @onclick="() => RunCheckAsync(false)">Run check now</button>
+                <button class="primary" disabled="@_busy" @onclick="() => RunCheckAsync(true)">Run check &amp; update now</button>
             </div>
 
             @if (_schedulePreview is not null)
@@ -392,7 +395,25 @@
         }
     }
 
+    private async Task RunCheckAsync(bool update)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Coordinator.RunAsync(
+                update ? RunTrigger.CheckAndUpdateNow : RunTrigger.CheckNow,
+                executeUpdates: update);
+            _message = result.Message;
+            _error = result.Status is RunStatus.Failed or RunStatus.PartiallySucceeded;
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private string TabClass(string tab) => _tab == tab ? "active" : string.Empty;
-    private static string FormatDate(DateTime? value) =>
-        value?.ToString("MMM d, yyyy HH:mm 'UTC'") ?? "Never";
+    private string FormatDate(DateTime? value) =>
+        DisplayTimeFormatter.Format(value, _record?.TimeZoneId);
 }

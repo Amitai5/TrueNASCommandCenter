@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using TrueNasUpdateManager.Integrations.TrueNas;
+using TrueNasUpdateManager.Services;
 
 namespace TrueNasUpdateManager.Tests;
 
@@ -145,6 +147,81 @@ public sealed class TrueNasJsonRpcClientTests
 
         Assert.IsFalse(result.Success);
         Assert.AreEqual("AUTHENTICATION_FAILED", result.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task JobFailure_UsesCoreGetJobsDiagnosticFallback()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "core.job_wait":
+                    transport.Error(id, -32001, "Job failed");
+                    break;
+                case "core.get_jobs":
+                    transport.Respond(id, new { id = 42, state = "FAILED", error = "Image pull failed" });
+                    break;
+            }
+
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var exception = await Assert.ThrowsAsync<TrueNasClientException>(() => client.WaitForJobAsync(42));
+
+        StringAssert.Contains(exception.Message, "TrueNAS job FAILED");
+        StringAssert.Contains(exception.Message, "Image pull failed");
+    }
+
+    [TestMethod]
+    public async Task ResetConnection_ReconnectsCleanly()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings =>
+        {
+            settings.TrueNasUrl = "wss://truenas.test/api/current";
+            settings.TrueNasUsername = "service";
+            settings.TrueNasApiKeyEncrypted = protector.Protect("test-key");
+        });
+        var first = TransportReturning("first");
+        var second = TransportReturning("second");
+        await using var client = new TrueNasJsonRpcClient(
+            new SequenceWebSocketTransportFactory(first, second),
+            new SettingsService(database, protector),
+            database,
+            new FixedTimeProvider(DateTimeOffset.UnixEpoch),
+            NullLogger<TrueNasJsonRpcClient>.Instance);
+
+        var firstResult = await client.QueryAppsAsync();
+        await client.ResetConnectionAsync();
+        var secondResult = await client.QueryAppsAsync();
+
+        Assert.AreEqual("first", firstResult.Single().Id);
+        Assert.AreEqual("second", secondResult.Single().Id);
+    }
+
+    private static FakeWebSocketTransport TransportReturning(string appId)
+    {
+        var transport = new FakeWebSocketTransport();
+        transport.OnSend = request =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            if (request.GetProperty("method").GetString() == "auth.login_ex")
+            {
+                transport.Respond(id, new { response_type = "SUCCESS", user_info = (object?)null });
+            }
+            else
+            {
+                transport.Respond(id, new[] { App(appId) });
+            }
+
+            return Task.CompletedTask;
+        };
+        return transport;
     }
 
     private static object App(string id) => new

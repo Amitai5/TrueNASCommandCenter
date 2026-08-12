@@ -4,6 +4,7 @@ namespace TrueNasUpdateManager.Integrations.TrueNas;
 
 public interface ITrueNasClient
 {
+    bool? HasWriteAccess { get; }
     Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TrueNasAppDto>> QueryAppsAsync(CancellationToken cancellationToken = default);
     Task<TrueNasAppDto> GetAppAsync(string appId, CancellationToken cancellationToken = default);

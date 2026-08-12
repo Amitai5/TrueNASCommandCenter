@@ -157,6 +157,7 @@
     private bool _loading = true;
     private bool _busy;
     private bool _error;
+    private string? _timeZoneId;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -167,6 +168,7 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _app = await db.Apps.AsNoTracking().SingleOrDefaultAsync(app => app.Id == AppId);
+        _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
         _attempts = await db.UpdateAttempts.AsNoTracking()
             .Where(attempt => attempt.AppId == AppId)
             .OrderByDescending(attempt => attempt.StartedUtc)
@@ -290,6 +292,5 @@
         : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
     private string StatusClass() => _app?.StatusLabel == "Up to date" ? "success" :
         _app?.StatusLabel is "Failed" or "Blocked: action required" ? "danger" : "warning";
-    private static string FormatDate(DateTime? value) =>
-        value?.ToString("MMM d, yyyy HH:mm 'UTC'") ?? "Never";
+    private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
 }

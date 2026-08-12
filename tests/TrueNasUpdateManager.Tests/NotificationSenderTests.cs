@@ -75,7 +75,7 @@ public sealed class NotificationSenderTests
         var sender = new WebhookNotificationSender(
             new FakeHttpClientFactory(new ThrowingHandler()),
             database.CreateSettingsService(),
-            TimeProvider.System,
+            new ImmediateTimeProvider(),
             NullLogger<WebhookNotificationSender>.Instance);
 
         var result = await sender.SendAsync(Notification("Timeout", "Message"));
@@ -104,7 +104,7 @@ public sealed class NotificationSenderTests
         new(
             new FakeHttpClientFactory(handler),
             database.CreateSettingsService(),
-            TimeProvider.System,
+            new ImmediateTimeProvider(),
             NullLogger<WebhookNotificationSender>.Instance);
 
     private static NotificationEvent Notification(string subject, string message) =>

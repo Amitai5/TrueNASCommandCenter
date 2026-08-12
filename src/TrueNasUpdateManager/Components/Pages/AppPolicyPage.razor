@@ -16,7 +16,7 @@
     {
         <header class="page-header">
             <div>
-                <a href="@AppPath()">← Apps</a>
+                <a href="/">← Apps</a>
                 <h1 style="margin-top:.6rem">App policy</h1>
                 <p class="subtitle">@_app.Name · @(_app.IsCustom ? "Custom" : "Catalog")</p>
             </div>
@@ -143,11 +143,13 @@
     private bool _saving;
     private bool _error;
     private string? _message;
+    private string? _timeZoneId;
 
     protected override async Task OnParametersSetAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _app = await db.Apps.AsNoTracking().SingleOrDefaultAsync(app => app.Id == AppId);
+        _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
         if (_app is null)
         {
             return;
@@ -223,6 +225,5 @@
             ? _app.LatestHumanVersion ?? _app.LatestVersion ?? "Catalog update"
             : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
 
-    private static string FormatDate(DateTime? value) =>
-        value?.ToString("MMM d, yyyy HH:mm 'UTC'") ?? "Never";
+    private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
 }

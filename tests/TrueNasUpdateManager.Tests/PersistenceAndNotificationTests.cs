@@ -45,6 +45,18 @@ public sealed class PersistenceAndNotificationTests
     }
 
     [TestMethod]
+    public async Task Settings_RejectTrueNasUrlWithUserInfo()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var service = database.CreateSettingsService();
+        var model = await service.GetFormAsync();
+        model.TrueNasUrl = "******truenas.test/api/current";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(model));
+    }
+
+    [TestMethod]
     public async Task Dispatcher_DeduplicatesSameUnresolvedUpdatePerProvider()
     {
         await using var database = new TestDatabase();

@@ -89,7 +89,7 @@ public sealed class UpdateExecutor(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await SetFailureAsync(app.Id, attempt, "CANCELLED", "The update was cancelled.", null, cancellationToken);
+            await SetFailureAsync(app.Id, attempt, "CANCELLED", "The update was cancelled.", null, CancellationToken.None);
             return new AttemptOutcome(attempt.Id, AttemptStatus.Cancelled, "CANCELLED", "The update was cancelled.");
         }
         catch (Exception exception)
@@ -155,7 +155,12 @@ public sealed class UpdateExecutor(
                 "Rollback verified.",
                 jobId);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await SetFailureAsync(app.Id, attempt, "CANCELLED", "The rollback was cancelled.", null, CancellationToken.None);
+            return new AttemptOutcome(attempt.Id, AttemptStatus.Cancelled, "CANCELLED", "The rollback was cancelled.");
+        }
+        catch (Exception exception)
         {
             var (code, message) = SanitizeException(exception);
             await SetFailureAsync(app.Id, attempt, code, message, exception, CancellationToken.None);

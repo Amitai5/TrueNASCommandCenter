@@ -47,6 +47,10 @@
                 <label for="date-filter">Since</label>
                 <input id="date-filter" type="date" @bind="_since" @bind:after="LoadAsync" />
             </div>
+            <div>
+                <label for="date-to-filter">Through</label>
+                <input id="date-to-filter" type="date" @bind="_through" @bind:after="LoadAsync" />
+            </div>
         </div>
     </section>
 
@@ -128,6 +132,8 @@
     private string? _eventFilter;
     private string? _statusFilter;
     private DateTime? _since;
+    private DateTime? _through;
+    private string? _timeZoneId;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -138,6 +144,7 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _apps = await db.Apps.AsNoTracking().OrderBy(app => app.Name).ToListAsync();
+        _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
 
         var attemptsQuery = db.UpdateAttempts.AsNoTracking()
             .Include(attempt => attempt.App)
@@ -163,11 +170,17 @@
             attemptsQuery = attemptsQuery.Where(attempt => attempt.StartedUtc >= since);
         }
 
+        if (_through is not null)
+        {
+            var through = _through.Value.Date.AddDays(1);
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.StartedUtc < through);
+        }
+
         _attempts = await attemptsQuery.OrderByDescending(attempt => attempt.StartedUtc).Take(500).ToListAsync();
         var runIds = _attempts.Select(attempt => attempt.RunId).Distinct().ToList();
         var runsQuery = db.UpdateRuns.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(AppFilter) || !string.IsNullOrWhiteSpace(_eventFilter) ||
-            !string.IsNullOrWhiteSpace(_statusFilter) || _since is not null)
+            !string.IsNullOrWhiteSpace(_statusFilter) || _since is not null || _through is not null)
         {
             runsQuery = runsQuery.Where(run => runIds.Contains(run.Id));
         }
@@ -205,7 +218,7 @@
             : $"{Math.Max(0, (int)duration.TotalSeconds)}s";
     }
 
-    private static string FormatDate(DateTime value) => value.ToString("MMM d, yyyy HH:mm 'UTC'");
+    private string FormatDate(DateTime value) => DisplayTimeFormatter.Format(value, _timeZoneId);
     private static string AppPath(string appId) => $"/apps/{Uri.EscapeDataString(appId)}";
     private static string RunTriggerText(RunTrigger trigger) => trigger switch
     {

@@ -36,6 +36,8 @@ public sealed class TrueNasJsonRpcClient(
     private bool hasWriteAccess;
     private long nextRequestId;
 
+    public bool? HasWriteAccess => rolesDetected ? hasWriteAccess : null;
+
     public async Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -130,7 +132,25 @@ public sealed class TrueNasJsonRpcClient(
 
     public async Task WaitForJobAsync(long jobId, CancellationToken cancellationToken = default)
     {
-        _ = await CallAsync<JsonElement>("core.job_wait", [jobId], cancellationToken);
+        await EnsureConnectedAsync(cancellationToken);
+        try
+        {
+            _ = await SendRequestAsync<JsonElement>(
+                "core.job_wait",
+                [jobId],
+                cancellationToken,
+                disableTimeout: true);
+        }
+        catch (TrueNasClientException exception)
+        {
+            var diagnostic = await TryGetJobDiagnosticAsync(jobId, cancellationToken);
+            if (diagnostic is not null)
+            {
+                throw new TrueNasClientException(exception.Code, diagnostic, exception);
+            }
+
+            throw;
+        }
     }
 
     public async Task ResetConnectionAsync()
@@ -253,7 +273,8 @@ public sealed class TrueNasJsonRpcClient(
     private async Task<T> SendRequestAsync<T>(
         string method,
         object?[] parameters,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool disableTimeout = false)
     {
         var activeTransport = transport;
         if (activeTransport?.State != WebSocketState.Open)
@@ -290,7 +311,9 @@ public sealed class TrueNasJsonRpcClient(
                 sendGate.Release();
             }
 
-            var result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+            var result = disableTimeout
+                ? await completion.Task.WaitAsync(cancellationToken)
+                : await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
             var value = result.Deserialize<T>(JsonOptions);
             return value ?? throw new TrueNasClientException(
                 "INVALID_RESPONSE",
@@ -361,6 +384,36 @@ public sealed class TrueNasJsonRpcClient(
             {
                 completion.TrySetException(error);
             }
+        }
+    }
+
+    private async Task<string?> TryGetJobDiagnosticAsync(long jobId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var job = await CallAsync<JsonElement>(
+                "core.get_jobs",
+                [
+                    new object[] { new object[] { "id", "=", jobId } },
+                    new Dictionary<string, object?> { ["get"] = true }
+                ],
+                cancellationToken);
+            if (job.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var state = job.TryGetProperty("state", out var stateElement)
+                ? stateElement.GetString()
+                : "FAILED";
+            var error = job.TryGetProperty("error", out var errorElement)
+                ? errorElement.GetString()
+                : null;
+            return Sanitize($"TrueNAS job {state}: {error ?? "No additional diagnostic was returned."}");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
         }
     }
 

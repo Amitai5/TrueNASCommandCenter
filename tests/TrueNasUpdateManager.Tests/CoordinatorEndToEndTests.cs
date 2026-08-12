@@ -53,6 +53,44 @@ public sealed class CoordinatorEndToEndTests
         CollectionAssert.AreEqual(new[] { "catalog", "image" }, trueNas.StartOrder);
     }
 
+    [TestMethod]
+    public async Task MissingWriteRole_BlocksAutomaticExecution()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        await SeedPoliciesAsync(database);
+        var trueNas = new FakeTrueNasClient { WriteAccess = false };
+        var coordinator = CreateCoordinator(database, trueNas);
+
+        var result = await coordinator.RunAsync(RunTrigger.CheckAndUpdateNow, executeUpdates: true);
+
+        Assert.AreEqual(RunStatus.Succeeded, result.Status);
+        Assert.IsEmpty(trueNas.StartOrder);
+        await using var db = await database.CreateDbContextAsync();
+        Assert.IsTrue((await db.UpdateAttempts.ToListAsync()).All(
+            attempt => attempt.Status == AttemptStatus.Blocked &&
+                       attempt.ReasonCode == "MISSING_WRITE_ACCESS"));
+    }
+
+    [TestMethod]
+    public async Task ServerWideFailure_StopsLaterQueuedUpdates()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        await SeedPoliciesAsync(database);
+        var trueNas = new FakeTrueNasClient { FailCatalogForServer = true };
+        var coordinator = CreateCoordinator(database, trueNas);
+
+        var result = await coordinator.RunAsync(RunTrigger.CheckAndUpdateNow, executeUpdates: true);
+
+        Assert.AreEqual(RunStatus.Failed, result.Status);
+        CollectionAssert.AreEqual(new[] { "catalog" }, trueNas.StartOrder);
+        await using var db = await database.CreateDbContextAsync();
+        Assert.IsTrue(await db.UpdateAttempts.AnyAsync(
+            attempt => attempt.Status == AttemptStatus.Skipped &&
+                       attempt.ReasonCode == "SERVER_CONDITION"));
+    }
+
     private static UpdateCoordinator CreateCoordinator(TestDatabase database, FakeTrueNasClient trueNas)
     {
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero));
@@ -68,6 +106,7 @@ public sealed class CoordinatorEndToEndTests
         return new UpdateCoordinator(
             new RunLock(),
             discovery,
+            trueNas,
             new UpdatePolicyEvaluator(new VersionClassifier()),
             executor,
             new NoopNotificationDispatcher(),
@@ -114,6 +153,9 @@ public sealed class CoordinatorEndToEndTests
         private long nextJob;
 
         public bool FailCatalogJob { get; init; }
+        public bool FailCatalogForServer { get; init; }
+        public bool WriteAccess { get; init; } = true;
+        public bool? HasWriteAccess => WriteAccess;
         public List<string> StartOrder { get; } = [];
         public int MaximumConcurrentJobs { get; private set; }
 
@@ -154,8 +196,16 @@ public sealed class CoordinatorEndToEndTests
             string appId,
             string targetVersion,
             bool snapshotHostPaths,
-            CancellationToken cancellationToken = default) =>
-            StartAsync(appId);
+            CancellationToken cancellationToken = default)
+        {
+            if (FailCatalogForServer)
+            {
+                StartOrder.Add(appId);
+                throw new TrueNasClientException("NETWORK_ERROR", "Connection lost.");
+            }
+
+            return StartAsync(appId);
+        }
 
         public Task<long> StartImageRefreshAsync(
             string appId,

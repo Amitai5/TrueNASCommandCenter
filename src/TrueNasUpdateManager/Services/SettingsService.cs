@@ -208,6 +208,12 @@ public sealed class SettingsService(
             return false;
         }
 
+        if (!string.IsNullOrEmpty(parsed.UserInfo))
+        {
+            error = "TrueNAS URL must not contain embedded credentials.";
+            return false;
+        }
+
         var builder = new UriBuilder(parsed);
         if (builder.Path is "" or "/")
         {
