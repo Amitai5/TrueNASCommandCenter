@@ -68,8 +68,7 @@ public sealed class EmailNotificationSender(
         try
         {
             var settings = await settingsService.GetRecordAsync(cancellationToken);
-            if (!settings.EmailEnabled ||
-                string.IsNullOrWhiteSpace(settings.SmtpHost) ||
+            if (string.IsNullOrWhiteSpace(settings.SmtpHost) ||
                 settings.SmtpPort is null ||
                 settings.SmtpSecurity is null ||
                 string.IsNullOrWhiteSpace(settings.EmailFromAddress))
@@ -134,8 +133,7 @@ public sealed class WebhookNotificationSender(
         CancellationToken cancellationToken = default)
     {
         var settings = await settingsService.GetRecordAsync(cancellationToken);
-        if (!settings.WebhookEnabled ||
-            !Uri.TryCreate(settings.WebhookUrl, UriKind.Absolute, out var endpoint) ||
+        if (!Uri.TryCreate(settings.WebhookUrl, UriKind.Absolute, out var endpoint) ||
             (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
         {
             return new NotificationDeliveryResult(false, Error: "Webhook is not fully configured.");

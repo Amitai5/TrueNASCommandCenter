@@ -1,0 +1,238 @@
+@page "/history"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>History · TrueNAS Update Manager</PageTitle>
+
+<div class="page">
+    <header class="page-header">
+        <div>
+            <h1>History</h1>
+            <p class="subtitle">Checks, updates, rollbacks, skips, and notification delivery.</p>
+        </div>
+    </header>
+
+    <section class="panel">
+        <div class="filters">
+            <div>
+                <label for="app-filter">App</label>
+                <select id="app-filter" @bind="AppFilter" @bind:after="LoadAsync">
+                    <option value="">All apps</option>
+                    @foreach (var app in _apps)
+                    {
+                        <option value="@app.Id">@app.Name</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="event-filter">Event</label>
+                <select id="event-filter" @bind="_eventFilter" @bind:after="LoadAsync">
+                    <option value="">All events</option>
+                    @foreach (var kind in Enum.GetValues<AttemptKind>())
+                    {
+                        <option value="@kind">@kind</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="status-filter">Result</label>
+                <select id="status-filter" @bind="_statusFilter" @bind:after="LoadAsync">
+                    <option value="">All results</option>
+                    @foreach (var status in Enum.GetValues<AttemptStatus>())
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="date-filter">Since</label>
+                <input id="date-filter" type="date" @bind="_since" @bind:after="LoadAsync" />
+            </div>
+        </div>
+    </section>
+
+    <section style="margin-top:1.5rem">
+        <h2>Recent runs</h2>
+        @if (_runs.Count == 0)
+        {
+            <div class="panel empty-state"><p class="muted">No matching runs.</p></div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Started</th><th>Trigger</th><th>Duration</th><th>Checked</th><th>Updates</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var run in _runs)
+                        {
+                            <tr>
+                                <td>@FormatDate(run.StartedUtc)</td>
+                                <td>@RunTriggerText(run.Trigger)</td>
+                                <td>@Duration(run.StartedUtc, run.EndedUtc)</td>
+                                <td>@run.CheckedCount</td>
+                                <td>@run.SucceededCount succeeded · @run.FailedCount failed · @run.SkippedCount skipped</td>
+                                <td><span class="badge @RunStatusClass(run.Status)">@run.Status</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section style="margin-top:1.5rem">
+        <h2>App events</h2>
+        @if (_attempts.Count == 0)
+        {
+            <div class="panel empty-state"><p class="muted">No matching app events.</p></div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Time</th><th>App</th><th>Event</th><th>Target</th><th>Result</th><th>Reason</th><th>Notification</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var attempt in _attempts)
+                        {
+                            <tr>
+                                <td>@FormatDate(attempt.StartedUtc)</td>
+                                <td><a href="@AppPath(attempt.AppId)">@attempt.App.Name</a></td>
+                                <td>@AttemptText(attempt.Kind)</td>
+                                <td>@TargetText(attempt)</td>
+                                <td>
+                                    <span class="badge @AttemptStatusClass(attempt.Status)">@attempt.Status</span>
+                                    <span class="app-meta">@Duration(attempt.StartedUtc, attempt.EndedUtc)</span>
+                                </td>
+                                <td>@attempt.ReasonMessage</td>
+                                <td>@NotificationText(attempt.AppId, attempt.ToVersion ?? attempt.OutdatedImagesJson)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "app")]
+    public string? AppFilter { get; set; }
+
+    private List<AppRecord> _apps = [];
+    private List<UpdateRun> _runs = [];
+    private List<UpdateAttempt> _attempts = [];
+    private List<NotificationRecord> _notifications = [];
+    private string? _eventFilter;
+    private string? _statusFilter;
+    private DateTime? _since;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _apps = await db.Apps.AsNoTracking().OrderBy(app => app.Name).ToListAsync();
+
+        var attemptsQuery = db.UpdateAttempts.AsNoTracking()
+            .Include(attempt => attempt.App)
+            .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(AppFilter))
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.AppId == AppFilter);
+        }
+
+        if (Enum.TryParse<AttemptKind>(_eventFilter, out var kind))
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.Kind == kind);
+        }
+
+        if (Enum.TryParse<AttemptStatus>(_statusFilter, out var status))
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.Status == status);
+        }
+
+        if (_since is not null)
+        {
+            var since = _since.Value.Date;
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.StartedUtc >= since);
+        }
+
+        _attempts = await attemptsQuery.OrderByDescending(attempt => attempt.StartedUtc).Take(500).ToListAsync();
+        var runIds = _attempts.Select(attempt => attempt.RunId).Distinct().ToList();
+        var runsQuery = db.UpdateRuns.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(AppFilter) || !string.IsNullOrWhiteSpace(_eventFilter) ||
+            !string.IsNullOrWhiteSpace(_statusFilter) || _since is not null)
+        {
+            runsQuery = runsQuery.Where(run => runIds.Contains(run.Id));
+        }
+
+        _runs = await runsQuery.OrderByDescending(run => run.StartedUtc).Take(100).ToListAsync();
+        _notifications = await db.Notifications.AsNoTracking()
+            .OrderByDescending(record => record.CreatedUtc)
+            .Take(1000)
+            .ToListAsync();
+    }
+
+    private string NotificationText(string appId, string? target)
+    {
+        var record = _notifications.FirstOrDefault(item =>
+            item.AppId == appId &&
+            (target is null || item.DeduplicationKey.Contains(target, StringComparison.Ordinal)));
+        return record?.Status.ToString() ?? "—";
+    }
+
+    private static string TargetText(UpdateAttempt attempt) =>
+        attempt.Kind == AttemptKind.ImageRefresh
+            ? "Image refresh"
+            : $"{attempt.FromVersion ?? "—"} → {attempt.ToVersion ?? "—"}";
+
+    private static string Duration(DateTime start, DateTime? end)
+    {
+        if (end is null)
+        {
+            return "In progress";
+        }
+
+        var duration = end.Value - start;
+        return duration.TotalMinutes >= 1
+            ? $"{(int)duration.TotalMinutes}m {duration.Seconds}s"
+            : $"{Math.Max(0, (int)duration.TotalSeconds)}s";
+    }
+
+    private static string FormatDate(DateTime value) => value.ToString("MMM d, yyyy HH:mm 'UTC'");
+    private static string AppPath(string appId) => $"/apps/{Uri.EscapeDataString(appId)}";
+    private static string RunTriggerText(RunTrigger trigger) => trigger switch
+    {
+        RunTrigger.CheckAndUpdateNow => "Check & update",
+        RunTrigger.CheckNow => "Check now",
+        RunTrigger.UpdateNow => "Update now",
+        _ => trigger.ToString()
+    };
+    private static string AttemptText(AttemptKind kind) => kind switch
+    {
+        AttemptKind.CatalogUpgrade => "Catalog upgrade",
+        AttemptKind.ImageRefresh => "Image refresh",
+        _ => "Rollback"
+    };
+    private static string RunStatusClass(RunStatus status) => status switch
+    {
+        RunStatus.Succeeded => "success",
+        RunStatus.Failed => "danger",
+        RunStatus.PartiallySucceeded => "warning",
+        _ => ""
+    };
+    private static string AttemptStatusClass(AttemptStatus status) => status switch
+    {
+        AttemptStatus.Succeeded => "success",
+        AttemptStatus.Failed => "danger",
+        AttemptStatus.Blocked => "danger",
+        AttemptStatus.Running or AttemptStatus.Verifying => "info",
+        _ => "warning"
+    };
+}

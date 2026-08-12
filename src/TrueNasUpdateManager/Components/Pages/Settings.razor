@@ -1,0 +1,398 @@
+@page "/settings"
+@inject SettingsService SettingsService
+@inject IScheduleService ScheduleService
+@inject ITrueNasClient TrueNasClient
+@inject IEmailNotificationSender EmailSender
+@inject IWebhookNotificationSender WebhookSender
+
+<PageTitle>Settings · TrueNAS Update Manager</PageTitle>
+
+<div class="page">
+    <header class="page-header">
+        <div>
+            <h1>Settings</h1>
+            <p class="subtitle">Connection, schedule, notifications, and safety.</p>
+        </div>
+        <button class="primary" disabled="@_busy || _model is null" @onclick="SaveAsync">Save settings</button>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="notice @(_error ? "danger" : "success")" role="status">@_message</div>
+    }
+
+    <div class="tabs" role="tablist">
+        <button class="@TabClass("connection")" @onclick='() => _tab = "connection"'>Connection</button>
+        <button class="@TabClass("schedule")" @onclick='() => _tab = "schedule"'>Schedule</button>
+        <button class="@TabClass("notifications")" @onclick='() => _tab = "notifications"'>Notifications</button>
+        <button class="@TabClass("advanced")" @onclick='() => _tab = "advanced"'>Advanced / Safety</button>
+    </div>
+
+    @if (_model is null)
+    {
+        <div class="panel empty-state"><span class="spinner"></span> Loading settings…</div>
+    }
+    else if (_tab == "connection")
+    {
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>TrueNAS connection</h2>
+                    <p class="field-help">JSON-RPC 2.0 over WebSocket. Use a scoped API key with APPS_READ and APPS_WRITE.</p>
+                </div>
+            </div>
+            <div class="form-grid">
+                <div class="field full">
+                    <label for="truenas-url">Server URL</label>
+                    <input id="truenas-url" type="url" placeholder="wss://truenas.example/api/current" @bind="_model.TrueNasUrl" />
+                    <p class="field-help">Only ws:// or wss:// URLs ending in /api/current are accepted.</p>
+                </div>
+                <div class="field">
+                    <label for="truenas-user">Username</label>
+                    <input id="truenas-user" autocomplete="username" @bind="_model.TrueNasUsername" />
+                </div>
+                <div class="field">
+                    <label for="truenas-key">API key</label>
+                    <input id="truenas-key" type="password" autocomplete="new-password"
+                           placeholder="@(_model.HasSavedTrueNasApiKey ? "Saved — enter to replace" : "Enter API key")"
+                           @bind="_model.NewTrueNasApiKey" />
+                    <p class="field-help">Stored encrypted and never returned to the browser after save.</p>
+                </div>
+            </div>
+
+            <div class="toggle-row" style="margin-top:1rem">
+                <input id="verify-tls" type="checkbox" @bind="_model.VerifyTls" />
+                <div>
+                    <label for="verify-tls">Verify TLS certificate</label>
+                    <p class="field-help">Enabled by default. Disable only for an explicitly trusted self-signed server.</p>
+                </div>
+            </div>
+            <div class="toggle-row">
+                <input id="allow-ws" type="checkbox" @bind="_model.AllowInsecureWebSocket" />
+                <div>
+                    <label for="allow-ws">Allow insecure ws://</label>
+                    <p class="field-help">Warning: credentials and update commands are not protected in transit.</p>
+                </div>
+            </div>
+
+            @if (!_model.VerifyTls || _model.AllowInsecureWebSocket)
+            {
+                <div class="notice warning">Transport security has been weakened explicitly. Prefer WSS with certificate validation.</div>
+            }
+
+            <div class="actions" style="margin-top:1rem">
+                <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>
+            </div>
+        </section>
+    }
+    else if (_tab == "schedule")
+    {
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Schedule</h2>
+                    <p class="field-help">The manager schedules its own runs; no TrueNAS cron task is created.</p>
+                </div>
+                <input aria-label="Scheduler enabled" type="checkbox" @bind="_model.SchedulerEnabled" />
+            </div>
+
+            <div class="form-grid">
+                <div class="field">
+                    <label for="cron">Cron expression</label>
+                    <input id="cron" placeholder="5 fields: minute hour day month weekday" @bind="_model.CronExpression" />
+                    <p class="field-help">Seconds fields are rejected.</p>
+                </div>
+                <div class="field">
+                    <label for="timezone">IANA timezone</label>
+                    <input id="timezone" list="timezones" placeholder="Area/City" @bind="_model.TimeZoneId" />
+                    <datalist id="timezones">
+                        @foreach (var zone in TimeZoneInfo.GetSystemTimeZones())
+                        {
+                            <option value="@zone.Id"></option>
+                        }
+                    </datalist>
+                </div>
+            </div>
+
+            <div class="actions" style="margin-top:1rem">
+                <button @onclick="PreviewSchedule">Validate &amp; preview</button>
+            </div>
+
+            @if (_schedulePreview is not null)
+            {
+                <div class="notice @(_schedulePreview.IsValid ? "" : "danger")" style="margin-top:1rem">
+                    @if (_schedulePreview.IsValid)
+                    {
+                        <strong>Valid schedule.</strong>
+                        <p>@_schedulePreview.Preview</p>
+                        <ol>
+                            @foreach (var run in _schedulePreview.NextRuns)
+                            {
+                                <li>@run.ToString("yyyy-MM-dd HH:mm:ss zzz")</li>
+                            }
+                        </ol>
+                    }
+                    else
+                    {
+                        @_schedulePreview.Error
+                    }
+                </div>
+            }
+
+            <dl class="details-list" style="margin-top:1.25rem">
+                <dt>Last scheduled run</dt><dd>@FormatDate(_record?.LastScheduledRunUtc)</dd>
+                <dt>Last completed check</dt><dd>@FormatDate(_record?.LastCompletedCheckUtc)</dd>
+            </dl>
+        </section>
+    }
+    else if (_tab == "notifications")
+    {
+        <div class="split-layout">
+            <section>
+                <div class="panel">
+                    <h2>Notification events</h2>
+                    <p class="field-help">No events are enabled until you choose them.</p>
+                    <div class="toggle-row"><input id="notify-manual" type="checkbox" @bind="_model.NotifyManualApproval" /><label for="notify-manual">Manual-approval update available</label></div>
+                    <div class="toggle-row"><input id="notify-failed" type="checkbox" @bind="_model.NotifyAutomaticFailure" /><label for="notify-failed">Automatic update failed</label></div>
+                    <div class="toggle-row"><input id="notify-blocked" type="checkbox" @bind="_model.NotifyAutomaticBlocked" /><label for="notify-blocked">Automatic update blocked</label></div>
+                    <div class="toggle-row"><input id="notify-rollback" type="checkbox" @bind="_model.NotifyRollback" /><label for="notify-rollback">Rollback occurred</label></div>
+                    <div class="toggle-row"><input id="notify-success" type="checkbox" @bind="_model.NotifyAutomaticSuccess" /><label for="notify-success">Automatic update succeeded</label></div>
+                    <div class="toggle-row"><input id="notify-check-failed" type="checkbox" @bind="_model.NotifyScheduledCheckFailure" /><label for="notify-check-failed">Scheduled check failed</label></div>
+                    <div class="toggle-row"><input id="notify-connection" type="checkbox" @bind="_model.NotifyConnectionFailure" /><label for="notify-connection">TrueNAS connection/authentication failed</label></div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Email</h2>
+                        <input aria-label="Email enabled" type="checkbox" @bind="_model.EmailEnabled" />
+                    </div>
+                    <div class="form-grid">
+                        <div class="field"><label for="smtp-host">SMTP host</label><input id="smtp-host" @bind="_model.SmtpHost" /></div>
+                        <div class="field"><label for="smtp-port">Port</label><input id="smtp-port" type="number" min="1" max="65535" @bind="_model.SmtpPort" /></div>
+                        <div class="field">
+                            <label for="smtp-security">Security</label>
+                            <select id="smtp-security" @bind="_model.SmtpSecurity">
+                                <option value="">Choose…</option>
+                                <option value="@SmtpSecurity.None">None</option>
+                                <option value="@SmtpSecurity.StartTls">STARTTLS</option>
+                                <option value="@SmtpSecurity.Tls">TLS/SSL</option>
+                            </select>
+                        </div>
+                        <div class="field"><label for="smtp-user">Username</label><input id="smtp-user" autocomplete="username" @bind="_model.SmtpUsername" /></div>
+                        <div class="field"><label for="smtp-password">Password</label><input id="smtp-password" type="password" autocomplete="new-password" placeholder="@(_model.HasSavedSmtpPassword ? "Saved — enter to replace" : "")" @bind="_model.NewSmtpPassword" /></div>
+                        <div class="field"><label for="from-name">From name</label><input id="from-name" @bind="_model.EmailFromName" /></div>
+                        <div class="field"><label for="from-address">From address</label><input id="from-address" type="email" @bind="_model.EmailFromAddress" /></div>
+                        <div class="field full"><label for="recipients">Recipients, one per line</label><textarea id="recipients" @bind="_model.EmailRecipients"></textarea></div>
+                    </div>
+                    <button disabled="@_busy" @onclick="TestEmailAsync">Send test email</button>
+                </div>
+            </section>
+
+            <aside>
+                <section class="panel">
+                    <div class="panel-header">
+                        <h2>Generic webhook</h2>
+                        <input aria-label="Webhook enabled" type="checkbox" @bind="_model.WebhookEnabled" />
+                    </div>
+                    <div class="field">
+                        <label for="webhook-url">URL</label>
+                        <input id="webhook-url" type="url" placeholder="https://example.invalid/hooks/truenas" @bind="_model.WebhookUrl" />
+                    </div>
+                    <div class="field" style="margin-top:1rem">
+                        <label for="webhook-auth">Authorization value</label>
+                        <input id="webhook-auth" type="password" autocomplete="new-password"
+                               placeholder="@(_model.HasSavedWebhookAuthorization ? "Saved — enter to replace" : "Optional")"
+                               @bind="_model.NewWebhookAuthorization" />
+                    </div>
+                    <div class="field" style="margin-top:1rem">
+                        <label for="webhook-headers">Secret custom headers</label>
+                        <textarea id="webhook-headers"
+                                  placeholder="@(_model.HasSavedWebhookHeaders ? "Saved — enter new Name: Value lines to replace" : "Name: Value")"
+                                  @bind="_model.WebhookHeaders"></textarea>
+                        <p class="field-help">All custom header values are encrypted and never logged.</p>
+                    </div>
+                    <div class="field" style="margin-top:1rem">
+                        <label for="webhook-timeout">Timeout (seconds)</label>
+                        <input id="webhook-timeout" type="number" min="1" max="120" @bind="_model.WebhookTimeoutSeconds" />
+                    </div>
+                    <button style="margin-top:1rem" disabled="@_busy" @onclick="TestWebhookAsync">Send test webhook</button>
+                </section>
+            </aside>
+        </div>
+    }
+    else
+    {
+        <section class="panel">
+            <h2>Advanced / Safety</h2>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="manager-id">This manager's TrueNAS app ID</label>
+                    <input id="manager-id" placeholder="Optional when TRUENAS_APP_ID is set" @bind="_model.ManagerAppId" />
+                    <p class="field-help">Matching app IDs are always blocked from self-update.</p>
+                </div>
+                <div class="field">
+                    <label for="verify-timeout">Post-update verification timeout (seconds)</label>
+                    <input id="verify-timeout" type="number" min="30" max="1800" @bind="_model.VerificationTimeoutSeconds" />
+                </div>
+                <div class="field">
+                    <label for="failure-cooldown">Connection notification cooldown (minutes)</label>
+                    <input id="failure-cooldown" type="number" min="1" max="10080" @bind="_model.ConnectionFailureCooldownMinutes" />
+                </div>
+                <div class="field">
+                    <label for="retention">History retention (days)</label>
+                    <input id="retention" type="number" min="1" placeholder="Blank keeps history indefinitely" @bind="_model.HistoryRetentionDays" />
+                    <p class="field-help">Cleanup occurs after scheduled runs. Blank retains history indefinitely.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Security boundary</h2>
+            <p>This app never uses Docker commands, privileged mode, or the Docker socket. All lifecycle actions use TrueNAS middleware.</p>
+            <p class="muted">V1 has no built-in authentication. Expose this UI only on a trusted LAN/VPN or behind an authenticated reverse proxy.</p>
+        </section>
+    }
+</div>
+
+@code {
+    private SettingsFormModel? _model;
+    private SettingsRecord? _record;
+    private ScheduleValidationResult? _schedulePreview;
+    private string _tab = "connection";
+    private string? _message;
+    private bool _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _model = await SettingsService.GetFormAsync();
+        _record = await SettingsService.GetRecordAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (_model.SchedulerEnabled)
+            {
+                _schedulePreview = ScheduleService.Validate(_model.CronExpression, _model.TimeZoneId);
+                if (!_schedulePreview.IsValid)
+                {
+                    throw new InvalidOperationException(_schedulePreview.Error);
+                }
+            }
+
+            await SettingsService.SaveAsync(_model);
+            _message = "Settings saved.";
+            _error = false;
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await SettingsService.SaveAsync(_model);
+            await TrueNasClient.ResetConnectionAsync();
+            var result = await TrueNasClient.TestConnectionAsync();
+            _message = result.Message;
+            _error = !result.Success;
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TestEmailAsync()
+    {
+        await TestNotificationAsync(EmailSender.SendAsync, "Test email");
+    }
+
+    private async Task TestWebhookAsync()
+    {
+        await TestNotificationAsync(WebhookSender.SendAsync, "Test webhook");
+    }
+
+    private async Task TestNotificationAsync(
+        Func<NotificationEvent, CancellationToken, Task<NotificationDeliveryResult>> sender,
+        string subject)
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await SettingsService.SaveAsync(_model);
+            var test = new NotificationEvent(
+                Guid.NewGuid(),
+                NotificationEventType.ScheduledCheckFailed,
+                DateTime.UtcNow,
+                $"test|{Guid.NewGuid()}",
+                subject,
+                "This is a test notification from TrueNAS App Update Manager.",
+                "TEST");
+            var result = await sender(test, CancellationToken.None);
+            _message = result.Success ? $"{subject} delivered." : result.Error ?? $"{subject} failed.";
+            _error = !result.Success;
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void PreviewSchedule()
+    {
+        if (_model is not null)
+        {
+            _schedulePreview = ScheduleService.Validate(_model.CronExpression, _model.TimeZoneId);
+        }
+    }
+
+    private string TabClass(string tab) => _tab == tab ? "active" : string.Empty;
+    private static string FormatDate(DateTime? value) =>
+        value?.ToString("MMM d, yyyy HH:mm 'UTC'") ?? "Never";
+}

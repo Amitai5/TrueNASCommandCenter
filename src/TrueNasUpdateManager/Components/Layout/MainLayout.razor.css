@@ -1,4 +1,4 @@
-#blazor-error-ui {
+:deep(#blazor-error-ui) {
     color-scheme: light only;
     background: lightyellow;
     bottom: 0;
