@@ -21,15 +21,70 @@ TrueNAS remains the lifecycle authority. Every catalog upgrade, image refresh, a
 - Responsive light-first UI
 - Liveness and readiness endpoints
 
-## Run with Docker Compose
+## Build locally
+
+The recommended build uses the included multi-stage Dockerfile:
 
 ```bash
-docker compose up --build
+docker build --pull --tag truenas-update-manager:local .
+```
+
+To build and start it with the hardened local Compose configuration instead:
+
+```bash
+docker compose up --build --detach
 ```
 
 Open `http://localhost:8080` and complete the first-launch wizard. The example uses a named volume and contains no server-specific hostnames, schedules, policies, recipients, endpoints, or host paths.
 
-For a published image, replace `build` and `image` in `compose.yaml` with the image reference used by the TrueNAS Custom App.
+## Deploy the published image
+
+GitHub Actions publishes the image to the GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/amitai5/truenasautoupdater:latest
+```
+
+Available tags are:
+
+- `latest` and `production` for the current `production` branch
+- `1.2.3` and `1.2` for a Git tag such as `v1.2.3`
+- `sha-<commit>` for an immutable commit build
+
+The workflow validates pull requests by building the image without publishing it. After the first successful publish, make the package public in its GitHub package settings if anonymous pulls are required.
+
+### Docker
+
+Create a persistent volume, then run the published image with the same restrictions as the supplied Compose configuration:
+
+```bash
+docker volume create update-manager-data
+
+docker run --detach \
+  --name truenas-update-manager \
+  --restart unless-stopped \
+  --publish 8080:8080 \
+  --mount source=update-manager-data,target=/data \
+  --read-only \
+  --tmpfs /tmp:size=64m,mode=1777 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges=true \
+  ghcr.io/amitai5/truenasautoupdater:latest
+```
+
+Open `http://localhost:8080`. To upgrade, pull the desired tag and recreate the container with the same `/data` volume.
+
+### TrueNAS Custom App
+
+Create a Custom App and configure:
+
+1. Image repository: `ghcr.io/amitai5/truenasautoupdater`
+2. Image tag: `latest` or a pinned version such as `1.2.3`
+3. Container port: `8080/tcp`
+4. Persistent storage mounted at `/data`
+5. Environment variables from the table below
+
+Expose port `8080` only on the trusted network where the UI should be available. Leave privileged mode and host networking disabled, do not mount the Docker socket, and grant write access only to the persistent `/data` storage.
 
 ### Required container settings
 
