@@ -1,0 +1,296 @@
+@page "/apps/{AppId}"
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ITrueNasClient TrueNasClient
+@inject IUpdateCoordinator Coordinator
+@inject IJSRuntime JS
+
+<PageTitle>App details · TrueNAS Update Manager</PageTitle>
+
+<div class="page">
+    @if (_loading)
+    {
+        <div class="panel empty-state"><span class="spinner"></span> Loading app…</div>
+    }
+    else if (_app is null)
+    {
+        <div class="panel empty-state">
+            <h1>App not found</h1>
+            <a class="button" href="/">Back to apps</a>
+        </div>
+    }
+    else
+    {
+        <header class="page-header">
+            <div>
+                <a href="/">← Apps</a>
+                <h1 style="margin-top:.6rem">@_app.Name</h1>
+                <p class="subtitle">@(_app.IsCustom ? "Custom app" : "Catalog app") · @_app.State</p>
+            </div>
+            <div class="actions">
+                <a class="button" href="@PolicyPath()">Edit policy</a>
+                <button disabled="@_busy" @onclick="CheckAsync">Check app now</button>
+                @if (_app.CatalogUpdateAvailable || _app.ImageUpdateAvailable)
+                {
+                    <button class="primary" disabled="@_busy || _app.ActionRequired" @onclick="UpdateAsync">Update now</button>
+                }
+            </div>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="notice @(_error ? "danger" : "success")">@_message</div>
+        }
+
+        @if (_app.ActionRequired)
+        {
+            <div class="notice danger">
+                <strong>Blocked: action required.</strong>
+                TrueNAS requires administrator action before this target can be executed.
+            </div>
+        }
+
+        <div class="split-layout">
+            <section>
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Update details</h2>
+                        <span class="badge @StatusClass()">@_app.StatusLabel</span>
+                    </div>
+                    <dl class="details-list">
+                        <dt>Installed</dt><dd>@(_app.HumanVersion ?? _app.InstalledVersion ?? "Unknown")</dd>
+                        <dt>Available</dt><dd>@AvailableText()</dd>
+                        <dt>Policy</dt><dd>@PolicyText()</dd>
+                        <dt>Version scope</dt><dd>@ScopeText()</dd>
+                        <dt>Last check</dt><dd>@FormatDate(_app.LastCheckUtc)</dd>
+                        <dt>Last successful update</dt><dd>@FormatDate(_app.LastSuccessfulUpdateUtc)</dd>
+                    </dl>
+
+                    @if (_images.Count > 0)
+                    {
+                        <h3 style="margin-top:1.25rem">Outdated images</h3>
+                        <ul>
+                            @foreach (var image in _images)
+                            {
+                                <li><code>@image</code></li>
+                            }
+                        </ul>
+                    }
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Recent history</h2>
+                        <a href="@HistoryPath()">View all history</a>
+                    </div>
+                    @if (_attempts.Count == 0)
+                    {
+                        <p class="muted">No manager attempts have been recorded for this app.</p>
+                    }
+                    else
+                    {
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>Time</th><th>Event</th><th>Result</th><th>Reason</th></tr></thead>
+                                <tbody>
+                                    @foreach (var attempt in _attempts)
+                                    {
+                                        <tr>
+                                            <td>@FormatDate(attempt.StartedUtc)</td>
+                                            <td>@attempt.Kind</td>
+                                            <td><span class="badge">@attempt.Status</span></td>
+                                            <td>@attempt.ReasonMessage</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <aside>
+                <section class="panel">
+                    <h2>Rollback</h2>
+                    @if (_rollbackVersions.Count == 0)
+                    {
+                        <p class="muted">TrueNAS does not currently expose rollback versions.</p>
+                    }
+                    else
+                    {
+                        <label for="rollback-version">Version</label>
+                        <select id="rollback-version" @bind="_rollbackTarget">
+                            @foreach (var version in _rollbackVersions)
+                            {
+                                <option value="@version">@version</option>
+                            }
+                        </select>
+                        <p class="field-help">Only versions returned by TrueNAS can be selected.</p>
+                        <button class="danger" style="width:100%;margin-top:1rem" disabled="@_busy" @onclick="RollbackAsync">
+                            Roll back
+                        </button>
+                    }
+                </section>
+
+                <section class="panel">
+                    <h2>Safety</h2>
+                    <dl class="details-list">
+                        <dt>Action required</dt><dd>@(_app.ActionRequired ? "Yes" : "No")</dd>
+                        <dt>Snapshots requested</dt><dd>@(_app.SnapshotHostPaths ? "Yes" : "No")</dd>
+                        <dt>Manager app ID</dt><dd>@_app.Id</dd>
+                    </dl>
+                </section>
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string AppId { get; set; } = string.Empty;
+
+    private AppRecord? _app;
+    private List<UpdateAttempt> _attempts = [];
+    private List<string> _images = [];
+    private List<string> _rollbackVersions = [];
+    private string? _rollbackTarget;
+    private string? _message;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _error;
+    private string? _timeZoneId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _app = await db.Apps.AsNoTracking().SingleOrDefaultAsync(app => app.Id == AppId);
+        _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
+        _attempts = await db.UpdateAttempts.AsNoTracking()
+            .Where(attempt => attempt.AppId == AppId)
+            .OrderByDescending(attempt => attempt.StartedUtc)
+            .Take(10)
+            .ToListAsync();
+        _images = DeserializeImages(_app?.OutdatedImagesJson);
+
+        if (_app is not null)
+        {
+            try
+            {
+                _rollbackVersions = (await TrueNasClient.GetRollbackVersionsAsync(AppId)).ToList();
+                _rollbackTarget = _rollbackVersions.FirstOrDefault();
+            }
+            catch
+            {
+                _rollbackVersions = [];
+            }
+        }
+
+        _loading = false;
+    }
+
+    private Task CheckAsync() => RunAsync(RunTrigger.CheckNow, false);
+
+    private async Task UpdateAsync()
+    {
+        if (_app is null)
+        {
+            return;
+        }
+
+        var warning = _app.State is "STOPPED" or "CRASHED"
+            ? $"The app is {_app.State}. Continue with the TrueNAS update?"
+            : $"Update {_app.Name} through TrueNAS now?";
+        if (await JS.InvokeAsync<bool>("confirm", warning))
+        {
+            await RunAsync(RunTrigger.UpdateNow, true, riskyStateConfirmed: true);
+        }
+    }
+
+    private async Task RollbackAsync()
+    {
+        if (_app is null || string.IsNullOrWhiteSpace(_rollbackTarget))
+        {
+            return;
+        }
+
+        if (!await JS.InvokeAsync<bool>(
+                "confirm",
+                $"Roll back {_app.Name} to {_rollbackTarget}? TrueNAS will perform and verify the rollback."))
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Coordinator.RollbackAsync(AppId, _rollbackTarget);
+            _message = result.Message;
+            _error = result.Status != RunStatus.Succeeded;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+        }
+    }
+
+    private async Task RunAsync(RunTrigger trigger, bool execute, bool riskyStateConfirmed = false)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Coordinator.RunAsync(trigger, execute, AppId, riskyStateConfirmed);
+            _message = result.Message;
+            _error = result.Status is RunStatus.Failed or RunStatus.PartiallySucceeded;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+        }
+    }
+
+    private static List<string> DeserializeImages(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(value) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private string PolicyPath() => $"/apps/{Uri.EscapeDataString(AppId)}/policy";
+    private string HistoryPath() => $"/history?app={Uri.EscapeDataString(AppId)}";
+    private string PolicyText() => _app?.Policy switch
+    {
+        AppPolicy.AutoUpdate => "Auto update",
+        AppPolicy.NotifyOnly => "Notify only",
+        AppPolicy.Ignore => "Ignore",
+        _ => "Needs configuration"
+    };
+    private string ScopeText() => _app?.VersionScope switch
+    {
+        VersionScope.AnyVersion => "Any version",
+        VersionScope.MinorAndPatch => "Minor + patch only",
+        VersionScope.PatchOnly => "Patch only",
+        _ => "—"
+    };
+    private string AvailableText() => _app?.CatalogUpdateAvailable == true
+        ? _app.LatestHumanVersion ?? _app.LatestVersion ?? "Catalog update"
+        : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
+    private string StatusClass() => _app?.StatusLabel == "Up to date" ? "success" :
+        _app?.StatusLabel is "Failed" or "Blocked: action required" ? "danger" : "warning";
+    private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
+}

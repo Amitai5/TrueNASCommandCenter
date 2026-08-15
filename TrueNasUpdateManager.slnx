@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TrueNasUpdateManager/TrueNasUpdateManager.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TrueNasUpdateManager.Tests/TrueNasUpdateManager.Tests.csproj" />
+  </Folder>
+</Solution>
