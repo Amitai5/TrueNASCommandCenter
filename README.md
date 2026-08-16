@@ -76,17 +76,39 @@ Open `http://localhost:8080`. To upgrade, pull the desired tag and recreate the 
 
 ### TrueNAS Custom App
 
-Create a Custom App and configure:
+Create a Custom App, choose **Install via YAML**, and paste this configuration:
 
-1. Image repository: `ghcr.io/amitai5/truenasautoupdater`
-2. Image tag: `latest` or a pinned version such as `1.2.3`
-3. Container port: `8080/tcp`
-4. Persistent storage mounted at `/data`
-5. Environment variables from the table below
+```yaml
+services:
+  truenas-update-manager:
+    image: ghcr.io/amitai5/truenasautoupdater:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DATA_PATH: /data
+    volumes:
+      - update-manager-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  update-manager-data:
+```
+
+Open `http://<truenas-address>:8080` and complete the first-launch wizard. If port `8080` is already in use, change only the first number in `"8080:8080"`. Replace `latest` with a version such as `1.2.3` to pin the deployment.
 
 Expose port `8080` only on the trusted network where the UI should be available. Leave privileged mode and host networking disabled, do not mount the Docker socket, and grant write access only to the persistent `/data` storage.
 
-### Required container settings
+### Manual form settings
+
+If the Custom App is configured with the form instead of YAML, use:
 
 | Setting | Value |
 | --- | --- |
@@ -120,6 +142,20 @@ The wizard covers:
 2. Optional schedule and timezone
 3. Optional Email/Webhook providers and explicitly selected events
 4. Read-only discovery followed by policy review
+
+### Configure scheduled checks and updates
+
+The schedule is saved by the manager in `/data`; it is not an environment variable or a separate TrueNAS cron task. On the wizard's **Schedule** step, enable scheduled checks and updates, enter a standard 5-field cron expression, and choose an IANA timezone such as `Etc/UTC` or `America/New_York`. You can change these values later under **Settings > Schedule**.
+
+Cron fields are `minute hour day-of-month month day-of-week`. Seconds are not supported.
+
+| Cron expression | Runs |
+| --- | --- |
+| `0 4 * * *` | Every day at 04:00 |
+| `0 4 * * 0` | Every Sunday at 04:00 |
+| `*/30 * * * *` | Every 30 minutes |
+
+At each scheduled time, the manager checks installed apps and applies updates only to apps whose policies permit automatic updates. Missed runs are not replayed after a restart, and overlapping runs are skipped.
 
 ## Update and schedule safety
 
