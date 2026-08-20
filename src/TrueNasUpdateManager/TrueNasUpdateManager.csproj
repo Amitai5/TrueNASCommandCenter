@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Cronos" Version="0.13.0" />
     <PackageReference Include="MailKit" Version="4.17.0" />
+    <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.10" GeneratePathProperty="true" PrivateAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -20,14 +21,10 @@
   </ItemGroup>
 
   <Target Name="ResolveBlazorFrameworkAssetRoot" BeforeTargets="_AddBlazorFrameworkStaticWebAssets">
-    <ItemGroup>
-      <BlazorFrameworkAssetsPack Include="@(KnownAspNetCorePack)" Condition="'%(Identity)' == 'Microsoft.AspNetCore.App.Internal.Assets' AND '%(TargetFramework)' == '$(TargetFramework)'" />
-    </ItemGroup>
     <PropertyGroup>
-      <BlazorFrameworkAssetsVersion>@(BlazorFrameworkAssetsPack->'%(AspNetCorePackVersion)')</BlazorFrameworkAssetsVersion>
-      <BlazorFrameworkStaticWebAssetRoot>$(NuGetPackageRoot)microsoft.aspnetcore.app.internal.assets/$(BlazorFrameworkAssetsVersion)/_framework</BlazorFrameworkStaticWebAssetRoot>
+      <BlazorFrameworkStaticWebAssetRoot>$(PkgMicrosoft_AspNetCore_App_Internal_Assets)/_framework</BlazorFrameworkStaticWebAssetRoot>
     </PropertyGroup>
-    <Error Condition="'$(BlazorFrameworkAssetsVersion)' == ''" Text="The Microsoft.AspNetCore.App.Internal.Assets package version could not be resolved." />
+    <Error Condition="'$(PkgMicrosoft_AspNetCore_App_Internal_Assets)' == ''" Text="The Microsoft.AspNetCore.App.Internal.Assets package path could not be resolved." />
     <Error Condition="!Exists('$(BlazorFrameworkStaticWebAssetRoot)/blazor.web.js')" Text="The Blazor bootstrap asset was not found at '$(BlazorFrameworkStaticWebAssetRoot)/blazor.web.js'." />
   </Target>
 
