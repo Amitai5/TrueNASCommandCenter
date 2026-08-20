@@ -18,7 +18,7 @@ TrueNAS remains the lifecycle authority. Every catalog upgrade, image refresh, a
 - Deduplicated Email and Generic Webhook notifications
 - Encrypted API, SMTP, Authorization, and secret-header values
 - Run, attempt, skip, failure, rollback, and notification history
-- Responsive light-first UI
+- Responsive system-aware light/dark UI with a persistent manual toggle
 - Liveness and readiness endpoints
 
 ## Build locally

@@ -18,9 +18,15 @@
                 <span aria-hidden="true">⚙</span> Settings
             </NavLink>
         </nav>
-        <div class="sidebar-status">
-            <span class="status-dot @(_connected ? "success" : "muted")"></span>
-            @(_connected ? "Connected" : "Not connected")
+        <div class="sidebar-footer">
+            <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+                <span data-theme-icon aria-hidden="true">◐</span>
+                <span data-theme-label>Theme</span>
+            </button>
+            <div class="sidebar-status">
+                <span class="status-dot @(_connected ? "success" : "muted")"></span>
+                @(_connected ? "Connected" : "Not connected")
+            </div>
         </div>
     </aside>
 
@@ -32,6 +38,10 @@
         <NavLink href="/" Match="NavLinkMatch.All"><span>◉</span>Apps</NavLink>
         <NavLink href="/history"><span>≡</span>History</NavLink>
         <NavLink href="/settings"><span>⚙</span>Settings</NavLink>
+        <button type="button" class="theme-toggle mobile-theme-toggle" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+            <span data-theme-icon aria-hidden="true">◐</span>
+            <span data-theme-label>Theme</span>
+        </button>
     </nav>
 </div>
 

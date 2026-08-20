@@ -4,8 +4,28 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#fafafc" />
+    <meta id="theme-color" name="theme-color" content="#fafafc" />
     <base href="/" />
+    <script>
+        (() => {
+            const storageKey = "truenas-update-manager-theme";
+            let preference = null;
+
+            try {
+                preference = localStorage.getItem(storageKey);
+            } catch {
+                // Storage can be unavailable in hardened or private browser contexts.
+            }
+
+            const theme = preference === "dark" || (preference !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+                ? "dark"
+                : "light";
+
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.style.colorScheme = theme;
+            document.getElementById("theme-color")?.setAttribute("content", theme === "dark" ? "#0f1117" : "#fafafc");
+        })();
+    </script>
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["TrueNasUpdateManager.styles.css"]" />
@@ -16,6 +36,7 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <ReconnectModal />
+    <script src="@Assets["theme.js"]" defer></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
