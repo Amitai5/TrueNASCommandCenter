@@ -10,16 +10,16 @@ You need:
 
 - TrueNAS Community Edition / SCALE 25.10 or later with the Apps service running.
 - An administrator account that can create users, groups, privileges, and API keys.
-- Network access from your browser to port `1000` on the TrueNAS system, or another host port you choose.
+- Network access from your browser to port `1800` on the TrueNAS system, or another host port you choose.
 - A trusted LAN or VPN. The manager does not include its own user login or RBAC.
 
 Install the container first using the [TrueNAS Custom App or Docker instructions](../README.md#installation). After installation, open:
 
 ```text
-http://<truenas-address>:1000
+http://<truenas-address>:1800
 ```
 
-The liveness endpoint should return a successful response at `http://<truenas-address>:1000/health/live`.
+The liveness endpoint should return a successful response at `http://<truenas-address>:1800/health/live`.
 
 ## 1. Create a service account and API key
 

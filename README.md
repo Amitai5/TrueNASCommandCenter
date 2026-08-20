@@ -23,7 +23,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - **[First-Time Setup Guide](docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
 - **[Developer Guide](docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
-- **In-app setup help** — after installation, open `http://<truenas-address>:1000/help` or select **Help** in the web UI
+- **In-app setup help** — after installation, open `http://<truenas-address>:1800/help` or select **Help** in the web UI
 
 ## Requirements
 
@@ -53,9 +53,9 @@ services:
     pull_policy: always
     restart: unless-stopped
     ports:
-      - "1000:8080"
+      - "1800:1800"
     environment:
-      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ASPNETCORE_URLS: http://0.0.0.0:1800
       DATA_PATH: /data
     volumes:
       - update-manager-data:/data
@@ -71,9 +71,9 @@ volumes:
   update-manager-data:
 ```
 
-Open `http://<truenas-address>:1000`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
+Open `http://<truenas-address>:1800`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
-If host port `1000` is already in use, change only the first number in `"1000:8080"`, for example `"8180:8080"`, and open that port in the browser. Keep the container port at `8080` so the non-root container does not require permission to bind a privileged port.
+Port `1800` is above Linux's privileged port range, so the non-root container can listen on it directly. If host port `1800` is already in use, change only the first number in `"1800:1800"`, for example `"8180:1800"`, and open that host port in the browser.
 
 ### Docker
 
@@ -85,7 +85,7 @@ docker volume create update-manager-data
 docker run --detach \
   --name truenas-update-manager \
   --restart unless-stopped \
-  --publish 1000:8080 \
+  --publish 1800:1800 \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -94,7 +94,7 @@ docker run --detach \
   ghcr.io/amitai5/truenasautoupdater:latest
 ```
 
-Open `http://localhost:1000` and follow the [First-Time Setup Guide](docs/SETUP.md).
+Open `http://localhost:1800` and follow the [First-Time Setup Guide](docs/SETUP.md).
 
 ## First launch
 
@@ -111,7 +111,7 @@ The **Continue** button on the connection step remains disabled until **Test con
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `ASPNETCORE_URLS` | Supplied by the image | HTTP listen address; the production image uses `http://0.0.0.0:8080` |
+| `ASPNETCORE_URLS` | Supplied by the image | HTTP listen address; the production image uses `http://0.0.0.0:1800` |
 | `DATA_PATH` | Supplied by the image | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | Manager app ID used to block attempts to update itself |
