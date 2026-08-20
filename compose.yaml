@@ -7,7 +7,7 @@ services:
     ports:
       - "1800:1800"
     environment:
-      ASPNETCORE_URLS: http://0.0.0.0:1800
+      ASPNETCORE_HTTP_PORTS: 1800
       DATA_PATH: /data
       # APP_ENCRYPTION_KEY: "base64-encoded-32-byte-key"
       # TRUENAS_APP_ID: "the-manager-app-id"

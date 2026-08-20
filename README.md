@@ -55,7 +55,7 @@ services:
     ports:
       - "1800:1800"
     environment:
-      ASPNETCORE_URLS: http://0.0.0.0:1800
+      ASPNETCORE_HTTP_PORTS: 1800
       DATA_PATH: /data
     volumes:
       - update-manager-data:/data
@@ -111,7 +111,7 @@ The **Continue** button on the connection step remains disabled until **Test con
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `ASPNETCORE_URLS` | Supplied by the image | HTTP listen address; the production image uses `http://0.0.0.0:1800` |
+| `ASPNETCORE_HTTP_PORTS` | Supplied by the image | HTTP listen port; the production image uses `1800` |
 | `DATA_PATH` | Supplied by the image | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | Manager app ID used to block attempts to update itself |

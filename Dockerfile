@@ -26,7 +26,7 @@ RUN mkdir -p /data && chown app:app /data
 COPY --from=build --chown=app:app /app ./
 
 USER app
-ENV ASPNETCORE_URLS=http://0.0.0.0:1800 \
+ENV ASPNETCORE_HTTP_PORTS=1800 \
     DATA_PATH=/data \
     DOTNET_EnableDiagnostics=0
 EXPOSE 1800

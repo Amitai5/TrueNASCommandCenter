@@ -75,7 +75,7 @@ docker run --rm \
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `ASPNETCORE_URLS` | Container default supplied | HTTP listen address; production image uses `http://0.0.0.0:1800` |
+| `ASPNETCORE_HTTP_PORTS` | Container default supplied | HTTP listen port; production image uses `1800` |
 | `DATA_PATH` | Container default supplied | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | App ID used to prevent the manager from updating itself |
