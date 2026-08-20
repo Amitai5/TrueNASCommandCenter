@@ -11,6 +11,8 @@ RUN dotnet publish src/TrueNasUpdateManager/TrueNasUpdateManager.csproj \
     --no-restore \
     --output /app \
     /p:UseAppHost=false
+RUN test -s /app/wwwroot/_framework/blazor.web.js \
+    && grep -Fq '"Route":"_framework/blazor.web.js"' /app/TrueNasUpdateManager.staticwebassets.endpoints.json
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.10 AS runtime
 WORKDIR /app

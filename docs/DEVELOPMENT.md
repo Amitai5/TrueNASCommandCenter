@@ -62,7 +62,7 @@ docker volume create update-manager-data
 
 docker run --rm \
   --name truenas-update-manager \
-  --publish 8080:8080 \
+  --publish 1000:8080 \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -93,7 +93,7 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 
 ### Frontend assets
 
-The UI supports system-aware light and dark themes with a local manual override. The Blazor bootstrap asset `_framework/blazor.web.js` is intentionally excluded from build-time compression because compressed responses produced corrupt-content failures in the target TrueNAS/Firefox deployment. Keep the exclusion narrowly scoped and verify the published response before changing it.
+The UI supports system-aware light and dark themes with a local manual override. Build-time static-asset compression is disabled because compressed Blazor responses produced corrupt-content failures in the target TrueNAS deployment, while excluding only `_framework/blazor.web.js` caused the Linux publish to omit the bootstrap asset entirely. The Dockerfile verifies that the raw asset and its endpoint are present before an image can be published.
 
 ## TrueNAS middleware methods
 

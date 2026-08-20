@@ -1,4 +1,4 @@
-:deep(#blazor-error-ui) {
+#blazor-error-ui {
     color-scheme: inherit;
     background: var(--notice-warning-background);
     bottom: 0;

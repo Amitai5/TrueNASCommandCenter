@@ -122,6 +122,10 @@
                 <p>This is expected until Test connection succeeds. Correct the connection, authentication, certificate, or role error shown above the form.</p>
             </details>
             <details>
+                <summary>TrueNAS keeps using an older image</summary>
+                <p>Add <code>pull_policy: always</code> below the custom app's <code>image:</code> line, enable <strong>Apps → Configuration → Settings → Check for docker image updates</strong>, and save/redeploy the app. The pull policy checks GHCR when TrueNAS reapplies the app; it does not restart a running container by itself.</p>
+            </details>
+            <details>
                 <summary>Authentication failed</summary>
                 <p>Confirm the username owns the key, reset the key if its value is uncertain, and check whether an earlier insecure connection caused TrueNAS to revoke it.</p>
             </details>

@@ -23,7 +23,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - **[First-Time Setup Guide](docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
 - **[Developer Guide](docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
-- **In-app setup help** — after installation, open `http://<truenas-address>:8080/help` or select **Help** in the web UI
+- **In-app setup help** — after installation, open `http://<truenas-address>:1000/help` or select **Help** in the web UI
 
 ## Requirements
 
@@ -50,9 +50,10 @@ This is the recommended TrueNAS installation method.
 services:
   truenas-update-manager:
     image: ghcr.io/amitai5/truenasautoupdater:latest
+    pull_policy: always
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "1000:8080"
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       DATA_PATH: /data
@@ -70,9 +71,9 @@ volumes:
   update-manager-data:
 ```
 
-Open `http://<truenas-address>:8080`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
+Open `http://<truenas-address>:1000`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
-If host port `8080` is already in use, change only the first number in `"8080:8080"`, for example `"8180:8080"`, and open that port in the browser.
+If host port `1000` is already in use, change only the first number in `"1000:8080"`, for example `"8180:8080"`, and open that port in the browser. Keep the container port at `8080` so the non-root container does not require permission to bind a privileged port.
 
 ### Docker
 
@@ -84,7 +85,7 @@ docker volume create update-manager-data
 docker run --detach \
   --name truenas-update-manager \
   --restart unless-stopped \
-  --publish 8080:8080 \
+  --publish 1000:8080 \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -93,7 +94,7 @@ docker run --detach \
   ghcr.io/amitai5/truenasautoupdater:latest
 ```
 
-Open `http://localhost:8080` and follow the [First-Time Setup Guide](docs/SETUP.md).
+Open `http://localhost:1000` and follow the [First-Time Setup Guide](docs/SETUP.md).
 
 ## First launch
 
@@ -140,9 +141,9 @@ Keep privileged mode and host networking disabled, do not mount `/var/run/docker
 
 ## Updating
 
-The `latest` and `production` image tags track the current `production` branch. Version tags such as `1.2.3` can be used to pin a deployment.
+The `latest` and `production` image tags track the current `production` branch. Version tags such as `1.2.3` can be used to pin a deployment. The recommended YAML uses `pull_policy: always`, which makes Compose check GHCR whenever TrueNAS applies or recreates the app instead of trusting a cached tag.
 
-To update, pull the desired image and recreate or redeploy the container while preserving the same `/data` volume. After an update, hard-refresh the browser if it has cached older frontend assets.
+In **Apps → Configuration → Settings**, keep **Check for docker image updates** enabled. To apply an available image, update/redeploy the custom app or edit its YAML and save without changing the `/data` volume. `pull_policy: always` does not restart a running container by itself; it takes effect when TrueNAS reapplies the Compose project. After an update, hard-refresh the browser if it has cached older frontend assets.
 
 ## Health endpoints
 

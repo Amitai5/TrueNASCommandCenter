@@ -10,16 +10,16 @@ You need:
 
 - TrueNAS Community Edition / SCALE 25.10 or later with the Apps service running.
 - An administrator account that can create users, groups, privileges, and API keys.
-- Network access from your browser to port `8080` on the TrueNAS system, or another host port you choose.
+- Network access from your browser to port `1000` on the TrueNAS system, or another host port you choose.
 - A trusted LAN or VPN. The manager does not include its own user login or RBAC.
 
 Install the container first using the [TrueNAS Custom App or Docker instructions](../README.md#installation). After installation, open:
 
 ```text
-http://<truenas-address>:8080
+http://<truenas-address>:1000
 ```
 
-The liveness endpoint should return a successful response at `http://<truenas-address>:8080/health/live`.
+The liveness endpoint should return a successful response at `http://<truenas-address>:1000/health/live`.
 
 ## 1. Create a service account and API key
 
@@ -121,6 +121,14 @@ This fail-closed default prevents newly discovered applications from updating wi
 3. In browser developer tools, verify `/_framework/blazor.web.js` returns HTTP `200` as JavaScript.
 
 The page can render as static HTML even when the Blazor bootstrap script fails. In that state, form fields appear normally but button handlers are not connected.
+
+### TrueNAS keeps using an older image
+
+1. Edit the custom app YAML and add `pull_policy: always` directly below the `image:` line.
+2. Open **Apps → Configuration → Settings** and enable **Check for docker image updates**.
+3. Save/redeploy the custom app while preserving the existing `/data` volume.
+
+`pull_policy: always` tells Compose to check GHCR whenever TrueNAS applies or recreates the app. It does not periodically restart a running container. If TrueNAS still has not detected the new digest, use **Apps → Configuration → Manage Container Images → Pull Image**, pull `ghcr.io/amitai5/truenasautoupdater:latest`, and then save/redeploy the custom app.
 
 ### Continue is disabled
 
