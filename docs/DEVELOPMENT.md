@@ -38,16 +38,16 @@ The application requires a writable data directory. In PowerShell:
 
 ```powershell
 $env:DATA_PATH = "$PWD/.data"
-dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:1800
+dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
 ```
 
 In Bash:
 
 ```bash
-DATA_PATH="$PWD/.data" dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:1800
+DATA_PATH="$PWD/.data" dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
 ```
 
-Open `http://localhost:1800` and use the first-launch wizard. Avoid using production API keys in development environments.
+Open `http://localhost:2600` and use the first-launch wizard. Avoid using production API keys in development environments.
 
 ## Build the container
 
@@ -62,7 +62,7 @@ docker volume create update-manager-data
 
 docker run --rm \
   --name truenas-update-manager \
-  --publish 1800:1800 \
+  --publish 2600:2600 \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -75,7 +75,7 @@ docker run --rm \
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `ASPNETCORE_HTTP_PORTS` | Container default supplied | HTTP listen port; production image uses `1800` |
+| `ASPNETCORE_HTTP_PORTS` | Container default supplied | HTTP listen port; production image defaults to `2600` |
 | `DATA_PATH` | Container default supplied | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | App ID used to prevent the manager from updating itself |

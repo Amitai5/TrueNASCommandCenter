@@ -1,3 +1,5 @@
+x-app-port: &app-port 2600
+
 services:
   truenas-update-manager:
     build:
@@ -5,9 +7,11 @@ services:
     image: truenas-update-manager:local
     restart: unless-stopped
     ports:
-      - "1800:1800"
+      - target: *app-port
+        published: *app-port
+        protocol: tcp
     environment:
-      ASPNETCORE_HTTP_PORTS: 1800
+      ASPNETCORE_HTTP_PORTS: *app-port
       DATA_PATH: /data
       # APP_ENCRYPTION_KEY: "base64-encoded-32-byte-key"
       # TRUENAS_APP_ID: "the-manager-app-id"

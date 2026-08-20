@@ -29,7 +29,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - **[First-Time Setup Guide](docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
 - **[Developer Guide](docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
-- **In-app setup help** — after installation, open `http://<truenas-address>:1800/help` or select **Help** in the web UI
+- **In-app setup help** — after installation, open `http://<truenas-address>:2600/help` or select **Help** in the web UI
 
 ## Requirements
 
@@ -53,15 +53,19 @@ This is the recommended TrueNAS installation method.
 5. Click **Save** and wait for the app to report a running state.
 
 ```yaml
+x-app-port: &app-port 2600
+
 services:
   truenas-update-manager:
     image: ghcr.io/amitai5/truenasautoupdater:latest
     pull_policy: always
     restart: unless-stopped
     ports:
-      - "1800:1800"
+      - target: *app-port
+        published: *app-port
+        protocol: tcp
     environment:
-      ASPNETCORE_HTTP_PORTS: 1800
+      ASPNETCORE_HTTP_PORTS: *app-port
       DATA_PATH: /data
     volumes:
       - update-manager-data:/data
@@ -77,9 +81,9 @@ volumes:
   update-manager-data:
 ```
 
-Open `http://<truenas-address>:1800`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
+Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
-Port `1800` is above Linux's privileged port range, so the non-root container can listen on it directly. If host port `1800` is already in use, change only the first number in `"1800:1800"`, for example `"8180:1800"`, and open that host port in the browser.
+The `x-app-port` value at the top of the YAML controls the published port, container target, and ASP.NET listener. It defaults to `2600`. If that port is already in use, change only the `x-app-port` value to another unused port above `1023`, save the YAML, and open the selected port in the browser.
 
 ### Docker
 
@@ -91,7 +95,7 @@ docker volume create update-manager-data
 docker run --detach \
   --name truenas-update-manager \
   --restart unless-stopped \
-  --publish 1800:1800 \
+  --publish 2600:2600 \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -100,7 +104,7 @@ docker run --detach \
   ghcr.io/amitai5/truenasautoupdater:latest
 ```
 
-Open `http://localhost:1800` and follow the [First-Time Setup Guide](docs/SETUP.md).
+Open `http://localhost:2600` and follow the [First-Time Setup Guide](docs/SETUP.md).
 
 ## First launch
 
@@ -117,7 +121,7 @@ The **Continue** button on the connection step remains disabled until **Test con
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `ASPNETCORE_HTTP_PORTS` | Supplied by the image | HTTP listen port; the production image uses `1800` |
+| `ASPNETCORE_HTTP_PORTS` | Supplied by the image | HTTP listen port; the production image defaults to `2600` |
 | `DATA_PATH` | Supplied by the image | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | Manager app ID used to block attempts to update itself |

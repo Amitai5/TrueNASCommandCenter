@@ -26,10 +26,10 @@ RUN mkdir -p /data && chown app:app /data
 COPY --from=build --chown=app:app /app ./
 
 USER app
-ENV ASPNETCORE_HTTP_PORTS=1800 \
+ENV ASPNETCORE_HTTP_PORTS=2600 \
     DATA_PATH=/data \
     DOTNET_EnableDiagnostics=0
-EXPOSE 1800
+EXPOSE 2600
 VOLUME ["/data"]
 
 ENTRYPOINT ["dotnet", "TrueNasUpdateManager.dll"]
