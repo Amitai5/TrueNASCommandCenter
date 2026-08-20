@@ -76,6 +76,10 @@
         </div>
 
         <p class="muted">For an untrusted certificate, the preferred fix is a trusted certificate with a matching hostname. On a trusted LAN, disabling certificate verification temporarily still keeps the connection encrypted with <code>wss://</code>.</p>
+
+        <div class="notice help-inline-notice">
+            <strong>Need deeper diagnostics?</strong> A failed connection test displays an error code and diagnostic ID. Search the TrueNAS app's container logs for that ID to see the failing connection stage, DNS results, port, TLS setting, WebSocket error, and RPC method. Credentials and RPC payloads are never written to the log.
+        </div>
     </section>
 
     <section id="wizard" class="panel help-section">

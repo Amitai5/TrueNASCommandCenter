@@ -12,7 +12,8 @@ public sealed record ConnectionTestResult(
     string Message,
     bool HasReadAccess,
     bool HasWriteAccess,
-    string? ErrorCode = null);
+    string? ErrorCode = null,
+    string? DiagnosticId = null);
 
 public sealed record VersionParts(int Major, int Minor, int Patch);
 

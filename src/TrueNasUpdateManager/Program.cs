@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using TrueNasUpdateManager.Components;
@@ -8,6 +9,8 @@ using TrueNasUpdateManager.Scheduling;
 using TrueNasUpdateManager.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 var dataPath = builder.Configuration["DATA_PATH"];
 if (string.IsNullOrWhiteSpace(dataPath))
 {
@@ -15,9 +18,21 @@ if (string.IsNullOrWhiteSpace(dataPath))
 }
 
 var databasePath = Path.Combine(dataPath, "app.db");
+var dataProtectionPath = Path.Combine(dataPath, "data-protection");
 var connectionString = $"Data Source={databasePath};Cache=Shared;Foreign Keys=True;Pooling=True";
 
+Directory.CreateDirectory(dataProtectionPath);
+if (!OperatingSystem.IsWindows())
+{
+    File.SetUnixFileMode(
+        dataProtectionPath,
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+}
+
 builder.Services.AddSingleton(new DataPathOptions(dataPath));
+builder.Services.AddDataProtection()
+    .SetApplicationName("TrueNasUpdateManager")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<InitializationState>();
 builder.Services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
@@ -45,6 +60,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+app.Logger.LogInformation("Persistent ASP.NET Data Protection key ring configured at {DataProtectionPath}", dataProtectionPath);
 
 if (!app.Environment.IsDevelopment())
 {

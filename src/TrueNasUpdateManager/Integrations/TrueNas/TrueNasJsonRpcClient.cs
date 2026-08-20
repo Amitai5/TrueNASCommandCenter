@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -23,7 +25,7 @@ public sealed class TrueNasJsonRpcClient(
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> pending = new();
+    private readonly ConcurrentDictionary<long, PendingRequest> pending = new();
     private readonly SemaphoreSlim connectionGate = new(1, 1);
     private readonly SemaphoreSlim sendGate = new(1, 1);
     private IWebSocketTransport? transport;
@@ -40,32 +42,52 @@ public sealed class TrueNasJsonRpcClient(
 
     public async Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
+        var diagnosticId = Guid.NewGuid().ToString("N");
+        var stage = "reset";
+        logger.LogInformation("TrueNAS connection test {DiagnosticId} started", diagnosticId);
         try
         {
             await ResetConnectionAsync();
-            await EnsureConnectedAsync(cancellationToken);
-            var pong = await CallAsync<string>("core.ping", [], cancellationToken);
+            stage = "connect-and-authenticate";
+            await EnsureConnectedAsync(cancellationToken, diagnosticId);
+            stage = "core.ping";
+            var pong = await SendRequestAsync<string>("core.ping", [], cancellationToken, diagnosticId: diagnosticId);
             if (!string.Equals(pong, "pong", StringComparison.OrdinalIgnoreCase))
             {
                 throw new TrueNasClientException("PING_FAILED", "TrueNAS returned an unexpected ping response.");
             }
 
-            _ = await CallAsync<IReadOnlyList<TrueNasAppDto>>(
+            stage = "app.query";
+            _ = await SendRequestAsync<IReadOnlyList<TrueNasAppDto>>(
                 "app.query",
                 [Array.Empty<object>(), new { extra = new { retrieve_config = false, include_app_schema = false } }],
-                cancellationToken);
+                cancellationToken,
+                diagnosticId: diagnosticId);
 
             await RecordConnectionResultAsync(true, null, null, cancellationToken);
             var writeMessage = rolesDetected && !hasWriteAccess
                 ? "Connected, but APPS_WRITE was not detected."
                 : "Connected and app discovery succeeded.";
-            return new ConnectionTestResult(true, writeMessage, true, !rolesDetected || hasWriteAccess);
+            logger.LogInformation(
+                "TrueNAS connection test {DiagnosticId} succeeded. ReadAccess={HasReadAccess} WriteAccess={HasWriteAccess}",
+                diagnosticId,
+                hasReadAccess,
+                !rolesDetected || hasWriteAccess);
+            return new ConnectionTestResult(true, writeMessage, true, !rolesDetected || hasWriteAccess, DiagnosticId: diagnosticId);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             var (code, message) = SanitizeException(exception);
-            await RecordConnectionResultAsync(false, code, message, cancellationToken);
-            return new ConnectionTestResult(false, message, false, false, code);
+            var diagnosticMessage = BuildDiagnosticMessage(message, code, diagnosticId);
+            logger.LogError(
+                exception,
+                "TrueNAS connection test {DiagnosticId} failed at stage {Stage}. ErrorCode={ErrorCode} ErrorMessage={ErrorMessage}",
+                diagnosticId,
+                stage,
+                code,
+                message);
+            await RecordConnectionResultAsync(false, code, diagnosticMessage, cancellationToken);
+            return new ConnectionTestResult(false, diagnosticMessage, false, false, code, diagnosticId);
         }
     }
 
@@ -175,9 +197,10 @@ public sealed class TrueNasJsonRpcClient(
         return await SendRequestAsync<T>(method, parameters, cancellationToken);
     }
 
-    private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
+    private async Task EnsureConnectedAsync(CancellationToken cancellationToken, string? diagnosticId = null)
     {
         var options = await settingsService.GetConnectionOptionsAsync(cancellationToken);
+        diagnosticId ??= Guid.NewGuid().ToString("N");
         var fingerprint = string.Join(
             '|',
             options.ServerUri,
@@ -190,6 +213,7 @@ public sealed class TrueNasJsonRpcClient(
             authenticated &&
             string.Equals(connectionFingerprint, fingerprint, StringComparison.Ordinal))
         {
+            logger.LogDebug("Reusing authenticated TrueNAS connection for diagnostic {DiagnosticId}", diagnosticId);
             return;
         }
 
@@ -200,9 +224,19 @@ public sealed class TrueNasJsonRpcClient(
                 authenticated &&
                 string.Equals(connectionFingerprint, fingerprint, StringComparison.Ordinal))
             {
+                logger.LogDebug("Reusing authenticated TrueNAS connection for diagnostic {DiagnosticId}", diagnosticId);
                 return;
             }
 
+            var endpoint = GetSafeEndpoint(options.ServerUri);
+            logger.LogInformation(
+                "TrueNAS connection attempt {DiagnosticId} started. Endpoint={Endpoint} Host={Host} Port={Port} VerifyTls={VerifyTls} AllowInsecureWebSocket={AllowInsecureWebSocket}",
+                diagnosticId,
+                endpoint,
+                options.ServerUri.DnsSafeHost,
+                options.ServerUri.Port,
+                options.VerifyTls,
+                options.AllowInsecureWebSocket);
             await DisposeTransportAsync();
             transport = transportFactory.Create();
             receiveCancellation = new CancellationTokenSource();
@@ -210,10 +244,17 @@ public sealed class TrueNasJsonRpcClient(
             try
             {
                 await transport.ConnectAsync(options, cancellationToken);
+                logger.LogInformation(
+                    "TrueNAS connection attempt {DiagnosticId} completed the WebSocket transport stage. State={State}",
+                    diagnosticId,
+                    transport.State);
                 receiveTask = ReceiveLoopAsync(transport, receiveCancellation.Token);
                 TrueNasAuthResponseDto auth;
                 try
                 {
+                    logger.LogInformation(
+                        "TrueNAS connection attempt {DiagnosticId} is authenticating with API_KEY_PLAIN",
+                        diagnosticId);
                     auth = await SendRequestAsync<TrueNasAuthResponseDto>(
                         "auth.login_ex",
                         [
@@ -225,11 +266,14 @@ public sealed class TrueNasJsonRpcClient(
                                 login_options = new { user_info = true, reconnect_token = false }
                             }
                         ],
-                        cancellationToken);
+                        cancellationToken,
+                        diagnosticId: diagnosticId);
                 }
                 catch (TrueNasClientException exception) when (exception.Code == "-32602")
                 {
-                    // TrueNAS 25.10 API_KEY_PLAIN predates the required username field.
+                    logger.LogWarning(
+                        "TrueNAS connection attempt {DiagnosticId} rejected the username authentication shape; retrying the legacy API-key shape",
+                        diagnosticId);
                     auth = await SendRequestAsync<TrueNasAuthResponseDto>(
                         "auth.login_ex",
                         [
@@ -240,7 +284,8 @@ public sealed class TrueNasJsonRpcClient(
                                 login_options = new { user_info = true, reconnect_token = false }
                             }
                         ],
-                        cancellationToken);
+                        cancellationToken,
+                        diagnosticId: diagnosticId);
                 }
 
                 if (!string.Equals(auth.ResponseType, "SUCCESS", StringComparison.Ordinal))
@@ -253,6 +298,12 @@ public sealed class TrueNasJsonRpcClient(
                 ReadRoles(auth.UserInfo);
                 authenticated = true;
                 connectionFingerprint = fingerprint;
+                logger.LogInformation(
+                    "TrueNAS connection attempt {DiagnosticId} authenticated successfully. RolesDetected={RolesDetected} ReadAccess={HasReadAccess} WriteAccess={HasWriteAccess}",
+                    diagnosticId,
+                    rolesDetected,
+                    hasReadAccess,
+                    hasWriteAccess);
             }
             catch
             {
@@ -262,7 +313,32 @@ public sealed class TrueNasJsonRpcClient(
         }
         catch (WebSocketException exception)
         {
-            throw ClassifyWebSocketException(exception);
+            var classified = ClassifyWebSocketException(exception);
+            var diagnosticMessage = BuildDiagnosticMessage(classified.Message, classified.Code, diagnosticId);
+            logger.LogError(
+                exception,
+                "TrueNAS connection attempt {DiagnosticId} failed during the WebSocket stage. WebSocketError={WebSocketError} NativeErrorCode={NativeErrorCode} ClassifiedErrorCode={ClassifiedErrorCode}",
+                diagnosticId,
+                exception.WebSocketErrorCode,
+                exception.NativeErrorCode,
+                classified.Code);
+            throw new TrueNasClientException(classified.Code, diagnosticMessage, classified);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(
+                exception,
+                "TrueNAS connection attempt {DiagnosticId} failed during connection setup",
+                diagnosticId);
+            if (exception is TrueNasClientException clientException)
+            {
+                throw new TrueNasClientException(
+                    clientException.Code,
+                    BuildDiagnosticMessage(clientException.Message, clientException.Code, diagnosticId),
+                    clientException);
+            }
+
+            throw;
         }
         finally
         {
@@ -274,7 +350,8 @@ public sealed class TrueNasJsonRpcClient(
         string method,
         object?[] parameters,
         CancellationToken cancellationToken,
-        bool disableTimeout = false)
+        bool disableTimeout = false,
+        string? diagnosticId = null)
     {
         var activeTransport = transport;
         if (activeTransport?.State != WebSocketState.Open)
@@ -284,7 +361,8 @@ public sealed class TrueNasJsonRpcClient(
 
         var id = Interlocked.Increment(ref nextRequestId);
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!pending.TryAdd(id, completion))
+        var request = new PendingRequest(method, diagnosticId, completion);
+        if (!pending.TryAdd(id, request))
         {
             throw new InvalidOperationException("A duplicate JSON-RPC request identifier was generated.");
         }
@@ -301,6 +379,11 @@ public sealed class TrueNasJsonRpcClient(
 
         try
         {
+            logger.LogDebug(
+                "Sending TrueNAS RPC request {RequestId} for method {Method}. DiagnosticId={DiagnosticId}",
+                id,
+                method,
+                diagnosticId ?? "none");
             await sendGate.WaitAsync(cancellationToken);
             try
             {
@@ -314,6 +397,11 @@ public sealed class TrueNasJsonRpcClient(
             var result = disableTimeout
                 ? await completion.Task.WaitAsync(cancellationToken)
                 : await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+            logger.LogDebug(
+                "TrueNAS RPC request {RequestId} for method {Method} completed. DiagnosticId={DiagnosticId}",
+                id,
+                method,
+                diagnosticId ?? "none");
             var value = result.Deserialize<T>(JsonOptions);
             return value ?? throw new TrueNasClientException(
                 "INVALID_RESPONSE",
@@ -346,22 +434,44 @@ public sealed class TrueNasJsonRpcClient(
                 var root = document.RootElement;
                 if (!root.TryGetProperty("id", out var idElement) ||
                     !TryReadRequestId(idElement, out var id) ||
-                    !pending.TryGetValue(id, out var completion))
+                    !pending.TryGetValue(id, out var request))
                 {
+                    logger.LogDebug("Ignoring an uncorrelated TrueNAS WebSocket message");
                     continue;
                 }
 
                 if (root.TryGetProperty("error", out var error))
                 {
-                    completion.TrySetException(ParseRpcError(error));
+                    var rpcException = ParseRpcError(error);
+                    if (string.Equals(request.Method, "auth.login_ex", StringComparison.Ordinal))
+                    {
+                        rpcException = new TrueNasClientException(
+                            rpcException.Code,
+                            "TrueNAS rejected the authentication request.",
+                            rpcException);
+                    }
+
+                    logger.LogWarning(
+                        "TrueNAS RPC request {RequestId} for method {Method} failed. DiagnosticId={DiagnosticId} ErrorCode={ErrorCode} ErrorMessage={ErrorMessage}",
+                        id,
+                        request.Method,
+                        request.DiagnosticId ?? "none",
+                        rpcException.Code,
+                        rpcException.Message);
+                    request.Completion.TrySetException(rpcException);
                 }
                 else if (root.TryGetProperty("result", out var result))
                 {
-                    completion.TrySetResult(result.Clone());
+                    request.Completion.TrySetResult(result.Clone());
                 }
                 else
                 {
-                    completion.TrySetException(
+                    logger.LogWarning(
+                        "TrueNAS RPC request {RequestId} for method {Method} received a malformed response. DiagnosticId={DiagnosticId}",
+                        id,
+                        request.Method,
+                        request.DiagnosticId ?? "none");
+                    request.Completion.TrySetException(
                         new TrueNasClientException("INVALID_RESPONSE", "TrueNAS returned a malformed response."));
                 }
             }
@@ -372,17 +482,30 @@ public sealed class TrueNasJsonRpcClient(
         catch (Exception exception)
         {
             terminalError = exception;
-            logger.LogWarning("TrueNAS WebSocket receive loop stopped: {ErrorType}", exception.GetType().Name);
+            logger.LogError(
+                exception,
+                "TrueNAS WebSocket receive loop stopped unexpectedly. ErrorType={ErrorType} TransportState={TransportState} PendingRequests={PendingRequests}",
+                exception.GetType().Name,
+                activeTransport.State,
+                pending.Count);
         }
         finally
         {
             authenticated = false;
+            if (terminalError is null && !cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    "TrueNAS WebSocket receive loop ended because the remote connection closed. TransportState={TransportState} PendingRequests={PendingRequests}",
+                    activeTransport.State,
+                    pending.Count);
+            }
+
             var error = terminalError is null
                 ? new TrueNasClientException("CONNECTION_CLOSED", "The TrueNAS connection closed.")
                 : new TrueNasClientException("NETWORK_ERROR", "The TrueNAS connection was interrupted.", terminalError);
-            foreach (var completion in pending.Values)
+            foreach (var request in pending.Values)
             {
-                completion.TrySetException(error);
+                request.Completion.TrySetException(error);
             }
         }
     }
@@ -413,6 +536,7 @@ public sealed class TrueNasJsonRpcClient(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            logger.LogDebug(exception, "Unable to retrieve diagnostic details for TrueNAS job {JobId}", jobId);
             return null;
         }
     }
@@ -501,8 +625,9 @@ public sealed class TrueNasJsonRpcClient(
             {
                 await oldTransport.CloseAsync(CancellationToken.None);
             }
-            catch
+            catch (Exception exception)
             {
+                logger.LogDebug(exception, "Ignoring an error while closing the previous TrueNAS WebSocket transport");
             }
 
             await oldTransport.DisposeAsync();
@@ -514,8 +639,9 @@ public sealed class TrueNasJsonRpcClient(
             {
                 await receiveTask.WaitAsync(TimeSpan.FromSeconds(2));
             }
-            catch
+            catch (Exception exception)
             {
+                logger.LogDebug(exception, "The previous TrueNAS WebSocket receive loop did not stop cleanly");
             }
         }
 
@@ -556,13 +682,50 @@ public sealed class TrueNasJsonRpcClient(
 
     private static TrueNasClientException ClassifyWebSocketException(WebSocketException exception)
     {
-        var message = exception.InnerException?.Message ?? exception.Message;
-        var code = message.Contains("certificate", StringComparison.OrdinalIgnoreCase)
-            ? "TLS_FAILURE"
-            : "NETWORK_ERROR";
-        return new TrueNasClientException(code, code == "TLS_FAILURE"
-            ? "TLS certificate validation failed."
-            : "Unable to connect to TrueNAS.", exception);
+        var messages = GetExceptionMessages(exception);
+        if (FindInnerException<AuthenticationException>(exception) is not null ||
+            messages.Contains("certificate", StringComparison.OrdinalIgnoreCase) ||
+            messages.Contains("TLS", StringComparison.OrdinalIgnoreCase) ||
+            messages.Contains("SSL", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TrueNasClientException("TLS_FAILURE", "TLS certificate validation or negotiation failed.", exception);
+        }
+
+        var socketException = FindInnerException<SocketException>(exception);
+        if (socketException?.SocketErrorCode is SocketError.HostNotFound or SocketError.NoData or SocketError.TryAgain)
+        {
+            return new TrueNasClientException(
+                "DNS_FAILURE",
+                "The TrueNAS hostname could not be resolved from the app container.",
+                exception);
+        }
+
+        if (socketException?.SocketErrorCode == SocketError.ConnectionRefused)
+        {
+            return new TrueNasClientException(
+                "CONNECTION_REFUSED",
+                "TrueNAS refused the WebSocket connection. Verify the address, port, and TrueNAS web service.",
+                exception);
+        }
+
+        if (socketException?.SocketErrorCode == SocketError.TimedOut ||
+            messages.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TrueNasClientException(
+                "TIMEOUT",
+                "The TrueNAS WebSocket connection timed out from the app container.",
+                exception);
+        }
+
+        if (exception.WebSocketErrorCode == WebSocketError.NotAWebSocket)
+        {
+            return new TrueNasClientException(
+                "WEBSOCKET_UPGRADE_FAILED",
+                "TrueNAS did not accept the WebSocket upgrade. Verify the /api/current endpoint.",
+                exception);
+        }
+
+        return new TrueNasClientException("NETWORK_ERROR", "Unable to connect to TrueNAS.", exception);
     }
 
     private static (string Code, string Message) SanitizeException(Exception exception) =>
@@ -575,6 +738,49 @@ public sealed class TrueNasJsonRpcClient(
 
     private static string Sanitize(string value) =>
         value.Length <= 512 ? value : value[..512];
+
+    private static string BuildDiagnosticMessage(string message, string code, string diagnosticId) =>
+        message.Contains("Diagnostic ID:", StringComparison.Ordinal)
+            ? Sanitize(message)
+            : Sanitize($"{message} Error code: {code}. Diagnostic ID: {diagnosticId}. Check the container logs for this ID.");
+
+    private static string GetSafeEndpoint(Uri uri)
+    {
+        var builder = new UriBuilder(uri)
+        {
+            UserName = string.Empty,
+            Password = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty
+        };
+        return builder.Uri.GetLeftPart(UriPartial.Path);
+    }
+
+    private static TException? FindInnerException<TException>(Exception exception) where TException : Exception
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is TException match)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private static string GetExceptionMessages(Exception exception)
+    {
+        var messages = new List<string>();
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            messages.Add(current.Message);
+        }
+
+        return string.Join(" | ", messages);
+    }
+
+    private sealed record PendingRequest(string Method, string? DiagnosticId, TaskCompletionSource<JsonElement> Completion);
 
     public async ValueTask DisposeAsync()
     {

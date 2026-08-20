@@ -146,6 +146,12 @@ This is expected until **Test connection** completes successfully. Read the stat
 - API keys are shown only once; reset the key if the saved value is uncertain.
 - If the key was used with `ws://`, check whether TrueNAS revoked it and create or reset it.
 
+### Collect connection diagnostics
+
+Every failed **Test connection** now displays an error code and diagnostic ID. Open the TrueNAS app's container logs and search for that diagnostic ID. The matching entries show the connection stage, resolved addresses, target port, TLS-verification setting, WebSocket error, inner exception, authentication result, and RPC method without logging the username, API key, or RPC payload.
+
+For scheduled or manual update-check failures, open **History** and copy the diagnostic value from the failed run. Use that ID to find the matching backend log entries.
+
 ### Missing app permissions
 
 Confirm that the service account's group is attached to a custom privilege containing both `APPS_READ` and `APPS_WRITE`. Do not modify TrueNAS built-in privileges.

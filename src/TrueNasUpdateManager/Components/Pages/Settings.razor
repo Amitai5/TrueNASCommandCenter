@@ -21,6 +21,13 @@
     {
         <div class="notice @(_error ? "danger" : "success")" role="status">@_message</div>
     }
+    else if (!string.IsNullOrWhiteSpace(_record?.LastConnectionError))
+    {
+        <div class="notice danger" role="status">
+            <strong>Last connection failure</strong>
+            <p>@_record.LastConnectionError</p>
+        </div>
+    }
 
     <div class="tabs" role="tablist">
         <button class="@TabClass("connection")" @onclick='() => _tab = "connection"'>Connection</button>

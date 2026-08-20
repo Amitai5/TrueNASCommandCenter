@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using TrueNasUpdateManager.Integrations.TrueNas;
@@ -147,6 +148,31 @@ public sealed class TrueNasJsonRpcClientTests
 
         Assert.IsFalse(result.Success);
         Assert.AreEqual("AUTHENTICATION_FAILED", result.ErrorCode);
+        Assert.IsNotNull(result.DiagnosticId);
+        StringAssert.Contains(result.Message, result.DiagnosticId);
+    }
+
+    [TestMethod]
+    public async Task ConnectionTest_LogsDiagnosticIdWithoutApiKey()
+    {
+        var logger = new RecordingLogger<TrueNasJsonRpcClient>();
+        var setup = await TestClientFactory.CreateAsync(logger: logger);
+        setup.Transport.ConnectException = new WebSocketException(
+            WebSocketError.ConnectionClosedPrematurely,
+            "The test WebSocket connection failed.");
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var result = await client.TestConnectionAsync();
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("NETWORK_ERROR", result.ErrorCode);
+        Assert.IsNotNull(result.DiagnosticId);
+        StringAssert.Contains(result.Message, result.DiagnosticId);
+        Assert.IsTrue(logger.Entries.Any(entry => entry.Message.Contains(result.DiagnosticId, StringComparison.Ordinal)));
+        Assert.IsFalse(logger.Entries.Any(entry =>
+            entry.Message.Contains("test-api-key", StringComparison.Ordinal) ||
+            (entry.Exception?.ToString().Contains("test-api-key", StringComparison.Ordinal) ?? false)));
     }
 
     [TestMethod]

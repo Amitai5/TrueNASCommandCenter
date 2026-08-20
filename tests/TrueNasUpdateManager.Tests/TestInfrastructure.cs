@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TrueNasUpdateManager.Data;
 using TrueNasUpdateManager.Domain;
@@ -204,10 +205,16 @@ internal sealed class FakeWebSocketTransport : IWebSocketTransport
     private readonly Channel<string> incoming = Channel.CreateUnbounded<string>();
 
     public WebSocketState State { get; private set; } = WebSocketState.None;
+    public Exception? ConnectException { get; set; }
     public Func<JsonElement, Task>? OnSend { get; set; }
 
     public Task ConnectAsync(ConnectionOptions options, CancellationToken cancellationToken)
     {
+        if (ConnectException is not null)
+        {
+            return Task.FromException(ConnectException);
+        }
+
         State = WebSocketState.Open;
         return Task.CompletedTask;
     }
@@ -278,8 +285,7 @@ internal sealed class SequenceWebSocketTransportFactory(params FakeWebSocketTran
 
 internal static class TestClientFactory
 {
-    public static async Task<(TrueNasJsonRpcClient Client, FakeWebSocketTransport Transport, TestDatabase Database)>
-        CreateAsync(Func<FakeWebSocketTransport, JsonElement, Task>? responder = null)
+    public static async Task<(TrueNasJsonRpcClient Client, FakeWebSocketTransport Transport, TestDatabase Database)> CreateAsync(Func<FakeWebSocketTransport, JsonElement, Task>? responder = null, ILogger<TrueNasJsonRpcClient>? logger = null)
     {
         var database = new TestDatabase();
         var protector = database.CreateProtector();
@@ -319,7 +325,24 @@ internal static class TestClientFactory
             new SettingsService(database, protector),
             database,
             new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)),
-            NullLogger<TrueNasJsonRpcClient>.Instance);
+            logger ?? NullLogger<TrueNasJsonRpcClient>.Instance);
         return (client, transport, database);
+    }
+}
+
+internal sealed record RecordedLog(LogLevel Level, string Message, Exception? Exception);
+
+/// <inheritdoc cref="ILogger{TCategoryName}"/>
+internal sealed class RecordingLogger<TCategoryName> : ILogger<TCategoryName>
+{
+    public List<RecordedLog> Entries { get; } = [];
+
+    IDisposable? ILogger.BeginScope<TState>(TState state) => null;
+
+    bool ILogger.IsEnabled(LogLevel logLevel) => true;
+
+    void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        Entries.Add(new RecordedLog(logLevel, formatter(state, exception), exception));
     }
 }
