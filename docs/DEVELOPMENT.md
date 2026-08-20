@@ -93,7 +93,7 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 
 ### Frontend assets
 
-The UI supports system-aware light and dark themes with a local manual override. Build-time static-asset compression is disabled because compressed Blazor responses produced corrupt-content failures in the target TrueNAS deployment, while excluding only `_framework/blazor.web.js` caused the Linux publish to omit the bootstrap asset entirely. The Dockerfile verifies that the raw asset and its endpoint are present before an image can be published.
+The UI supports system-aware light and dark themes with a local manual override. Build-time static-asset compression is disabled because compressed Blazor responses produced corrupt-content failures in the target TrueNAS deployment. The project normalizes the framework asset package root so Linux publishes include `_framework/blazor.web.js`, and the Dockerfile verifies that the raw asset and its endpoint are present before an image can be published.
 
 ## TrueNAS middleware methods
 
