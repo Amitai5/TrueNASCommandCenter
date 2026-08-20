@@ -1,5 +1,11 @@
 # TrueNAS App Update Manager
 
+[![Production build](https://img.shields.io/github/actions/workflow/status/Amitai5/TrueNASAutoUpdater/publish-container.yml?branch=production&style=for-the-badge&label=production)](https://github.com/Amitai5/TrueNASAutoUpdater/actions/workflows/publish-container.yml)
+[![Container image](https://img.shields.io/badge/GHCR-latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Amitai5/TrueNASAutoUpdater/pkgs/container/truenasautoupdater)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![TrueNAS](https://img.shields.io/badge/TrueNAS-25.10%2B-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://www.truenas.com/)
+[![License](https://img.shields.io/badge/license-MIT-16A34A?style=for-the-badge)](LICENSE)
+
 TrueNAS App Update Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email or webhook notifications.
 
 TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
