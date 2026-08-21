@@ -60,10 +60,7 @@ services:
     image: ghcr.io/amitai5/truenasautoupdater:latest
     pull_policy: always
     restart: unless-stopped
-    ports:
-      - target: *app-port
-        published: *app-port
-        protocol: tcp
+    network_mode: host
     environment:
       ASPNETCORE_HTTP_PORTS: *app-port
       DATA_PATH: /data
@@ -83,7 +80,9 @@ volumes:
 
 Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
-The `x-app-port` value at the top of the YAML controls the published port, container target, and ASP.NET listener. It defaults to `2600`. If that port is already in use, change only the `x-app-port` value to another unused port above `1023`, save the YAML, and open the selected port in the browser.
+Host networking is required because the manager always connects back to TrueNAS middleware at the built-in `wss://127.0.0.1/api/current` endpoint. This avoids user-entered DNS, mDNS, routing, and LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
+
+The `x-app-port` value controls the ASP.NET listener and defaults to `2600`. If that port is already in use, change only `x-app-port` to another unused port above `1023`, save the YAML, and open the selected port in the browser.
 
 ### Docker
 
@@ -95,7 +94,7 @@ docker volume create update-manager-data
 docker run --detach \
   --name truenas-update-manager \
   --restart unless-stopped \
-  --publish 2600:2600 \
+  --network host \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -108,9 +107,9 @@ Open `http://localhost:2600` and follow the [First-Time Setup Guide](docs/SETUP.
 
 ## First launch
 
-The wizard does not preconfigure a connection, schedule, timezone, policy, hostname, notification target, or notification event.
+The wizard has a built-in secure TrueNAS endpoint but does not preconfigure credentials, schedule, timezone, policy, notification target, or notification event.
 
-1. Connect a dedicated TrueNAS service account and test its API key.
+1. Enter a dedicated TrueNAS service account and test its API key. The app uses `wss://127.0.0.1/api/current` automatically. Disable certificate verification only when the TrueNAS certificate does not cover the loopback address.
 2. Optionally configure scheduled checks and updates.
 3. Optionally configure email or webhook notifications.
 4. Discover installed apps and assign an explicit policy to each one.
@@ -125,6 +124,8 @@ The **Continue** button on the connection step remains disabled until **Test con
 | `DATA_PATH` | Supplied by the image | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | Manager app ID used to block attempts to update itself |
+
+The TrueNAS WebSocket endpoint is intentionally not configurable. The application always uses `wss://127.0.0.1/api/current` and therefore requires the documented host-network deployment.
 
 Generate an optional external encryption key with:
 
@@ -147,7 +148,7 @@ Back up the external key separately from `/data`. Losing it makes saved secrets 
 - Persistence failure stops unattended execution before an app lifecycle call.
 - TrueNAS job success is followed by state, version, and image verification.
 
-Keep privileged mode and host networking disabled, do not mount `/var/run/docker.sock`, and grant write access only to `/data`.
+Host networking is intentionally enabled so this single-purpose manager can reach TrueNAS middleware. Keep privileged mode disabled, do not mount `/var/run/docker.sock`, retain the dropped capabilities and read-only root filesystem, and grant write access only to `/data`.
 
 ## Updating
 

@@ -91,7 +91,6 @@ public sealed class NotificationSenderTests
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings =>
         {
-            settings.TrueNasUrl = "wss://truenas.test/api/current";
             settings.WebhookUrl = "https://hooks.example.test/events";
             settings.WebhookAuthorizationEncrypted = protector.Protect("******");
             settings.WebhookHeadersEncrypted = protector.Protect("X-Secret: secret-value");

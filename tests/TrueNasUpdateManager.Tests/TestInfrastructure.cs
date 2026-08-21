@@ -291,7 +291,6 @@ internal static class TestClientFactory
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings =>
         {
-            settings.TrueNasUrl = "wss://truenas.test/api/current";
             settings.TrueNasUsername = "service";
             settings.TrueNasApiKeyEncrypted = protector.Protect("test-api-key");
         });

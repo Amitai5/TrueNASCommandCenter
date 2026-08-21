@@ -8,12 +8,10 @@ namespace TrueNasUpdateManager.Services;
 public sealed class SettingsFormModel
 {
     public bool OnboardingCompleted { get; set; }
-    public string? TrueNasUrl { get; set; }
     public string? TrueNasUsername { get; set; }
     public string? NewTrueNasApiKey { get; set; }
     public bool HasSavedTrueNasApiKey { get; set; }
     public bool VerifyTls { get; set; } = true;
-    public bool AllowInsecureWebSocket { get; set; }
     public bool SchedulerEnabled { get; set; }
     public string? CronExpression { get; set; }
     public string? TimeZoneId { get; set; }
@@ -65,11 +63,9 @@ public sealed class SettingsService(
         return new SettingsFormModel
         {
             OnboardingCompleted = settings.OnboardingCompleted,
-            TrueNasUrl = settings.TrueNasUrl,
             TrueNasUsername = settings.TrueNasUsername,
             HasSavedTrueNasApiKey = !string.IsNullOrWhiteSpace(settings.TrueNasApiKeyEncrypted),
             VerifyTls = settings.VerifyTls,
-            AllowInsecureWebSocket = settings.AllowInsecureWebSocket,
             SchedulerEnabled = settings.SchedulerEnabled,
             CronExpression = settings.CronExpression,
             TimeZoneId = settings.TimeZoneId,
@@ -109,10 +105,10 @@ public sealed class SettingsService(
         var settings = await db.Settings.SingleAsync(item => item.Id == 1, cancellationToken);
 
         settings.OnboardingCompleted = model.OnboardingCompleted;
-        settings.TrueNasUrl = NullIfWhiteSpace(model.TrueNasUrl);
+        settings.TrueNasUrl = TrueNasConnectionDefaults.ServerUrl;
         settings.TrueNasUsername = NullIfWhiteSpace(model.TrueNasUsername);
         settings.VerifyTls = model.VerifyTls;
-        settings.AllowInsecureWebSocket = model.AllowInsecureWebSocket;
+        settings.AllowInsecureWebSocket = false;
         settings.SchedulerEnabled = model.SchedulerEnabled;
         settings.CronExpression = NullIfWhiteSpace(model.CronExpression);
         settings.TimeZoneId = NullIfWhiteSpace(model.TimeZoneId);
@@ -150,11 +146,6 @@ public sealed class SettingsService(
     public async Task<ConnectionOptions> GetConnectionOptionsAsync(CancellationToken cancellationToken = default)
     {
         var settings = await GetRecordAsync(cancellationToken);
-        if (!TryValidateTrueNasUri(settings.TrueNasUrl, settings.AllowInsecureWebSocket, out var uri, out var error))
-        {
-            throw new InvalidOperationException(error);
-        }
-
         if (string.IsNullOrWhiteSpace(settings.TrueNasUsername) ||
             string.IsNullOrWhiteSpace(settings.TrueNasApiKeyEncrypted))
         {
@@ -162,11 +153,10 @@ public sealed class SettingsService(
         }
 
         return new ConnectionOptions(
-            uri!,
+            TrueNasConnectionDefaults.ServerUri,
             settings.TrueNasUsername,
             secretProtector.Unprotect(settings.TrueNasApiKeyEncrypted),
-            settings.VerifyTls,
-            settings.AllowInsecureWebSocket);
+            settings.VerifyTls);
     }
 
     public string? ReadSmtpPassword(SettingsRecord settings) =>
@@ -186,60 +176,8 @@ public sealed class SettingsService(
         return ParseHeaders(value);
     }
 
-    public static bool TryValidateTrueNasUri(
-        string? value,
-        bool allowInsecure,
-        out Uri? uri,
-        out string? error)
-    {
-        uri = null;
-        error = null;
-
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var parsed) ||
-            (parsed.Scheme != Uri.UriSchemeWs && parsed.Scheme != Uri.UriSchemeWss))
-        {
-            error = "TrueNAS URL must be an absolute ws:// or wss:// URL.";
-            return false;
-        }
-
-        if (parsed.Scheme == Uri.UriSchemeWs && !allowInsecure)
-        {
-            error = "Insecure ws:// requires explicit opt-in.";
-            return false;
-        }
-
-        if (!string.IsNullOrEmpty(parsed.UserInfo))
-        {
-            error = "TrueNAS URL must not contain embedded credentials.";
-            return false;
-        }
-
-        var builder = new UriBuilder(parsed);
-        if (builder.Path is "" or "/")
-        {
-            builder.Path = "/api/current";
-        }
-
-        if (!string.Equals(builder.Path.TrimEnd('/'), "/api/current", StringComparison.OrdinalIgnoreCase))
-        {
-            error = "TrueNAS URL path must be /api/current.";
-            return false;
-        }
-
-        builder.Query = string.Empty;
-        builder.Fragment = string.Empty;
-        uri = builder.Uri;
-        return true;
-    }
-
     private static void Validate(SettingsFormModel model)
     {
-        if (!string.IsNullOrWhiteSpace(model.TrueNasUrl) &&
-            !TryValidateTrueNasUri(model.TrueNasUrl, model.AllowInsecureWebSocket, out _, out var connectionError))
-        {
-            throw new InvalidOperationException(connectionError);
-        }
-
         if (model.SchedulerEnabled &&
             (string.IsNullOrWhiteSpace(model.CronExpression) || string.IsNullOrWhiteSpace(model.TimeZoneId)))
         {

@@ -6,10 +6,7 @@ services:
       context: .
     image: truenas-update-manager:local
     restart: unless-stopped
-    ports:
-      - target: *app-port
-        published: *app-port
-        protocol: tcp
+    network_mode: host
     environment:
       ASPNETCORE_HTTP_PORTS: *app-port
       DATA_PATH: /data

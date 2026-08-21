@@ -139,9 +139,6 @@ public sealed class WebhookNotificationSender(
             return new NotificationDeliveryResult(false, Error: "Webhook is not fully configured.");
         }
 
-        var trueNasHost = Uri.TryCreate(settings.TrueNasUrl, UriKind.Absolute, out var trueNasUri)
-            ? trueNasUri.Host
-            : null;
         var payload = new
         {
             schemaVersion = 1,
@@ -150,8 +147,8 @@ public sealed class WebhookNotificationSender(
             timestamp = notification.TimestampUtc,
             server = new
             {
-                name = trueNasHost,
-                url = settings.TrueNasUrl
+                name = TrueNasConnectionDefaults.ServerUri.Host,
+                url = TrueNasConnectionDefaults.ServerUrl
             },
             app = notification.AppId is null
                 ? null

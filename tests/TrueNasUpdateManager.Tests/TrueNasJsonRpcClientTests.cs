@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -175,6 +176,61 @@ public sealed class TrueNasJsonRpcClientTests
             (entry.Exception?.ToString().Contains("test-api-key", StringComparison.Ordinal) ?? false)));
     }
 
+    /// <summary>Verifies that unreachable host and network failures return actionable host-network guidance.</summary>
+    /// <param name="socketErrorCode">The native socket error to classify.</param>
+    [TestMethod]
+    [DataRow((int)SocketError.HostUnreachable)]
+    [DataRow((int)SocketError.NetworkUnreachable)]
+    [TestCategory("Unit")]
+    public async Task ConnectionTest_UnreachableTrueNasHost_ReturnsActionableNetworkError(int socketErrorCode)
+    {
+        // Arrange
+        var setup = await TestClientFactory.CreateAsync();
+        setup.Transport.ConnectException = new WebSocketException(
+            WebSocketError.Faulted,
+            "Unable to connect to the remote server.",
+            new SocketException(socketErrorCode));
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        // Act
+        var result = await client.TestConnectionAsync();
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("NETWORK_UNREACHABLE", result.ErrorCode);
+        StringAssert.Contains(result.Message, "Enable host networking");
+        StringAssert.Contains(result.Message, "wss://127.0.0.1/api/current");
+    }
+
+    /// <summary>Verifies that unexpected loopback resolution failures explain the host-network recovery path.</summary>
+    /// <param name="socketErrorCode">The native DNS socket error to classify.</param>
+    [TestMethod]
+    [DataRow((int)SocketError.HostNotFound)]
+    [DataRow((int)SocketError.NoData)]
+    [DataRow((int)SocketError.TryAgain)]
+    [TestCategory("Unit")]
+    public async Task ConnectionTest_UnresolvableTrueNasHost_ReturnsActionableDnsError(int socketErrorCode)
+    {
+        // Arrange
+        var setup = await TestClientFactory.CreateAsync();
+        setup.Transport.ConnectException = new WebSocketException(
+            WebSocketError.Faulted,
+            "Unable to connect to the remote server.",
+            new SocketException(socketErrorCode));
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        // Act
+        var result = await client.TestConnectionAsync();
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("DNS_FAILURE", result.ErrorCode);
+        StringAssert.Contains(result.Message, "host networking");
+        StringAssert.Contains(result.Message, "built-in TrueNAS loopback endpoint");
+    }
+
     [TestMethod]
     public async Task JobFailure_UsesCoreGetJobsDiagnosticFallback()
     {
@@ -209,7 +265,6 @@ public sealed class TrueNasJsonRpcClientTests
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings =>
         {
-            settings.TrueNasUrl = "wss://truenas.test/api/current";
             settings.TrueNasUsername = "service";
             settings.TrueNasApiKeyEncrypted = protector.Protect("test-key");
         });

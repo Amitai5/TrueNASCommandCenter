@@ -1,11 +1,16 @@
 namespace TrueNasUpdateManager.Domain;
 
+internal static class TrueNasConnectionDefaults
+{
+    public const string ServerUrl = "wss://127.0.0.1/api/current";
+    public static Uri ServerUri { get; } = new(ServerUrl, UriKind.Absolute);
+}
+
 public sealed record ConnectionOptions(
     Uri ServerUri,
     string Username,
     string ApiKey,
-    bool VerifyTls,
-    bool AllowInsecureWebSocket);
+    bool VerifyTls);
 
 public sealed record ConnectionTestResult(
     bool Success,

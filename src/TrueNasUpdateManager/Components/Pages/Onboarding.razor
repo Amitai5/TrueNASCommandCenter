@@ -33,12 +33,8 @@
     {
         <section class="panel">
             <h2>1. TrueNAS connection</h2>
-            <p class="muted">Use a service account/API key with APPS_READ and APPS_WRITE.</p>
+            <p class="muted">The manager uses its built-in secure loopback endpoint. Enter a service account/API key with APPS_READ and APPS_WRITE.</p>
             <div class="form-grid">
-                <div class="field full">
-                    <label for="wizard-url">WebSocket URL</label>
-                    <input id="wizard-url" placeholder="wss://truenas.example/api/current" @bind="_model.TrueNasUrl" />
-                </div>
                 <div class="field">
                     <label for="wizard-user">Username</label>
                     <input id="wizard-user" autocomplete="username" @bind="_model.TrueNasUsername" />
@@ -50,8 +46,7 @@
                            @bind="_model.NewTrueNasApiKey" />
                 </div>
             </div>
-            <div class="toggle-row"><input id="wizard-tls" type="checkbox" @bind="_model.VerifyTls" /><label for="wizard-tls">Verify TLS certificate</label></div>
-            <div class="toggle-row"><input id="wizard-ws" type="checkbox" @bind="_model.AllowInsecureWebSocket" /><label for="wizard-ws">Allow insecure ws:// (not recommended)</label></div>
+            <div class="toggle-row"><input id="wizard-tls" type="checkbox" @bind="_model.VerifyTls" /><label for="wizard-tls">Verify TLS certificate (disable when the certificate does not cover 127.0.0.1)</label></div>
             <div class="actions" style="justify-content:space-between;margin-top:1rem">
                 <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>
                 <button class="primary" disabled="@_busy || !_connectionTested" @onclick="NextAsync">Continue</button>

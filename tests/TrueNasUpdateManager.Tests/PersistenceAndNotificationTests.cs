@@ -15,7 +15,6 @@ public sealed class PersistenceAndNotificationTests
         await database.InitializeAsync();
         var service = database.CreateSettingsService();
         var model = await service.GetFormAsync();
-        model.TrueNasUrl = "wss://server.test/api/current";
         model.TrueNasUsername = "service";
         model.NewTrueNasApiKey = "plain-api-secret";
 
@@ -40,20 +39,34 @@ public sealed class PersistenceAndNotificationTests
         Assert.IsNull(app.Policy);
         Assert.IsNotNull(settings.TrueNasApiKeyEncrypted);
         Assert.DoesNotContain("plain-api-secret", settings.TrueNasApiKeyEncrypted);
+        Assert.AreEqual("wss://127.0.0.1/api/current", settings.TrueNasUrl);
+        Assert.IsFalse(settings.AllowInsecureWebSocket);
         Assert.IsNull(form.NewTrueNasApiKey);
         Assert.IsTrue(form.HasSavedTrueNasApiKey);
     }
 
+    /// <summary>Verifies that legacy endpoint settings cannot override the fixed loopback connection.</summary>
     [TestMethod]
-    public async Task Settings_RejectTrueNasUrlWithUserInfo()
+    public async Task Settings_ConnectionOptionsIgnoreLegacyEndpointAndUseFixedLoopback()
     {
         await using var database = new TestDatabase();
-        await database.InitializeAsync();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings =>
+        {
+            settings.TrueNasUrl = "wss://legacy.example.test/api/current";
+            settings.AllowInsecureWebSocket = true;
+            settings.TrueNasUsername = "service";
+            settings.TrueNasApiKeyEncrypted = protector.Protect("test-api-key");
+            settings.VerifyTls = false;
+        });
         var service = database.CreateSettingsService();
-        var model = await service.GetFormAsync();
-        model.TrueNasUrl = "******truenas.test/api/current";
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(model));
+        var options = await service.GetConnectionOptionsAsync();
+
+        Assert.AreEqual(new Uri("wss://127.0.0.1/api/current"), options.ServerUri);
+        Assert.AreEqual("service", options.Username);
+        Assert.AreEqual("test-api-key", options.ApiKey);
+        Assert.IsFalse(options.VerifyTls);
     }
 
     [TestMethod]

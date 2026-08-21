@@ -62,7 +62,7 @@ docker volume create update-manager-data
 
 docker run --rm \
   --name truenas-update-manager \
-  --publish 2600:2600 \
+  --network host \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -70,6 +70,8 @@ docker run --rm \
   --security-opt no-new-privileges=true \
   truenas-update-manager:local
 ```
+
+Host networking matches the production TrueNAS deployment and allows the container to reach middleware at the application's fixed `wss://127.0.0.1/api/current` endpoint. End-to-end connection testing must therefore run on a TrueNAS host or an equivalent loopback environment; the unit test suite uses a fake WebSocket transport for local development.
 
 ## Runtime configuration
 
@@ -79,6 +81,8 @@ docker run --rm \
 | `DATA_PATH` | Container default supplied | Writable directory for SQLite and generated encryption material |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | App ID used to prevent the manager from updating itself |
+
+The TrueNAS WebSocket endpoint is not configurable by design. Do not add a development-only endpoint override; use the fake transport tests for alternate connection scenarios.
 
 Do not add secrets, server-specific URLs, schedules, policies, recipients, or host paths to source-controlled configuration.
 

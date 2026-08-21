@@ -46,15 +46,10 @@
             <div class="panel-header">
                 <div>
                     <h2>TrueNAS connection</h2>
-                    <p class="field-help">JSON-RPC 2.0 over WebSocket. Use a scoped API key with APPS_READ and APPS_WRITE.</p>
+                    <p class="field-help">The server endpoint is built in and uses encrypted WebSocket over host loopback. Use a scoped API key with APPS_READ and APPS_WRITE.</p>
                 </div>
             </div>
             <div class="form-grid">
-                <div class="field full">
-                    <label for="truenas-url">Server URL</label>
-                    <input id="truenas-url" type="url" placeholder="wss://truenas.example/api/current" @bind="_model.TrueNasUrl" />
-                    <p class="field-help">Only ws:// or wss:// URLs ending in /api/current are accepted.</p>
-                </div>
                 <div class="field">
                     <label for="truenas-user">Username</label>
                     <input id="truenas-user" autocomplete="username" @bind="_model.TrueNasUsername" />
@@ -72,20 +67,13 @@
                 <input id="verify-tls" type="checkbox" @bind="_model.VerifyTls" />
                 <div>
                     <label for="verify-tls">Verify TLS certificate</label>
-                    <p class="field-help">Enabled by default. Disable only for an explicitly trusted self-signed server.</p>
-                </div>
-            </div>
-            <div class="toggle-row">
-                <input id="allow-ws" type="checkbox" @bind="_model.AllowInsecureWebSocket" />
-                <div>
-                    <label for="allow-ws">Allow insecure ws://</label>
-                    <p class="field-help">Warning: credentials and update commands are not protected in transit.</p>
+                    <p class="field-help">Disable for the loopback URL unless the TrueNAS certificate explicitly covers 127.0.0.1.</p>
                 </div>
             </div>
 
-            @if (!_model.VerifyTls || _model.AllowInsecureWebSocket)
+            @if (!_model.VerifyTls)
             {
-                <div class="notice warning">Transport security has been weakened explicitly. Prefer WSS with certificate validation.</div>
+                <div class="notice warning">Certificate identity verification is disabled. The loopback connection remains encrypted with WSS.</div>
             }
 
             <div class="actions" style="margin-top:1rem">
