@@ -50,7 +50,7 @@
             <div class="toggle-row"><input id="wizard-tls" type="checkbox" @bind="_model.VerifyTls" /><label for="wizard-tls">Verify TLS certificate (disable only for an untrusted or mismatched certificate)</label></div>
             <div class="actions" style="justify-content:space-between;margin-top:1rem">
                 <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>
-                <button class="primary" disabled="@_busy || !_connectionTested" @onclick="NextAsync">Continue</button>
+                <button class="primary" disabled="@(_busy || !_connectionTested)" @onclick="NextAsync">Continue</button>
             </div>
         </section>
     }

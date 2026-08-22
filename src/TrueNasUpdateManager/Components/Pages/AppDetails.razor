@@ -31,7 +31,7 @@
                 <button disabled="@_busy" @onclick="CheckAsync">Check app now</button>
                 @if (_app.CatalogUpdateAvailable || _app.ImageUpdateAvailable)
                 {
-                    <button class="primary" disabled="@_busy || _app.ActionRequired" @onclick="UpdateAsync">Update now</button>
+                    <button class="primary" disabled="@(_busy || _app.ActionRequired)" @onclick="UpdateAsync">Update now</button>
                 }
             </div>
         </header>
