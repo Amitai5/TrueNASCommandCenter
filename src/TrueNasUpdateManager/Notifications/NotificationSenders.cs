@@ -125,6 +125,7 @@ public sealed class EmailNotificationSender(
 public sealed class WebhookNotificationSender(
     IHttpClientFactory httpClientFactory,
     SettingsService settingsService,
+    TrueNasEndpointOptions trueNasEndpoint,
     TimeProvider timeProvider,
     ILogger<WebhookNotificationSender> logger) : IWebhookNotificationSender
 {
@@ -147,8 +148,8 @@ public sealed class WebhookNotificationSender(
             timestamp = notification.TimestampUtc,
             server = new
             {
-                name = TrueNasConnectionDefaults.ServerUri.Host,
-                url = TrueNasConnectionDefaults.ServerUrl
+                name = trueNasEndpoint.ServerUri.Host,
+                url = trueNasEndpoint.ServerUrl
             },
             app = notification.AppId is null
                 ? null

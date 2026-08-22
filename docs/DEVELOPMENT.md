@@ -38,13 +38,14 @@ The application requires a writable data directory. In PowerShell:
 
 ```powershell
 $env:DATA_PATH = "$PWD/.data"
+$env:TRUENAS_WEBSOCKET_URL = "wss://truenas.example.test/api/current"
 dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
 ```
 
 In Bash:
 
 ```bash
-DATA_PATH="$PWD/.data" dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
+DATA_PATH="$PWD/.data" TRUENAS_WEBSOCKET_URL="wss://truenas.example.test/api/current" dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
 ```
 
 Open `http://localhost:2600` and use the first-launch wizard. Avoid using production API keys in development environments.
@@ -63,6 +64,8 @@ docker volume create update-manager-data
 docker run --rm \
   --name truenas-update-manager \
   --network host \
+  --add-host truenas.example.test:192.0.2.10 \
+  --env TRUENAS_WEBSOCKET_URL=wss://truenas.example.test/api/current \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -71,7 +74,7 @@ docker run --rm \
   truenas-update-manager:local
 ```
 
-Host networking matches the production TrueNAS deployment and allows the container to reach middleware at the application's fixed `wss://127.0.0.1/api/current` endpoint. End-to-end connection testing must therefore run on a TrueNAS host or an equivalent loopback environment; the unit test suite uses a fake WebSocket transport for local development.
+Replace the documentation-only address `192.0.2.10` with the target TrueNAS Web UI IPv4 address before an end-to-end test. Host networking matches production, while the explicit host mapping makes local hostname resolution deterministic. The unit test suite uses a fake WebSocket transport and does not require a reachable endpoint.
 
 ## Runtime configuration
 
@@ -79,10 +82,11 @@ Host networking matches the production TrueNAS deployment and allows the contain
 | --- | --- | --- |
 | `ASPNETCORE_HTTP_PORTS` | Container default supplied | HTTP listen port; production image defaults to `2600` |
 | `DATA_PATH` | Container default supplied | Writable directory for SQLite and generated encryption material |
+| `TRUENAS_WEBSOCKET_URL` | Yes | Absolute `wss://` TrueNAS JSON-RPC endpoint ending in `/api/current` |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | App ID used to prevent the manager from updating itself |
 
-The TrueNAS WebSocket endpoint is not configurable by design. Do not add a development-only endpoint override; use the fake transport tests for alternate connection scenarios.
+`TRUENAS_WEBSOCKET_URL` is deployment configuration, not an end-user setting. The application fails fast when it is missing or not an absolute `wss://` URL ending in `/api/current`. Never include credentials, query values, or fragments in it.
 
 Do not add secrets, server-specific URLs, schedules, policies, recipients, or host paths to source-controlled configuration.
 

@@ -68,11 +68,12 @@ public sealed class TrueNasJsonRpcClientTests
     }
 
     [TestMethod]
-    public async Task ApiKeyAuthentication_FallsBackTo25_10ShapeOnInvalidParams()
+    public async Task ApiKeyAuthentication_FallsBackToLegacyShapeOnInvalidParams()
     {
         var setup = await TestClientFactory.CreateAsync();
         var authCalls = 0;
         var includedUsername = new List<bool>();
+        var includedReconnectToken = new List<bool>();
         setup.Transport.OnSend = request =>
         {
             var method = request.GetProperty("method").GetString();
@@ -82,6 +83,7 @@ public sealed class TrueNasJsonRpcClientTests
                 authCalls++;
                 var login = request.GetProperty("params")[0];
                 includedUsername.Add(login.TryGetProperty("username", out _));
+                includedReconnectToken.Add(login.GetProperty("login_options").TryGetProperty("reconnect_token", out _));
                 if (authCalls == 1)
                 {
                     setup.Transport.Error(id, -32602, "Invalid parameters");
@@ -105,6 +107,7 @@ public sealed class TrueNasJsonRpcClientTests
 
         Assert.IsEmpty(apps);
         CollectionAssert.AreEqual(new[] { true, false }, includedUsername);
+        CollectionAssert.AreEqual(new[] { false, false }, includedReconnectToken);
     }
 
     [TestMethod]
@@ -199,11 +202,11 @@ public sealed class TrueNasJsonRpcClientTests
         // Assert
         Assert.IsFalse(result.Success);
         Assert.AreEqual("NETWORK_UNREACHABLE", result.ErrorCode);
-        StringAssert.Contains(result.Message, "Enable host networking");
-        StringAssert.Contains(result.Message, "wss://127.0.0.1/api/current");
+        StringAssert.Contains(result.Message, "Host Network mode");
+        StringAssert.Contains(result.Message, "TRUENAS_WEBSOCKET_URL");
     }
 
-    /// <summary>Verifies that unexpected loopback resolution failures explain the host-network recovery path.</summary>
+    /// <summary>Verifies that hostname resolution failures explain the deployment configuration recovery path.</summary>
     /// <param name="socketErrorCode">The native DNS socket error to classify.</param>
     [TestMethod]
     [DataRow((int)SocketError.HostNotFound)]
@@ -227,8 +230,8 @@ public sealed class TrueNasJsonRpcClientTests
         // Assert
         Assert.IsFalse(result.Success);
         Assert.AreEqual("DNS_FAILURE", result.ErrorCode);
-        StringAssert.Contains(result.Message, "host networking");
-        StringAssert.Contains(result.Message, "built-in TrueNAS loopback endpoint");
+        StringAssert.Contains(result.Message, "TRUENAS_WEBSOCKET_URL");
+        StringAssert.Contains(result.Message, "extra_hosts");
     }
 
     [TestMethod]
@@ -272,7 +275,7 @@ public sealed class TrueNasJsonRpcClientTests
         var second = TransportReturning("second");
         await using var client = new TrueNasJsonRpcClient(
             new SequenceWebSocketTransportFactory(first, second),
-            new SettingsService(database, protector),
+            new SettingsService(database, protector, TestDatabase.TrueNasEndpoint),
             database,
             new FixedTimeProvider(DateTimeOffset.UnixEpoch),
             NullLogger<TrueNasJsonRpcClient>.Instance);

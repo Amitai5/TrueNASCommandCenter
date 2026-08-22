@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using TrueNasUpdateManager.Components;
 using TrueNasUpdateManager.Data;
+using TrueNasUpdateManager.Domain;
 using TrueNasUpdateManager.Integrations.TrueNas;
 using TrueNasUpdateManager.Notifications;
 using TrueNasUpdateManager.Scheduling;
@@ -11,6 +12,7 @@ using TrueNasUpdateManager.Services;
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+var trueNasEndpoint = TrueNasEndpointOptions.Parse(builder.Configuration["TRUENAS_WEBSOCKET_URL"]);
 var dataPath = builder.Configuration["DATA_PATH"];
 if (string.IsNullOrWhiteSpace(dataPath))
 {
@@ -30,6 +32,7 @@ if (!OperatingSystem.IsWindows())
 }
 
 builder.Services.AddSingleton(new DataPathOptions(dataPath));
+builder.Services.AddSingleton(trueNasEndpoint);
 builder.Services.AddDataProtection()
     .SetApplicationName("TrueNasUpdateManager")
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));

@@ -16,6 +16,8 @@ namespace TrueNasUpdateManager.Tests;
 
 internal sealed class TestDatabase : IDbContextFactory<AppDbContext>, IAsyncDisposable
 {
+    public static TrueNasEndpointOptions TrueNasEndpoint { get; } = TrueNasEndpointOptions.Parse("wss://truenas.example.test/api/current");
+
     private readonly string directory = Path.Combine(Path.GetTempPath(), $"truenas-tests-{Guid.NewGuid():N}");
     private readonly DbContextOptions<AppDbContext> options;
 
@@ -56,7 +58,7 @@ internal sealed class TestDatabase : IDbContextFactory<AppDbContext>, IAsyncDisp
         return new AesGcmSecretProtector(DataPath, configuration);
     }
 
-    public SettingsService CreateSettingsService() => new(this, CreateProtector());
+    public SettingsService CreateSettingsService() => new(this, CreateProtector(), TrueNasEndpoint);
 
     public ValueTask DisposeAsync()
     {
@@ -321,7 +323,7 @@ internal static class TestClientFactory
 
         var client = new TrueNasJsonRpcClient(
             new FakeWebSocketTransportFactory(transport),
-            new SettingsService(database, protector),
+            new SettingsService(database, protector, TestDatabase.TrueNasEndpoint),
             database,
             new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)),
             logger ?? NullLogger<TrueNasJsonRpcClient>.Instance);

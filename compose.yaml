@@ -1,26 +1,24 @@
-x-app-port: &app-port 2600
-
 services:
   truenas-update-manager:
-    build:
-      context: .
-    image: truenas-update-manager:local
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      ASPNETCORE_HTTP_PORTS: *app-port
-      DATA_PATH: /data
-      # APP_ENCRYPTION_KEY: "base64-encoded-32-byte-key"
-      # TRUENAS_APP_ID: "the-manager-app-id"
-    volumes:
-      - update-manager-data:/data
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
     cap_drop:
       - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenasautoupdater:latest
+    network_mode: host
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
 volumes:
-  update-manager-data:
+  update-manager-data: null
+x-app-port: 2600

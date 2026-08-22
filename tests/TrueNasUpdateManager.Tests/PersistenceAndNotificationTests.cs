@@ -39,15 +39,15 @@ public sealed class PersistenceAndNotificationTests
         Assert.IsNull(app.Policy);
         Assert.IsNotNull(settings.TrueNasApiKeyEncrypted);
         Assert.DoesNotContain("plain-api-secret", settings.TrueNasApiKeyEncrypted);
-        Assert.AreEqual("wss://127.0.0.1/api/current", settings.TrueNasUrl);
+        Assert.AreEqual(TestDatabase.TrueNasEndpoint.ServerUrl, settings.TrueNasUrl);
         Assert.IsFalse(settings.AllowInsecureWebSocket);
         Assert.IsNull(form.NewTrueNasApiKey);
         Assert.IsTrue(form.HasSavedTrueNasApiKey);
     }
 
-    /// <summary>Verifies that legacy endpoint settings cannot override the fixed loopback connection.</summary>
+    /// <summary>Verifies that legacy database settings cannot override the deployment-configured endpoint.</summary>
     [TestMethod]
-    public async Task Settings_ConnectionOptionsIgnoreLegacyEndpointAndUseFixedLoopback()
+    public async Task Settings_ConnectionOptionsIgnoreLegacyEndpointAndUseDeploymentConfiguration()
     {
         await using var database = new TestDatabase();
         var protector = database.CreateProtector();
@@ -63,7 +63,7 @@ public sealed class PersistenceAndNotificationTests
 
         var options = await service.GetConnectionOptionsAsync();
 
-        Assert.AreEqual(new Uri("wss://127.0.0.1/api/current"), options.ServerUri);
+        Assert.AreEqual(TestDatabase.TrueNasEndpoint.ServerUri, options.ServerUri);
         Assert.AreEqual("service", options.Username);
         Assert.AreEqual("test-api-key", options.ApiKey);
         Assert.IsFalse(options.VerifyTls);

@@ -5,6 +5,7 @@
 @inject IEmailNotificationSender EmailSender
 @inject IWebhookNotificationSender WebhookSender
 @inject IUpdateCoordinator Coordinator
+@inject TrueNasEndpointOptions TrueNasEndpoint
 
 <PageTitle>Settings · TrueNAS Update Manager</PageTitle>
 
@@ -46,7 +47,7 @@
             <div class="panel-header">
                 <div>
                     <h2>TrueNAS connection</h2>
-                    <p class="field-help">The server endpoint is built in and uses encrypted WebSocket over host loopback. Use a scoped API key with APPS_READ and APPS_WRITE.</p>
+                    <p class="field-help">The deployment connects securely to <code>@TrueNasEndpoint.ServerUrl</code>. Use a scoped API key with APPS_READ and APPS_WRITE.</p>
                 </div>
             </div>
             <div class="form-grid">
@@ -67,13 +68,13 @@
                 <input id="verify-tls" type="checkbox" @bind="_model.VerifyTls" />
                 <div>
                     <label for="verify-tls">Verify TLS certificate</label>
-                    <p class="field-help">Disable for the loopback URL unless the TrueNAS certificate explicitly covers 127.0.0.1.</p>
+                    <p class="field-help">Keep enabled when the TrueNAS certificate is trusted and covers <code>@TrueNasEndpoint.ServerUri.Host</code>.</p>
                 </div>
             </div>
 
             @if (!_model.VerifyTls)
             {
-                <div class="notice warning">Certificate identity verification is disabled. The loopback connection remains encrypted with WSS.</div>
+                <div class="notice warning">Certificate identity verification is disabled. The connection remains encrypted with WSS, but the server identity is not verified.</div>
             }
 
             <div class="actions" style="margin-top:1rem">

@@ -261,7 +261,7 @@ public sealed class TrueNasJsonRpcClient(
                                 mechanism = "API_KEY_PLAIN",
                                 username = options.Username,
                                 api_key = options.ApiKey,
-                                login_options = new { user_info = true, reconnect_token = false }
+                                login_options = new { user_info = true }
                             }
                         ],
                         cancellationToken,
@@ -279,7 +279,7 @@ public sealed class TrueNasJsonRpcClient(
                             {
                                 mechanism = "API_KEY_PLAIN",
                                 api_key = options.ApiKey,
-                                login_options = new { user_info = true, reconnect_token = false }
+                                login_options = new { user_info = true }
                             }
                         ],
                         cancellationToken,
@@ -694,7 +694,7 @@ public sealed class TrueNasJsonRpcClient(
         {
             return new TrueNasClientException(
                 "DNS_FAILURE",
-                "The built-in TrueNAS loopback endpoint could not be resolved. Redeploy the app with host networking and check the container logs.",
+                "The configured TrueNAS hostname could not be resolved from the app container. Verify TRUENAS_WEBSOCKET_URL and any extra_hosts mapping, then redeploy.",
                 exception);
         }
 
@@ -702,7 +702,7 @@ public sealed class TrueNasJsonRpcClient(
         {
             return new TrueNasClientException(
                 "NETWORK_UNREACHABLE",
-                "The app container has no route to the TrueNAS host. Enable host networking and use wss://127.0.0.1/api/current.",
+                "The app container has no route to the configured TrueNAS endpoint. Verify Host Network mode, TRUENAS_WEBSOCKET_URL, and the container logs.",
                 exception);
         }
 
@@ -710,7 +710,7 @@ public sealed class TrueNasJsonRpcClient(
         {
             return new TrueNasClientException(
                 "CONNECTION_REFUSED",
-                "TrueNAS refused the built-in loopback WebSocket connection. Verify host networking and the TrueNAS web service on port 443.",
+                "The configured TrueNAS endpoint refused the WebSocket connection. Verify its address and port and the TrueNAS web service, then redeploy if the host changed.",
                 exception);
         }
 

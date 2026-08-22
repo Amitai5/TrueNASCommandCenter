@@ -75,6 +75,7 @@ public sealed class NotificationSenderTests
         var sender = new WebhookNotificationSender(
             new FakeHttpClientFactory(new ThrowingHandler()),
             database.CreateSettingsService(),
+            TestDatabase.TrueNasEndpoint,
             new ImmediateTimeProvider(),
             NullLogger<WebhookNotificationSender>.Instance);
 
@@ -103,6 +104,7 @@ public sealed class NotificationSenderTests
         new(
             new FakeHttpClientFactory(handler),
             database.CreateSettingsService(),
+            TestDatabase.TrueNasEndpoint,
             new ImmediateTimeProvider(),
             NullLogger<WebhookNotificationSender>.Instance);
 

@@ -11,6 +11,7 @@ You need:
 - TrueNAS Community Edition / SCALE 25.10 or later with the Apps service running.
 - An administrator account that can create users, groups, privileges, and API keys.
 - Network access from your browser to port `2600` on the TrueNAS system, or another port configured through `x-app-port` in the YAML.
+- The current TrueNAS Web UI IPv4 address and the hostname covered by its TLS certificate.
 - A trusted LAN or VPN. The manager does not include its own user login or RBAC.
 
 Install the container first using the [TrueNAS Custom App or Docker instructions](../README.md#installation). After installation, open:
@@ -62,21 +63,52 @@ TrueNAS displays the complete key only when it is created or reset. If it is los
 
 Open the update manager and complete **Step 1: TrueNAS connection**.
 
-The application always connects to TrueNAS middleware through its built-in `wss://127.0.0.1/api/current` endpoint. There is no server URL field or insecure `ws://` mode.
+The application connects through the `TRUENAS_WEBSOCKET_URL` configured in the custom app YAML. There is no browser-editable server URL field or insecure `ws://` mode.
+
+Before opening the wizard, replace the entire TrueNAS custom app YAML with this complete configuration:
+
+```yaml
+services:
+  truenas-update-manager:
+    cap_drop:
+      - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenasautoupdater:latest
+    network_mode: host
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
+volumes:
+  update-manager-data: null
+x-app-port: 2600
+```
+
+The YAML uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the `extra_hosts` value in the complete YAML. If the TrueNAS certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`. Prefer a DHCP reservation or static address so the mapping does not become stale.
 
 | Field | Recommended value |
 | --- | --- |
 | Username | The API key owner's exact username, such as `autoupdate` |
 | API key | The key copied from TrueNAS |
-| Verify TLS certificate | Disabled for loopback unless the certificate explicitly covers `127.0.0.1` |
+| Verify TLS certificate | Enabled when the certificate is trusted and covers the hostname in `TRUENAS_WEBSOCKET_URL` |
 
-The documented deployment uses TrueNAS Host Network mode, so the fixed loopback address reaches middleware without depending on container DNS or a route back through the LAN. Previously saved server URLs and insecure-WebSocket settings are ignored after upgrading and normalized the next time settings are saved.
+The documented deployment uses TrueNAS Host Network mode and an explicit hostname mapping. This avoids Docker bridge routing and unreliable `.local` name resolution while preserving TLS hostname validation. Previously saved server URLs and insecure-WebSocket settings are ignored after upgrading and normalized to the deployment endpoint the next time settings are saved.
 
 TrueNAS requires secure transport for user-linked API keys. The manager enforces `wss://` and does not expose an insecure transport option.
 
 Click **Test connection**. A successful test verifies authentication, pings middleware, checks app access, and enables **Continue**. The Continue button intentionally remains disabled until the connection test succeeds.
 
-If TrueNAS uses an untrusted or self-signed certificate, the preferred fix is to configure a trusted certificate that covers `127.0.0.1`. On a trusted LAN, disabling certificate verification can be used as a temporary workaround while keeping `wss://` encryption enabled.
+If TrueNAS uses an untrusted or self-signed certificate, the preferred fix is to configure a trusted certificate that covers the configured hostname. On a trusted LAN, disabling certificate verification can be used as a temporary workaround while keeping `wss://` encryption enabled.
 
 ## 3. Configure the schedule
 
@@ -136,7 +168,8 @@ This is expected until **Test connection** completes successfully. Read the stat
 
 ### Certificate validation failed
 
-- Configure a trusted TrueNAS certificate that covers `127.0.0.1` when possible.
+- Configure a trusted TrueNAS certificate that covers the hostname in `TRUENAS_WEBSOCKET_URL` when possible.
+- Confirm the `extra_hosts` hostname exactly matches that certificate name.
 - For a temporary trusted-LAN workaround, disable only certificate verification; the connection remains encrypted with `wss://`.
 
 ### Authentication failed
@@ -156,17 +189,13 @@ Confirm that the service account's group is attached to a custom privilege conta
 
 ### TrueNAS is unreachable or the connection times out
 
-The endpoint is fixed at `wss://127.0.0.1/api/current`, so an unreachable or timed-out connection usually means the container is not using the documented host network.
+An unreachable, refused, or timed-out connection means the configured hostname maps to the wrong address, the container is not using the documented host network, or the TrueNAS Web UI is not listening on the configured port.
 
-For an existing YAML installation:
+For an existing installation, edit the custom app, replace its entire YAML with the complete configuration in [Connect the first-launch wizard](#2-connect-the-first-launch-wizard), and save/redeploy. The named `update-manager-data` volume remains attached, so the database and saved settings are preserved. Then open **Settings** and run **Test connection** again.
 
-1. Edit the custom app YAML.
-2. Remove the `ports:` block.
-3. Add `network_mode: host` beneath `restart: unless-stopped`.
-4. Save and redeploy while preserving the `/data` volume.
-5. Open **Settings**, disable certificate verification only if the certificate does not cover loopback, and run **Test connection** again.
-
-`NETWORK_UNREACHABLE` means the container has no route to the TrueNAS host. The fixed loopback endpoint avoids DNS failures; host networking makes that endpoint reach TrueNAS middleware.
+- `DNS_FAILURE` means the configured hostname is missing from container DNS or `extra_hosts`.
+- `NETWORK_UNREACHABLE` means the container has no route to the configured address.
+- `CONNECTION_REFUSED` means that address is reachable but no TrueNAS WebSocket service accepted the configured port.
 
 ### No apps are discovered
 

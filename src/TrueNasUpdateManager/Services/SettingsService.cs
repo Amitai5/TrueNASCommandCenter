@@ -47,7 +47,8 @@ public sealed class SettingsFormModel
 
 public sealed class SettingsService(
     IDbContextFactory<AppDbContext> dbFactory,
-    ISecretProtector secretProtector)
+    ISecretProtector secretProtector,
+    TrueNasEndpointOptions trueNasEndpoint)
 {
     public async Task<SettingsRecord> GetRecordAsync(CancellationToken cancellationToken = default)
     {
@@ -105,7 +106,7 @@ public sealed class SettingsService(
         var settings = await db.Settings.SingleAsync(item => item.Id == 1, cancellationToken);
 
         settings.OnboardingCompleted = model.OnboardingCompleted;
-        settings.TrueNasUrl = TrueNasConnectionDefaults.ServerUrl;
+        settings.TrueNasUrl = trueNasEndpoint.ServerUrl;
         settings.TrueNasUsername = NullIfWhiteSpace(model.TrueNasUsername);
         settings.VerifyTls = model.VerifyTls;
         settings.AllowInsecureWebSocket = false;
@@ -153,7 +154,7 @@ public sealed class SettingsService(
         }
 
         return new ConnectionOptions(
-            TrueNasConnectionDefaults.ServerUri,
+            trueNasEndpoint.ServerUri,
             settings.TrueNasUsername,
             secretProtector.Unprotect(settings.TrueNasApiKeyEncrypted),
             settings.VerifyTls);

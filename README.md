@@ -53,36 +53,39 @@ This is the recommended TrueNAS installation method.
 5. Click **Save** and wait for the app to report a running state.
 
 ```yaml
-x-app-port: &app-port 2600
-
 services:
   truenas-update-manager:
-    image: ghcr.io/amitai5/truenasautoupdater:latest
-    pull_policy: always
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      ASPNETCORE_HTTP_PORTS: *app-port
-      DATA_PATH: /data
-    volumes:
-      - update-manager-data:/data
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
     cap_drop:
       - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenasautoupdater:latest
+    network_mode: host
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
 volumes:
-  update-manager-data:
+  update-manager-data: null
+x-app-port: 2600
 ```
 
 Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
-Host networking is required because the manager always connects back to TrueNAS middleware at the built-in `wss://127.0.0.1/api/current` endpoint. This avoids user-entered DNS, mDNS, routing, and LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
+This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
 
-The `x-app-port` value controls the ASP.NET listener and defaults to `2600`. If that port is already in use, change only `x-app-port` to another unused port above `1023`, save the YAML, and open the selected port in the browser.
+Host networking is required so the manager can reach the TrueNAS Web UI address without Docker bridge or LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
+
+`ASPNETCORE_HTTP_PORTS` controls the listener, while `x-app-port` records the same port for the TrueNAS configuration. If `2600` is already in use, change both values to the same unused port above `1023`, save the complete YAML, and open that port in the browser.
 
 ### Docker
 
@@ -95,6 +98,8 @@ docker run --detach \
   --name truenas-update-manager \
   --restart unless-stopped \
   --network host \
+  --add-host truenas.local:10.0.0.21 \
+  --env TRUENAS_WEBSOCKET_URL=wss://truenas.local/api/current \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -103,13 +108,13 @@ docker run --detach \
   ghcr.io/amitai5/truenasautoupdater:latest
 ```
 
-Open `http://localhost:2600` and follow the [First-Time Setup Guide](docs/SETUP.md).
+If the TrueNAS Web UI address changes from `10.0.0.21`, update `--add-host`, then open `http://localhost:2600` and follow the [First-Time Setup Guide](docs/SETUP.md).
 
 ## First launch
 
-The wizard has a built-in secure TrueNAS endpoint but does not preconfigure credentials, schedule, timezone, policy, notification target, or notification event.
+The wizard uses the secure TrueNAS endpoint configured in the deployment YAML but does not preconfigure credentials, schedule, timezone, policy, notification target, or notification event.
 
-1. Enter a dedicated TrueNAS service account and test its API key. The app uses `wss://127.0.0.1/api/current` automatically. Disable certificate verification only when the TrueNAS certificate does not cover the loopback address.
+1. Enter a dedicated TrueNAS service account and test its API key. Keep certificate verification enabled when the certificate is trusted and covers the hostname in `TRUENAS_WEBSOCKET_URL`.
 2. Optionally configure scheduled checks and updates.
 3. Optionally configure email or webhook notifications.
 4. Discover installed apps and assign an explicit policy to each one.
@@ -122,10 +127,11 @@ The **Continue** button on the connection step remains disabled until **Test con
 | --- | --- | --- |
 | `ASPNETCORE_HTTP_PORTS` | Supplied by the image | HTTP listen port; the production image defaults to `2600` |
 | `DATA_PATH` | Supplied by the image | Writable directory for SQLite and generated encryption material |
+| `TRUENAS_WEBSOCKET_URL` | Yes | Secure TrueNAS JSON-RPC endpoint; must be an absolute `wss://` URL ending in `/api/current` |
 | `APP_ENCRYPTION_KEY` | No | Base64-encoded 32-byte external key for stronger secret-key separation |
 | `TRUENAS_APP_ID` | No | Manager app ID used to block attempts to update itself |
 
-The TrueNAS WebSocket endpoint is intentionally not configurable. The application always uses `wss://127.0.0.1/api/current` and therefore requires the documented host-network deployment.
+The endpoint is deployment configuration rather than a browser-editable setting. The app validates it at startup, requires `wss://`, rejects embedded credentials, queries, and fragments, and ignores legacy endpoint values stored in the database.
 
 Generate an optional external encryption key with:
 

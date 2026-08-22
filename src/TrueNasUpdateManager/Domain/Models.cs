@@ -1,9 +1,44 @@
 namespace TrueNasUpdateManager.Domain;
 
-internal static class TrueNasConnectionDefaults
+public sealed record TrueNasEndpointOptions
 {
-    public const string ServerUrl = "wss://127.0.0.1/api/current";
-    public static Uri ServerUri { get; } = new(ServerUrl, UriKind.Absolute);
+    private TrueNasEndpointOptions(Uri serverUri)
+    {
+        ServerUri = serverUri;
+    }
+
+    public Uri ServerUri { get; }
+    public string ServerUrl => ServerUri.AbsoluteUri;
+
+    /// <summary>Parses and validates the deployment-configured TrueNAS WebSocket endpoint.</summary>
+    /// <param name="value">The absolute WSS URL ending in /api/current.</param>
+    /// <returns>The validated and normalized endpoint options.</returns>
+    public static TrueNasEndpointOptions Parse(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("TRUENAS_WEBSOCKET_URL is required. Set it to the TrueNAS Web UI host followed by /api/current.", nameof(value));
+        }
+
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var serverUri) ||
+            !string.Equals(serverUri.Scheme, "wss", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(serverUri.Host) ||
+            !string.IsNullOrEmpty(serverUri.UserInfo) ||
+            !string.IsNullOrEmpty(serverUri.Query) ||
+            !string.IsNullOrEmpty(serverUri.Fragment) ||
+            !string.Equals(serverUri.AbsolutePath.TrimEnd('/'), "/api/current", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("TRUENAS_WEBSOCKET_URL must be an absolute wss:// URL ending in /api/current without credentials, a query, or a fragment.", nameof(value));
+        }
+
+        var normalizedUri = new UriBuilder(serverUri)
+        {
+            Path = "/api/current",
+            Query = string.Empty,
+            Fragment = string.Empty
+        }.Uri;
+        return new TrueNasEndpointOptions(normalizedUri);
+    }
 }
 
 public sealed record ConnectionOptions(

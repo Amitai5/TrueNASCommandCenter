@@ -1,4 +1,5 @@
 @page "/help"
+@inject TrueNasEndpointOptions TrueNasEndpoint
 
 <PageTitle>Setup help · TrueNAS Update Manager</PageTitle>
 
@@ -50,9 +51,36 @@
             <span class="help-step-number" aria-hidden="true">2</span>
             <div>
                 <h2>Connect to TrueNAS</h2>
-                <p class="muted">The secure loopback endpoint is built in. Enter these values in Step 1 of the wizard.</p>
+                <p class="muted">The secure endpoint is configured in the TrueNAS app deployment. Enter these values in Step 1 of the wizard.</p>
             </div>
         </div>
+
+        <h3>Complete TrueNAS app YAML</h3>
+        <p>Replace the entire custom app configuration with this YAML. It uses the current TrueNAS Web UI address, <code>10.0.0.21</code>.</p>
+        <pre class="help-yaml"><code>services:
+  truenas-update-manager:
+    cap_drop:
+      - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenasautoupdater:latest
+    network_mode: host
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
+volumes:
+  update-manager-data: null
+x-app-port: 2600</code></pre>
 
         <div class="table-wrap help-table">
             <table>
@@ -62,14 +90,15 @@
                 <tbody>
                     <tr><td>Username</td><td>The API key owner's exact, case-sensitive username</td></tr>
                     <tr><td>API key</td><td>The value copied when the key was created</td></tr>
-                    <tr><td>Verify TLS certificate</td><td>Disable for loopback unless the certificate explicitly covers <code>127.0.0.1</code></td></tr>
+                    <tr><td>Configured endpoint</td><td><code>@TrueNasEndpoint.ServerUrl</code></td></tr>
+                    <tr><td>Verify TLS certificate</td><td>Keep enabled when the certificate is trusted and covers <code>@TrueNasEndpoint.ServerUri.Host</code></td></tr>
                 </tbody>
             </table>
         </div>
 
-        <p>Click <strong>Test connection</strong>. A successful test enables <strong>Continue</strong>. The app always connects to <code>wss://127.0.0.1/api/current</code>, and the documented Host Network deployment makes that loopback address reach TrueNAS middleware without container DNS or LAN hairpin routing.</p>
+        <p>Click <strong>Test connection</strong>. A successful test enables <strong>Continue</strong>. The app uses the validated <code>TRUENAS_WEBSOCKET_URL</code> from the deployment and does not expose the server address as an editable browser field.</p>
 
-        <p class="muted">For an untrusted certificate, the preferred fix is a trusted certificate that covers <code>127.0.0.1</code>. On a trusted LAN, disabling certificate verification temporarily still keeps the connection encrypted with <code>wss://</code>.</p>
+        <p class="muted">Prefer a stable hostname and a trusted certificate that covers it. When container DNS cannot resolve a local hostname, map that hostname to the TrueNAS IPv4 address with <code>extra_hosts</code> in the app YAML.</p>
 
         <div class="notice help-inline-notice">
             <strong>Need deeper diagnostics?</strong> A failed connection test displays an error code and diagnostic ID. Search the TrueNAS app's container logs for that ID to see the failing connection stage, DNS results, port, TLS setting, WebSocket error, and RPC method. Credentials and RPC payloads are never written to the log.
@@ -133,7 +162,11 @@
             </details>
             <details>
                 <summary>Certificate validation error</summary>
-                <p>The endpoint is fixed to loopback. Prefer a trusted certificate that covers <code>127.0.0.1</code>; otherwise disable certificate verification only on a trusted network.</p>
+                <p>Confirm the certificate covers <code>@TrueNasEndpoint.ServerUri.Host</code>. Prefer correcting the hostname or certificate; otherwise disable certificate verification only on a trusted network.</p>
+            </details>
+            <details>
+                <summary>DNS failure, network unreachable, or connection refused</summary>
+                <p>Verify <code>TRUENAS_WEBSOCKET_URL</code> and the <code>extra_hosts</code> mapping in the TrueNAS app YAML, then redeploy. The hostname should map to the current TrueNAS Web UI IPv4 address and the URL must end in <code>/api/current</code>.</p>
             </details>
             <details>
                 <summary>No apps are discovered</summary>
