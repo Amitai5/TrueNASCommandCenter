@@ -150,18 +150,15 @@
                             </td>
                             <td>
                                 <div class="actions">
+                                    <a class="button small" href="@PolicyPath(app.Id)">Edit policy</a>
+                                    <a class="button small" href="@AppPath(app.Id)">View details</a>
                                     @if (webUi is not null)
                                     {
                                         <a class="button small primary" href="@webUi" target="_blank" rel="noopener noreferrer">Web UI ↗</a>
                                     }
-                                    <a class="button small" href="@PolicyPath(app.Id)">Edit policy</a>
                                     @if (IsDown(app.State))
                                     {
                                         <button class="small primary" disabled="@_busy" @onclick="() => ManageAppAsync(app, AppLifecycleAction.Start)">Start</button>
-                                    }
-                                    else
-                                    {
-                                        <button class="small" disabled="@_busy" @onclick="() => ManageAppAsync(app, AppLifecycleAction.Restart)">Restart</button>
                                     }
                                     @if (app.CatalogUpdateAvailable || app.ImageUpdateAvailable)
                                     {
@@ -193,26 +190,19 @@
                         <span>@AvailableText(app)</span>
                     </div>
                     <div class="actions">
+                        <a class="button small" href="@PolicyPath(app.Id)">Edit policy</a>
+                        <a class="button small" href="@AppPath(app.Id)">View details</a>
                         @if (webUi is not null)
                         {
-                            <a class="button small primary" href="@webUi" target="_blank" rel="noopener noreferrer">Open Web UI ↗</a>
+                            <a class="button small primary" href="@webUi" target="_blank" rel="noopener noreferrer">Web UI ↗</a>
                         }
-                        <a class="button small" href="@PolicyPath(app.Id)">Policy</a>
                         @if (IsDown(app.State))
                         {
                             <button class="small primary" disabled="@_busy" @onclick="() => ManageAppAsync(app, AppLifecycleAction.Start)">Start</button>
                         }
-                        else
-                        {
-                            <button class="small" disabled="@_busy" @onclick="() => ManageAppAsync(app, AppLifecycleAction.Restart)">Restart</button>
-                        }
                         @if (app.CatalogUpdateAvailable || app.ImageUpdateAvailable)
                         {
                             <button class="small primary" disabled="@_busy" @onclick="() => UpdateAppAsync(app)">Update now</button>
-                        }
-                        else
-                        {
-                            <a class="button small" href="@AppPath(app.Id)">Details</a>
                         }
                     </div>
                 </article>

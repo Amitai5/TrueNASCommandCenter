@@ -46,6 +46,26 @@ public sealed class InventoryHealthAndLinkTests
     }
 
     [TestMethod]
+    [DataRow("exited", AppHealthState.Running)]
+    [DataRow("starting", AppHealthState.Running)]
+    [DataRow("crashed", AppHealthState.Degraded)]
+    public async Task Refresh_ClassifiesContainerStateWithoutFlaggingCompletedOneShotContainers(string containerState, AppHealthState expectedHealth)
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var app = AppWithWorkloads() with
+        {
+            ActiveWorkloads = Json($$"""{"container_details":[{"id":"container-1","service_name":"permissions","image":"example.test/permissions:latest","state":"{{containerState}}","port_config":[],"volume_mounts":[]}]}""")
+        };
+        var service = new AppDiscoveryService(new InventoryTrueNasClient([app]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)));
+
+        await service.RefreshAsync();
+
+        await using var db = await database.CreateDbContextAsync();
+        Assert.AreEqual(expectedHealth, (await db.Apps.SingleAsync()).HealthState);
+    }
+
+    [TestMethod]
     public async Task HealthRecovery_AttemptsRestartOnlyOncePerIncident()
     {
         await using var database = new TestDatabase();

@@ -314,13 +314,15 @@ public sealed class AppDiscoveryService(
             return Domain.AppHealthState.Running;
         }
 
-        return containers.EnumerateArray().Any(container => !string.Equals(ReadString(container, "state") ?? ReadString(container, "status"), "RUNNING", StringComparison.OrdinalIgnoreCase)) ? Domain.AppHealthState.Degraded : Domain.AppHealthState.Running;
+        return containers.EnumerateArray().Any(IsCrashedContainer) ? Domain.AppHealthState.Degraded : Domain.AppHealthState.Running;
     }
+
+    private static bool IsCrashedContainer(JsonElement container) => string.Equals(ReadString(container, "state") ?? ReadString(container, "status"), "CRASHED", StringComparison.OrdinalIgnoreCase);
 
     private static string HealthMessage(Domain.AppHealthState state) => state switch
     {
-        Domain.AppHealthState.Running => "The app and its reported containers are running.",
-        Domain.AppHealthState.Degraded => "The app is running, but at least one container is not healthy.",
+        Domain.AppHealthState.Running => "TrueNAS reports the app running. Completed one-shot containers may remain exited.",
+        Domain.AppHealthState.Degraded => "The app is running, but TrueNAS reports at least one crashed container.",
         Domain.AppHealthState.Stopped => "The app is stopped or crashed.",
         Domain.AppHealthState.Maintenance => "Monitoring is paused for an intentional maintenance stop.",
         _ => "TrueNAS did not report enough workload information to determine health."
