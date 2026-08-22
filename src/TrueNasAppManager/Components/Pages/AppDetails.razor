@@ -1,0 +1,576 @@
+@page "/apps/{AppId}"
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ITrueNasClient TrueNasClient
+@inject IUpdateCoordinator Coordinator
+@inject IAppManagementService AppManagementService
+@inject IAppLinkService AppLinkService
+@inject IGitHubMetadataService GitHubMetadataService
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>App details · TrueNAS App Manager</PageTitle>
+
+<div class="page">
+    @if (_loading)
+    {
+        <div class="panel empty-state"><span class="spinner"></span> Loading app…</div>
+    }
+    else if (_app is null)
+    {
+        <div class="panel empty-state">
+            <h1>App not found</h1>
+            <a class="button" href="/">Back to apps</a>
+        </div>
+    }
+    else
+    {
+        <header class="page-header">
+            <div>
+                <a href="/">← Apps</a>
+                <h1 style="margin-top:.6rem">@_app.Name</h1>
+                <p class="subtitle">@(_app.IsCustom ? "Custom app" : _app.Train ?? "Catalog app") · <span class="badge @HealthClass()">@_app.HealthState</span></p>
+            </div>
+            <div class="actions">
+                @if (_webUi is not null)
+                {
+                    <a class="button primary" href="@_webUi" target="_blank" rel="noopener noreferrer">Open Web UI ↗</a>
+                }
+                <a class="button" href="@PolicyPath()">Edit policy</a>
+                <button disabled="@_busy" @onclick="CheckAsync">Check app now</button>
+                @if (_app.State is "STOPPED" or "CRASHED")
+                {
+                    <button class="primary" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Start)">Start app</button>
+                }
+                else
+                {
+                    <button disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Restart)">Restart app</button>
+                    <button class="danger" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Stop)">Stop app</button>
+                }
+                @if (_app.CatalogUpdateAvailable || _app.ImageUpdateAvailable)
+                {
+                    <button class="primary" disabled="@(_busy || _app.ActionRequired)" @onclick="UpdateAsync">Update now</button>
+                }
+            </div>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="notice @(_error ? "danger" : "success")">@_message</div>
+        }
+
+        @if (_app.ActionRequired)
+        {
+            <div class="notice danger">
+                <strong>Blocked: action required.</strong>
+                TrueNAS requires administrator action before this target can be executed.
+            </div>
+        }
+
+        <div class="split-layout">
+            <section>
+                <div class="panel app-info-hero">
+                    <div class="app-monogram" aria-hidden="true">@AppInitials()</div>
+                    <div>
+                        <h2>About</h2>
+                        <p>@(_app.Description ?? "TrueNAS did not provide a description for this application.")</p>
+                        <div class="actions">
+                            @if (!string.IsNullOrWhiteSpace(_app.HomeUrl))
+                            {
+                                <a class="button small" href="@_app.HomeUrl" target="_blank" rel="noopener noreferrer">Homepage ↗</a>
+                            }
+                            @foreach (var source in _sources)
+                            {
+                                <a class="button small" href="@source" target="_blank" rel="noopener noreferrer">@(source.Contains("github.com", StringComparison.OrdinalIgnoreCase) ? "GitHub" : "Source") ↗</a>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header"><h2>Ports &amp; access</h2>@if (_webUi is not null) { <a href="@_webUi" target="_blank" rel="noopener noreferrer">Open Web UI ↗</a> }</div>
+                    @if (_app.Ports.Count == 0)
+                    {
+                        <p class="muted">TrueNAS did not report published ports. Host-networked custom apps may show no workload ports.</p>
+                    }
+                    else
+                    {
+                        <div class="port-grid">
+                            @foreach (var port in _app.Ports.OrderBy(port => port.HostPort))
+                            {
+                                <div class="port-card"><strong>@port.HostPort</strong><span>@port.Protocol.ToUpperInvariant() @if (port.ContainerPort is not null) { <text>→ @port.ContainerPort</text> }</span><small>@(port.ContainerName ?? "Published port")</small></div>
+                            }
+                        </div>
+                    }
+                    @if (_app.Portals.Count > 0)
+                    {
+                        <dl class="details-list" style="margin-top:1rem">
+                            @foreach (var portal in _app.Portals)
+                            {
+                                <dt>@portal.Name</dt><dd><a href="@portal.Url" target="_blank" rel="noopener noreferrer">@portal.Url ↗</a></dd>
+                            }
+                        </dl>
+                    }
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header"><div><h2>Containers &amp; live logs</h2><p class="field-help">The last 500 lines plus live output. Logs stay in browser memory and are never stored.</p></div></div>
+                    @if (_app.Containers.Count == 0)
+                    {
+                        <p class="muted">TrueNAS did not report container details for this app.</p>
+                    }
+                    else
+                    {
+                        <div class="form-grid">
+                            <div class="field"><label for="log-container">Container</label><select id="log-container" @bind="_selectedContainerId">@foreach (var container in _app.Containers) { <option value="@container.ContainerId">@container.Name · @container.State</option> }</select></div>
+                            <div class="actions log-actions">
+                                @if (_logTask is null)
+                                {
+                                    <button class="primary" disabled="@string.IsNullOrWhiteSpace(_selectedContainerId)" @onclick="StartLogsAsync">Start logs</button>
+                                }
+                                else
+                                {
+                                    <button @onclick="ToggleLogPause">@(_logsPaused ? "Resume" : "Pause")</button>
+                                    <button @onclick="StopLogsAsync">Stop</button>
+                                }
+                                <button @onclick="ClearLogs">Clear</button>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_logError))
+                        {
+                            <div class="notice danger">@_logError</div>
+                        }
+                        <div class="log-viewer" role="log" aria-live="polite">
+                            @if (_logs.Count == 0)
+                            {
+                                <span class="muted">Start the stream to load recent output.</span>
+                            }
+                            @foreach (var entry in _logs)
+                            {
+                                <div><time>@entry.Timestamp.ToString("HH:mm:ss")</time> <span class="log-stream">@entry.Stream</span> @entry.Message</div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Update details</h2>
+                        <span class="badge @StatusClass()">@_app.StatusLabel</span>
+                    </div>
+                    <dl class="details-list">
+                        <dt>Installed</dt><dd>@(_app.HumanVersion ?? _app.InstalledVersion ?? "Unknown")</dd>
+                        <dt>Available</dt><dd>@AvailableText()</dd>
+                        <dt>Policy</dt><dd>@PolicyText()</dd>
+                        <dt>Version scope</dt><dd>@ScopeText()</dd>
+                        <dt>Last check</dt><dd>@FormatDate(_app.LastCheckUtc)</dd>
+                        <dt>Last successful update</dt><dd>@FormatDate(_app.LastSuccessfulUpdateUtc)</dd>
+                    </dl>
+
+                    @if (_images.Count > 0)
+                    {
+                        <h3 style="margin-top:1.25rem">Outdated images</h3>
+                        <ul>
+                            @foreach (var image in _images)
+                            {
+                                <li><code>@image</code></li>
+                            }
+                        </ul>
+                    }
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Recent history</h2>
+                        <a href="@HistoryPath()">View all history</a>
+                    </div>
+                    @if (_attempts.Count == 0)
+                    {
+                        <p class="muted">No manager attempts have been recorded for this app.</p>
+                    }
+                    else
+                    {
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>Time</th><th>Event</th><th>Result</th><th>Reason</th></tr></thead>
+                                <tbody>
+                                    @foreach (var attempt in _attempts)
+                                    {
+                                        <tr>
+                                            <td>@FormatDate(attempt.StartedUtc)</td>
+                                            <td>@attempt.Kind</td>
+                                            <td><span class="badge">@attempt.Status</span></td>
+                                            <td>@attempt.ReasonMessage</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <aside>
+                <section class="panel">
+                    <h2>Application info</h2>
+                    <dl class="details-list">
+                        <dt>Health</dt><dd><span class="badge @HealthClass()">@_app.HealthState</span></dd>
+                        <dt>App version</dt><dd>@(_app.HumanVersion ?? "Unknown")</dd>
+                        <dt>Chart version</dt><dd>@(_app.InstalledVersion ?? "Unknown")</dd>
+                        <dt>Train</dt><dd>@(_app.Train ?? (_app.IsCustom ? "Custom" : "Unknown"))</dd>
+                        <dt>Containers</dt><dd>@_app.Containers.Count</dd>
+                    </dl>
+                    @if (_gitHub is not null)
+                    {
+                        <hr />
+                        <h3>GitHub</h3>
+                        <dl class="details-list"><dt>Repository</dt><dd>@(_gitHub.FullName ?? _gitHub.RepositoryUrl)</dd><dt>Stars</dt><dd>@(_gitHub.Stars?.ToString("N0") ?? "—")</dd><dt>License</dt><dd>@(_gitHub.License ?? "Unknown")</dd></dl>
+                        @if (_topics.Count > 0)
+                        {
+                            <div class="topic-list">@foreach (var topic in _topics) { <span class="badge">@topic</span> }</div>
+                        }
+                    }
+                </section>
+
+                <section class="panel">
+                    <h2>Workloads</h2>
+                    @foreach (var container in _app.Containers)
+                    {
+                        <div class="workload-row"><div><strong>@container.Name</strong><span class="app-meta">@container.Image</span></div><span class="badge @(container.State.Equals("RUNNING", StringComparison.OrdinalIgnoreCase) ? "success" : "warning")">@container.State</span></div>
+                    }
+                </section>
+
+                <section class="panel">
+                    <h2>Rollback</h2>
+                    @if (_rollbackVersions.Count == 0)
+                    {
+                        <p class="muted">TrueNAS does not currently expose rollback versions.</p>
+                    }
+                    else
+                    {
+                        <label for="rollback-version">Version</label>
+                        <select id="rollback-version" @bind="_rollbackTarget">
+                            @foreach (var version in _rollbackVersions)
+                            {
+                                <option value="@version">@version</option>
+                            }
+                        </select>
+                        <p class="field-help">Only versions returned by TrueNAS can be selected.</p>
+                        <button class="danger" style="width:100%;margin-top:1rem" disabled="@_busy" @onclick="RollbackAsync">
+                            Roll back
+                        </button>
+                    }
+                </section>
+
+                <section class="panel">
+                    <h2>Safety</h2>
+                    <dl class="details-list">
+                        <dt>Action required</dt><dd>@(_app.ActionRequired ? "Yes" : "No")</dd>
+                        <dt>Snapshots requested</dt><dd>@(_app.SnapshotHostPaths ? "Yes" : "No")</dd>
+                        <dt>Downtime action</dt><dd>@_app.DowntimeAction</dd>
+                        <dt>Maintenance</dt><dd>@(_app.MaintenanceMode ? "On" : "Off")</dd>
+                        <dt>Manager app ID</dt><dd>@_app.Id</dd>
+                    </dl>
+                </section>
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string AppId { get; set; } = string.Empty;
+
+    private AppRecord? _app;
+    private List<UpdateAttempt> _attempts = [];
+    private List<string> _images = [];
+    private List<string> _rollbackVersions = [];
+    private List<string> _sources = [];
+    private List<string> _topics = [];
+    private List<TrueNasLogEntry> _logs = [];
+    private SettingsRecord? _settings;
+    private GitHubRepositoryCache? _gitHub;
+    private string? _webUi;
+    private string? _selectedContainerId;
+    private string? _logError;
+    private CancellationTokenSource? _logCancellation;
+    private Task? _logTask;
+    private bool _logsPaused;
+    private string? _rollbackTarget;
+    private string? _message;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _error;
+    private string? _timeZoneId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _app = await db.Apps.AsNoTracking().AsSplitQuery().Include(app => app.Ports).Include(app => app.Portals).Include(app => app.Containers).SingleOrDefaultAsync(app => app.Id == AppId);
+        _settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1);
+        _timeZoneId = _settings.TimeZoneId;
+        _attempts = await db.UpdateAttempts.AsNoTracking()
+            .Where(attempt => attempt.AppId == AppId)
+            .OrderByDescending(attempt => attempt.StartedUtc)
+            .Take(10)
+            .ToListAsync();
+        _images = DeserializeImages(_app?.OutdatedImagesJson);
+        _sources = DeserializeStrings(_app?.SourceUrlsJson);
+        _webUi = _app is null ? null : AppLinkService.ResolveWebUiUrl(_app, _settings.PortalHostOverride);
+        _gitHub = _app is null ? null : await GitHubMetadataService.GetForAppAsync(_app.Id);
+        _topics = DeserializeStrings(_gitHub?.TopicsJson);
+        _selectedContainerId ??= _app?.Containers.FirstOrDefault()?.ContainerId;
+
+        if (_app is not null)
+        {
+            try
+            {
+                _rollbackVersions = (await TrueNasClient.GetRollbackVersionsAsync(AppId)).ToList();
+                _rollbackTarget = _rollbackVersions.FirstOrDefault();
+            }
+            catch
+            {
+                _rollbackVersions = [];
+            }
+        }
+
+        _loading = false;
+    }
+
+    private Task CheckAsync() => RunAsync(RunTrigger.CheckNow, false);
+
+    private async Task UpdateAsync()
+    {
+        if (_app is null)
+        {
+            return;
+        }
+
+        var warning = _app.State is "STOPPED" or "CRASHED"
+            ? $"The app is {_app.State}. Continue with the TrueNAS update?"
+            : $"Update {_app.Name} through TrueNAS now?";
+        if (await JS.InvokeAsync<bool>("confirm", warning))
+        {
+            await RunAsync(RunTrigger.UpdateNow, true, riskyStateConfirmed: true);
+        }
+    }
+
+    private async Task ManageAsync(AppLifecycleAction action)
+    {
+        if (_app is null)
+        {
+            return;
+        }
+
+        if (action != AppLifecycleAction.Start && !await JS.InvokeAsync<bool>("confirm", $"{action} {_app.Name} through TrueNAS now?"))
+        {
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var result = await AppManagementService.ExecuteAsync(AppId, action);
+            _message = result.Message;
+            _error = !result.Success;
+        }
+        catch
+        {
+            _message = $"The app could not be {PastTense(action)}.";
+            _error = true;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+        }
+    }
+
+    private async Task RollbackAsync()
+    {
+        if (_app is null || string.IsNullOrWhiteSpace(_rollbackTarget))
+        {
+            return;
+        }
+
+        if (!await JS.InvokeAsync<bool>(
+                "confirm",
+                $"Roll back {_app.Name} to {_rollbackTarget}? TrueNAS will perform and verify the rollback."))
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Coordinator.RollbackAsync(AppId, _rollbackTarget);
+            _message = result.Message;
+            _error = result.Status != RunStatus.Succeeded;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+        }
+    }
+
+    private async Task RunAsync(RunTrigger trigger, bool execute, bool riskyStateConfirmed = false)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Coordinator.CheckAndUpdateAsync(trigger, execute, AppId, riskyStateConfirmed);
+            _message = result.Message;
+            _error = result.Status is RunStatus.Failed or RunStatus.PartiallySucceeded;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+        }
+    }
+
+    private static List<string> DeserializeImages(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(value) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static List<string> DeserializeStrings(string? value) => DeserializeImages(value);
+
+    private Task StartLogsAsync()
+    {
+        if (_logTask is not null || string.IsNullOrWhiteSpace(_selectedContainerId))
+        {
+            return Task.CompletedTask;
+        }
+
+        _logs.Clear();
+        _logError = null;
+        _logsPaused = false;
+        _logCancellation = new CancellationTokenSource();
+        var containerId = _selectedContainerId;
+        _logTask = StreamLogsAsync(containerId, _logCancellation.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task StreamLogsAsync(string containerId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var entry in TrueNasClient.FollowContainerLogsAsync(new TrueNasContainerLogRequest(AppId, containerId, 500), cancellationToken))
+            {
+                if (!_logsPaused)
+                {
+                    _logs.Add(entry);
+                    if (_logs.Count > 500)
+                    {
+                        _logs.RemoveRange(0, _logs.Count - 500);
+                    }
+
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            _logError = $"The log stream ended: {exception.Message}";
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _logTask = null;
+            _logCancellation?.Dispose();
+            _logCancellation = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ToggleLogPause() => _logsPaused = !_logsPaused;
+
+    private void ClearLogs() => _logs.Clear();
+
+    private async Task StopLogsAsync()
+    {
+        var task = _logTask;
+        _logCancellation?.Cancel();
+        if (task is not null)
+        {
+            await task;
+        }
+    }
+
+    /// <summary>Stops any active TrueNAS log subscription when the page is disposed.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        await StopLogsAsync();
+    }
+
+    private string PolicyPath() => $"/apps/{Uri.EscapeDataString(AppId)}/policy";
+    private string HistoryPath() => $"/history?app={Uri.EscapeDataString(AppId)}";
+    private string PolicyText() => _app?.Policy switch
+    {
+        AppPolicy.AutoUpdate => "Auto update",
+        AppPolicy.NotifyOnly => "Notify only",
+        AppPolicy.Ignore => "Ignore",
+        _ => "Needs configuration"
+    };
+    private string ScopeText() => _app?.VersionScope switch
+    {
+        VersionScope.AnyVersion => "Any version",
+        VersionScope.MinorAndPatch => "Minor + patch only",
+        VersionScope.PatchOnly => "Patch only",
+        _ => "—"
+    };
+    private string AvailableText() => _app?.CatalogUpdateAvailable == true
+        ? _app.LatestHumanVersion ?? _app.LatestVersion ?? "Catalog update"
+        : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
+    private string StatusClass() => _app?.StatusLabel == "Up to date" ? "success" :
+        _app?.StatusLabel is "Failed" or "Crashed" or "Blocked: action required" ? "danger" : "warning";
+    private string HealthClass() => _app?.HealthState switch
+    {
+        AppHealthState.Running => "success",
+        AppHealthState.Degraded => "warning",
+        AppHealthState.Stopped => "danger",
+        AppHealthState.Maintenance => "info",
+        _ => string.Empty
+    };
+    private string AppInitials()
+    {
+        if (string.IsNullOrWhiteSpace(_app?.Name))
+        {
+            return "APP";
+        }
+
+        var words = _app.Name.Split([' ', '-', '_'], StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
+    private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
+
+    private static string PastTense(AppLifecycleAction action) => action switch
+    {
+        AppLifecycleAction.Start => "started",
+        AppLifecycleAction.Stop => "stopped",
+        AppLifecycleAction.Restart => "restarted",
+        _ => "managed"
+    };
+}

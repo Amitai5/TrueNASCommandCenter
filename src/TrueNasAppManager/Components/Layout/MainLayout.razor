@@ -1,0 +1,51 @@
+﻿@inherits LayoutComponentBase
+<div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+        <a class="brand" href="/">
+            <span class="brand-mark">TM</span>
+            <span>TrueNAS<br /><strong>App Manager</strong></span>
+        </a>
+        <nav>
+            <NavLink href="/" Match="NavLinkMatch.All">
+                <span aria-hidden="true">◉</span> Apps
+            </NavLink>
+            <NavLink href="/history">
+                <span aria-hidden="true">≡</span> History
+            </NavLink>
+            <NavLink href="/settings">
+                <span aria-hidden="true">⚙</span> Settings
+            </NavLink>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="sidebar-utilities">
+                <button type="button" class="theme-toggle sidebar-utility" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+                    <span data-theme-icon aria-hidden="true">◐</span>
+                    <span data-theme-label>Theme</span>
+                </button>
+                <NavLink class="sidebar-utility" href="/help">
+                    <span aria-hidden="true">?</span> Help
+                </NavLink>
+            </div>
+        </div>
+    </aside>
+
+    <main>
+        @Body
+    </main>
+
+    <nav class="mobile-nav" aria-label="Primary navigation">
+        <NavLink href="/" Match="NavLinkMatch.All"><span>◉</span>Apps</NavLink>
+        <NavLink href="/history"><span>≡</span>History</NavLink>
+        <NavLink href="/settings"><span>⚙</span>Settings</NavLink>
+        <NavLink href="/help"><span>?</span>Help</NavLink>
+        <button type="button" class="theme-toggle mobile-theme-toggle" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+            <span data-theme-icon aria-hidden="true">◐</span>
+            <span data-theme-label>Theme</span>
+        </button>
+    </nav>
+</div>
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">×</span>
+</div>

@@ -10,14 +10,14 @@ This document covers local development, tests, container builds, project structu
 - Docker for container builds
 - Git
 
-No running TrueNAS server, SMTP server, or webhook endpoint is required for the automated test suite.
+No running TrueNAS server, mail server, GitHub API, or webhook endpoint is required for the automated test suite.
 
 ## Repository structure
 
 | Path | Purpose |
 | --- | --- |
-| `src/TrueNasUpdateManager` | Blazor application, scheduler, persistence, notifications, and integrations |
-| `tests/TrueNasUpdateManager.Tests` | Hermetic MSTest unit and integration-style tests using fakes |
+| `src/TrueNasAppManager` | Blazor application, scheduler, persistence, notifications, and integrations |
+| `tests/TrueNasAppManager.Tests` | Hermetic MSTest unit and integration-style tests using fakes |
 | `Dockerfile` | Multi-stage production image |
 | `.github/workflows` | Pull-request validation and container publishing |
 | `docs` | Operator setup and developer documentation |
@@ -25,12 +25,12 @@ No running TrueNAS server, SMTP server, or webhook endpoint is required for the 
 ## Restore, build, and test
 
 ```bash
-dotnet restore TrueNasUpdateManager.slnx
-dotnet build TrueNasUpdateManager.slnx --no-restore
-dotnet test TrueNasUpdateManager.slnx --no-build --no-restore
+dotnet restore TrueNasAppManager.slnx
+dotnet build TrueNasAppManager.slnx --no-restore
+dotnet test TrueNasAppManager.slnx --no-build --no-restore
 ```
 
-Tests use fake transports, HTTP handlers, SMTP message construction, temporary SQLite databases, and deterministic `TimeProvider` values. They do not depend on the Internet, real TrueNAS middleware, the host file system outside temporary test directories, or wall-clock timing.
+Tests use fake transports, HTTP handlers, TrueNAS mail requests, temporary SQLite databases, and deterministic `TimeProvider` values. They do not depend on the Internet, real TrueNAS middleware, the host file system outside temporary test directories, or wall-clock timing.
 
 ## Run locally
 
@@ -39,13 +39,13 @@ The application requires a writable data directory. In PowerShell:
 ```powershell
 $env:DATA_PATH = "$PWD/.data"
 $env:TRUENAS_WEBSOCKET_URL = "wss://truenas.example.test/api/current"
-dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
+dotnet run --project src/TrueNasAppManager/TrueNasAppManager.csproj --urls http://localhost:2600
 ```
 
 In Bash:
 
 ```bash
-DATA_PATH="$PWD/.data" TRUENAS_WEBSOCKET_URL="wss://truenas.example.test/api/current" dotnet run --project src/TrueNasUpdateManager/TrueNasUpdateManager.csproj --urls http://localhost:2600
+DATA_PATH="$PWD/.data" TRUENAS_WEBSOCKET_URL="wss://truenas.example.test/api/current" dotnet run --project src/TrueNasAppManager/TrueNasAppManager.csproj --urls http://localhost:2600
 ```
 
 Open `http://localhost:2600` and use the first-launch wizard. Avoid using production API keys in development environments.
@@ -53,7 +53,7 @@ Open `http://localhost:2600` and use the first-launch wizard. Avoid using produc
 ## Build the container
 
 ```bash
-docker build --pull --tag truenas-update-manager:local .
+docker build --pull --tag truenas-app-manager:local .
 ```
 
 Run the local image with the same security restrictions used by the documented production deployment:
@@ -62,16 +62,17 @@ Run the local image with the same security restrictions used by the documented p
 docker volume create update-manager-data
 
 docker run --rm \
-  --name truenas-update-manager \
+  --name truenas-app-manager \
   --network host \
   --add-host truenas.example.test:192.0.2.10 \
+  --env TRUENAS_APP_ID=truenas-app-manager \
   --env TRUENAS_WEBSOCKET_URL=wss://truenas.example.test/api/current \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
   --cap-drop ALL \
   --security-opt no-new-privileges=true \
-  truenas-update-manager:local
+  truenas-app-manager:local
 ```
 
 Replace the documentation-only address `192.0.2.10` with the target TrueNAS Web UI IPv4 address before an end-to-end test. Host networking matches production, while the explicit host mapping makes local hostname resolution deterministic. The unit test suite uses a fake WebSocket transport and does not require a reachable endpoint.
@@ -94,10 +95,13 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 
 - The web application uses interactive server-side Blazor on ASP.NET Core .NET 10.
 - SQLite state is stored under `DATA_PATH`.
-- TrueNAS remains the lifecycle authority; all discovery, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
+- TrueNAS remains the lifecycle authority; inventory, workload health, logs, lifecycle actions, mail, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
+- Complete inventory refresh and missing-app reconciliation always run before update evaluation.
+- Per-app health incidents persist a single recovery-attempt marker so scheduled retries cannot loop.
+- GitHub enrichment accepts only canonical public `github.com` sources, uses ETags and a 24-hour SQLite cache, and never gates TrueNAS operations.
 - Scheduled and manual update executions are serialized.
 - Policy evaluation fails closed when app state, semantic version parsing, or persistence is uncertain.
-- API, SMTP, Authorization, and secret-header values are encrypted before persistence.
+- API, Authorization, and secret-header values are encrypted before persistence.
 
 ### Frontend assets
 
@@ -112,6 +116,7 @@ Discovery and status:
 - `app.outdated_docker_images`
 - `app.upgrade_summary`
 - `app.rollback_versions`
+- `app.container_log_follow` through `core.subscribe`
 
 Execution and jobs:
 
@@ -119,8 +124,11 @@ Execution and jobs:
 - `app.pull_images`
 - `app.rollback`
 - `core.job_wait`
+- `core.subscribe`
+- `core.unsubscribe`
 - `core.ping`
 - `auth.login_ex`
+- `mail.send`
 
 API DTOs are intentionally narrow. Validate the installed TrueNAS API schemas when adding support for a new TrueNAS release.
 

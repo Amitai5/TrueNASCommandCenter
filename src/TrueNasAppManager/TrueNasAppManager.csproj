@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NoDefaultLaunchSettingsFile>True</NoDefaultLaunchSettingsFile>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Cronos" Version="0.13.0" />
+    <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.10" GeneratePathProperty="true" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+  </ItemGroup>
+
+  <Target Name="ResolveBlazorFrameworkAssetRoot" BeforeTargets="_AddBlazorFrameworkStaticWebAssets">
+    <PropertyGroup>
+      <BlazorFrameworkStaticWebAssetRoot>$(PkgMicrosoft_AspNetCore_App_Internal_Assets)/_framework</BlazorFrameworkStaticWebAssetRoot>
+    </PropertyGroup>
+    <Error Condition="'$(PkgMicrosoft_AspNetCore_App_Internal_Assets)' == ''" Text="The Microsoft.AspNetCore.App.Internal.Assets package path could not be resolved." />
+    <Error Condition="!Exists('$(BlazorFrameworkStaticWebAssetRoot)/blazor.web.js')" Text="The Blazor bootstrap asset was not found at '$(BlazorFrameworkStaticWebAssetRoot)/blazor.web.js'." />
+  </Target>
+
+</Project>

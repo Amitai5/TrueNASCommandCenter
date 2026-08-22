@@ -1,14 +1,20 @@
 services:
-  truenas-update-manager:
+  truenas-app-manager:
     cap_drop:
       - ALL
     environment:
       ASPNETCORE_HTTP_PORTS: 2600
       DATA_PATH: /data
+      TRUENAS_APP_ID: truenas-app-manager
       TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
     extra_hosts:
       - truenas.local:10.0.0.21
-    image: ghcr.io/amitai5/truenasautoupdater:latest
+    image: ghcr.io/amitai5/truenasappmanager:latest
+    labels:
+      org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASAppManager
+      org.opencontainers.image.title: TrueNAS App Manager
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASAppManager
     network_mode: host
     pull_policy: always
     read_only: true
@@ -22,3 +28,12 @@ services:
 volumes:
   update-manager-data: null
 x-app-port: 2600
+x-notes: >-
+  TrueNAS App Manager monitors app health, exposes ports and Web UI links, streams container logs,
+  and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
+x-portals:
+  - host: 0.0.0.0
+    name: Web UI
+    path: /
+    port: 2600
+    scheme: http

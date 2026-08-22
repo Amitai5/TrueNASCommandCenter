@@ -1,25 +1,30 @@
-# TrueNAS App Update Manager
+# TrueNAS App Manager
 
-[![Production build](https://img.shields.io/github/actions/workflow/status/Amitai5/TrueNASAutoUpdater/publish-container.yml?branch=production&style=for-the-badge&label=production)](https://github.com/Amitai5/TrueNASAutoUpdater/actions/workflows/publish-container.yml)
-[![Container image](https://img.shields.io/badge/GHCR-latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Amitai5/TrueNASAutoUpdater/pkgs/container/truenasautoupdater)
+[![Production build](https://img.shields.io/github/actions/workflow/status/Amitai5/TrueNASAppManager/publish-container.yml?branch=production&style=for-the-badge&label=production)](https://github.com/Amitai5/TrueNASAppManager/actions/workflows/publish-container.yml)
+[![Container image](https://img.shields.io/badge/GHCR-latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Amitai5/TrueNASAppManager/pkgs/container/truenasappmanager)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![TrueNAS](https://img.shields.io/badge/TrueNAS-25.10%2B-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://www.truenas.com/)
 [![License](https://img.shields.io/badge/license-MIT-16A34A?style=for-the-badge)](LICENSE)
 
-TrueNAS App Update Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email or webhook notifications.
+TrueNAS App Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, manages their lifecycle, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email or webhook notifications.
 
-TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
+TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, start, stop, restart, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
 
 ## Features
 
 - Explicit **Auto Update**, **Notify Only**, **Ignore**, and fail-closed **Unconfigured** policies
 - Conservative Any Version, Minor + Patch, and Patch-only version scopes
 - Catalog upgrades and image-only refreshes
+- Start, stop, and restart controls backed by TrueNAS jobs
 - Five-field cron scheduling with IANA timezones
 - Sequential updates with TrueNAS job waiting and post-update verification
 - Manual rollback to versions reported by TrueNAS
-- Optional email and generic webhook notifications
-- Encrypted API, SMTP, Authorization, and secret-header values
+- Per-app health policies: Ignore, Notify Only, or one automatic restart attempt plus notification
+- Top-level and container health, maintenance mode, recovery notifications, and lifecycle audit history
+- Prominent published ports, TrueNAS Web UI portals, explicit URL overrides, and on-demand live container logs
+- Optional TrueNAS-native email and generic webhook notifications
+- Optional public GitHub repository facts with 24-hour ETag caching and no token
+- Encrypted API, Authorization, and secret-header values
 - Detailed run, attempt, skip, failure, rollback, and notification history
 - Responsive system-aware light/dark web UI with a persistent manual toggle
 - SQLite persistence in a dedicated `/data` volume
@@ -35,7 +40,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - TrueNAS Community Edition / SCALE 25.10 or later
 - A configured TrueNAS Apps storage pool
-- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`
+- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; add `MAIL_WRITE` when TrueNAS email notifications are enabled
 - A trusted LAN/VPN, or an authenticated reverse proxy in front of the web UI
 
 The application does not include its own user accounts or RBAC. Do not expose it directly to an untrusted network.
@@ -48,22 +53,28 @@ This is the recommended TrueNAS installation method.
 
 1. Open **Apps → Discover**.
 2. Open the menu beside **Custom App** and select **Install via YAML**.
-3. Enter an application name such as `truenas-update-manager`.
+3. Enter an application name such as `truenas-app-manager`.
 4. Paste the following Compose configuration into **Custom Config**.
 5. Click **Save** and wait for the app to report a running state.
 
 ```yaml
 services:
-  truenas-update-manager:
+  truenas-app-manager:
     cap_drop:
       - ALL
     environment:
       ASPNETCORE_HTTP_PORTS: 2600
       DATA_PATH: /data
+      TRUENAS_APP_ID: truenas-app-manager
       TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
     extra_hosts:
       - truenas.local:10.0.0.21
-    image: ghcr.io/amitai5/truenasautoupdater:latest
+    image: ghcr.io/amitai5/truenasappmanager:latest
+    labels:
+      org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASAppManager
+      org.opencontainers.image.title: TrueNAS App Manager
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASAppManager
     network_mode: host
     pull_policy: always
     read_only: true
@@ -77,15 +88,73 @@ services:
 volumes:
   update-manager-data: null
 x-app-port: 2600
+x-notes: >-
+  TrueNAS App Manager monitors app health, exposes ports and Web UI links, streams container logs,
+  and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
+x-portals:
+  - host: 0.0.0.0
+    name: Web UI
+    path: /
+    port: 2600
+    scheme: http
 ```
 
 Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
 This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
 
-Host networking is required so the manager can reach the TrueNAS Web UI address without Docker bridge or LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
+Host networking is the reliable default because it lets the manager reach the TrueNAS Web UI address without Docker bridge or LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
 
 `ASPNETCORE_HTTP_PORTS` controls the listener, while `x-app-port` records the same port for the TrueNAS configuration. If `2600` is already in use, change both values to the same unused port above `1023`, save the complete YAML, and open that port in the browser.
+
+### Optional bridge-network deployment
+
+Bridge networking makes port `2600` appear in TrueNAS workload metadata, but some TrueNAS hosts cannot route a custom-app bridge back to their own Web UI address. Use this complete alternative only when **Test connection** succeeds; otherwise return to the host-network YAML above.
+
+```yaml
+services:
+  truenas-app-manager:
+    cap_drop:
+      - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_APP_ID: truenas-app-manager
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenasappmanager:latest
+    labels:
+      org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASAppManager
+      org.opencontainers.image.title: TrueNAS App Manager
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASAppManager
+    ports:
+      - protocol: tcp
+        published: 2600
+        target: 2600
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
+volumes:
+  update-manager-data: null
+x-app-port: 2600
+x-notes: >-
+  TrueNAS App Manager monitors app health, exposes ports and Web UI links, streams container logs,
+  and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
+x-portals:
+  - host: 0.0.0.0
+    name: Web UI
+    path: /
+    port: 2600
+    scheme: http
+```
 
 ### Docker
 
@@ -95,17 +164,18 @@ Create a persistent volume and run the published image:
 docker volume create update-manager-data
 
 docker run --detach \
-  --name truenas-update-manager \
+  --name truenas-app-manager \
   --restart unless-stopped \
   --network host \
   --add-host truenas.local:10.0.0.21 \
+  --env TRUENAS_APP_ID=truenas-app-manager \
   --env TRUENAS_WEBSOCKET_URL=wss://truenas.local/api/current \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
   --cap-drop ALL \
   --security-opt no-new-privileges=true \
-  ghcr.io/amitai5/truenasautoupdater:latest
+  ghcr.io/amitai5/truenasappmanager:latest
 ```
 
 If the TrueNAS Web UI address changes from `10.0.0.21`, update `--add-host`, then open `http://localhost:2600` and follow the [First-Time Setup Guide](docs/SETUP.md).
@@ -116,7 +186,7 @@ The wizard uses the secure TrueNAS endpoint configured in the deployment YAML bu
 
 1. Enter a dedicated TrueNAS service account and test its API key. Keep certificate verification enabled when the certificate is trusted and covers the hostname in `TRUENAS_WEBSOCKET_URL`.
 2. Optionally configure scheduled checks and updates.
-3. Optionally configure email or webhook notifications.
+3. Optionally configure TrueNAS-native email or webhook notifications.
 4. Discover installed apps and assign an explicit policy to each one.
 
 The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
@@ -146,7 +216,9 @@ Back up the external key separately from `/data`. Losing it makes saved secrets 
 - New apps are discovered as **Unconfigured** and never update automatically.
 - Only one check/update run can execute at a time.
 - Scheduled and Check & Update runs process apps sequentially.
-- **Check Now** never installs updates.
+- **Refresh Apps** reconciles the installed app list, ports, portals, containers, and health without installing updates.
+- Every manual and scheduled update check refreshes the complete inventory first.
+- GitHub enrichment is opt-in, cached, concurrency-limited, and never controls or blocks TrueNAS operations.
 - `action_required` always blocks unattended execution.
 - Running apps can auto-update; stopped and crashed apps require manual confirmation.
 - Transitional states are skipped.
@@ -168,3 +240,7 @@ In **Apps → Configuration → Settings**, keep **Check for docker image update
 - `/health/ready` — application initialization and SQLite connectivity
 
 Temporary TrueNAS downtime does not make application readiness fail.
+
+## TrueNAS custom-app metadata limits
+
+The YAML supplies a Web UI portal, operator notes, and OCI labels. TrueNAS still identifies YAML installs as custom apps, so its native **Application Info** card can continue to show a generic icon, `App Version: custom`, and `Source: N/A`. TrueNAS App Manager displays the richer TrueNAS workload data and optional GitHub facts inside its own app-details page; it does not create unsupported catalog metadata files or catalog routes.
