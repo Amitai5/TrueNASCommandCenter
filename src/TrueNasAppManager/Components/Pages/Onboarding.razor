@@ -68,7 +68,17 @@
                     </div>
                     <div class="field">
                         <label for="wizard-zone">IANA timezone</label>
-                        <input id="wizard-zone" placeholder="Area/City" @bind="_model.TimeZoneId" />
+                        <select id="wizard-zone" @bind="_model.TimeZoneId">
+                            <option value="">Select a timezone</option>
+                            @if (!string.IsNullOrWhiteSpace(_model.TimeZoneId) && !IanaTimeZoneCatalog.Ids.Contains(_model.TimeZoneId, StringComparer.Ordinal))
+                            {
+                                <option value="@_model.TimeZoneId">@_model.TimeZoneId</option>
+                            }
+                            @foreach (var timeZoneId in IanaTimeZoneCatalog.Ids)
+                            {
+                                <option value="@timeZoneId">@timeZoneId</option>
+                            }
+                        </select>
                     </div>
                 </div>
                 <button style="margin-top:1rem" @onclick="PreviewSchedule">Validate schedule</button>
@@ -97,7 +107,7 @@
                     <div class="toggle-row"><input id="wizard-email" type="checkbox" @bind="_model.EmailEnabled" /><label for="wizard-email">Use TrueNAS email</label></div>
                     @if (_model.EmailEnabled)
                     {
-                        <p class="field-help">Email is sent by the mail service configured in TrueNAS. Add MAIL_WRITE to the API key.</p>
+                        <p class="field-help">Email is sent through the mail service configured in TrueNAS using the authenticated API connection.</p>
                         <div class="field" style="margin-top:.7rem"><label for="wiz-recipients">Optional recipients</label><textarea id="wiz-recipients" placeholder="Leave blank for TrueNAS administrators" @bind="_model.EmailRecipients"></textarea></div>
                         <button style="margin-top:.7rem" disabled="@_busy" @onclick="TestEmailAsync">Send test email</button>
                     }

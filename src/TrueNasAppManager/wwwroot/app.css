@@ -410,6 +410,22 @@ h3 {
     font-size: 0.8rem;
 }
 
+.app-search-bar {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) auto auto;
+    gap: 0.75rem;
+    align-items: center;
+    margin: 1rem 0;
+}
+
+.app-search-bar .field {
+    min-width: 0;
+}
+
+.app-search-bar .muted {
+    white-space: nowrap;
+}
+
 .panel {
     padding: 1.2rem;
 }
@@ -885,11 +901,14 @@ tr:last-child td {
 .tabs {
     display: flex;
     gap: 0.25rem;
+    max-width: 100%;
     margin-bottom: 1rem;
+    overflow-x: auto;
     border-bottom: 1px solid var(--border);
 }
 
 .tabs button {
+    flex: 0 0 auto;
     border: 0;
     border-bottom: 2px solid transparent;
     border-radius: 0;
@@ -1017,6 +1036,14 @@ tr:last-child td {
         gap: 0.65rem;
     }
 
+    .app-search-bar {
+        grid-template-columns: 1fr auto;
+    }
+
+    .app-search-bar .field {
+        grid-column: 1 / -1;
+    }
+
     .mobile-app-card {
         padding: 1rem;
         border: 1px solid var(--border);
@@ -1033,7 +1060,7 @@ tr:last-child td {
     }
 
     .mobile-app-card .actions > * {
-        flex: 1;
+        flex: 1 1 calc(50% - 0.65rem);
     }
 
     .split-layout, .form-grid, .filters {

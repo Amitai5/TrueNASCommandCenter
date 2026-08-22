@@ -111,7 +111,6 @@ public sealed class AppManagementAndDowntimeTests
         private AppLifecycleAction? pendingAction;
 
         public bool? HasWriteAccess => true;
-        public bool? HasMailWriteAccess => true;
         public string State { get; set; } = "RUNNING";
         public List<AppLifecycleAction> LifecycleCalls { get; } = [];
         public int WaitCalls { get; private set; }

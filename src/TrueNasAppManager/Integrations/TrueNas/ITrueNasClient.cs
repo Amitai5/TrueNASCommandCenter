@@ -5,7 +5,6 @@ namespace TrueNasAppManager.Integrations.TrueNas;
 public interface ITrueNasClient
 {
     bool? HasWriteAccess { get; }
-    bool? HasMailWriteAccess { get; }
     /// <summary>Tests authentication and reports the TrueNAS roles available to the configured service account.</summary>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The connection and role test result.</returns>

@@ -1,4 +1,6 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TrueNasAppManager.Domain;
 using TrueNasAppManager.Integrations.TrueNas;
@@ -107,11 +109,34 @@ public sealed class CoordinatorEndToEndTests
                        attempt.ReasonCode == "SERVER_CONDITION"));
     }
 
-    private static UpdateCoordinator CreateCoordinator(TestDatabase database, FakeTrueNasClient trueNas)
+    [TestMethod]
+    [DataRow(5, "busy")]
+    [DataRow(6, "busy")]
+    [DataRow(8, "not writable")]
+    [DataRow(13, "full")]
+    [DataRow(19, "conflicted")]
+    public async Task DatabaseFailure_ReturnsActionableMessageAndLogsOriginalException(int sqliteErrorCode, string expectedMessage)
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var trueNas = new FakeTrueNasClient();
+        var logger = new RecordingLogger<UpdateCoordinator>();
+        var failure = new DbUpdateException("Database write failed.", new SqliteException("SQLite test failure.", sqliteErrorCode));
+        var coordinator = CreateCoordinator(database, trueNas, new FailingDiscoveryService(failure), logger);
+
+        var result = await coordinator.RefreshAppsAsync();
+
+        Assert.AreEqual(RunStatus.Failed, result.Status);
+        StringAssert.Contains(result.Message, expectedMessage, StringComparison.OrdinalIgnoreCase);
+        var loggedFailure = logger.Entries.Single(entry => entry.Level == LogLevel.Warning);
+        Assert.AreSame(failure, loggedFailure.Exception);
+    }
+
+    private static UpdateCoordinator CreateCoordinator(TestDatabase database, FakeTrueNasClient trueNas, IAppDiscoveryService? discoveryOverride = null, ILogger<UpdateCoordinator>? logger = null)
     {
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero));
         var settings = database.CreateSettingsService();
-        var discovery = new AppDiscoveryService(trueNas, database, time);
+        var discovery = discoveryOverride ?? new AppDiscoveryService(trueNas, database, time);
         var executor = new UpdateExecutor(
             trueNas,
             discovery,
@@ -131,7 +156,7 @@ public sealed class CoordinatorEndToEndTests
             database,
             settings,
             time,
-            NullLogger<UpdateCoordinator>.Instance);
+            logger ?? NullLogger<UpdateCoordinator>.Instance);
     }
 
     private static async Task SeedPoliciesAsync(TestDatabase database)
@@ -174,7 +199,6 @@ public sealed class CoordinatorEndToEndTests
         public bool FailCatalogForServer { get; init; }
         public bool WriteAccess { get; init; } = true;
         public bool? HasWriteAccess => WriteAccess;
-        public bool? HasMailWriteAccess => true;
         public List<string> StartOrder { get; } = [];
         public List<string> CallOrder { get; } = [];
         public int MaximumConcurrentJobs { get; private set; }
@@ -312,5 +336,14 @@ public sealed class CoordinatorEndToEndTests
                 LatestVersion = latest,
                 ActionRequired = false
             };
+    }
+
+    private sealed class FailingDiscoveryService(Exception exception) : IAppDiscoveryService
+    {
+        public Task<InventoryRefreshResult> RefreshAsync(CancellationToken cancellationToken = default) => Task.FromException<InventoryRefreshResult>(exception);
+
+        public Task<IReadOnlyList<AppRecord>> DiscoverAsync(CancellationToken cancellationToken = default) => Task.FromException<IReadOnlyList<AppRecord>>(exception);
+
+        public Task<AppRecord> DiscoverAppAsync(string appId, CancellationToken cancellationToken = default) => Task.FromException<AppRecord>(exception);
     }
 }

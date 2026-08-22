@@ -47,11 +47,6 @@ public sealed class EmailNotificationSender(
         try
         {
             var settings = await settingsService.GetRecordAsync(cancellationToken);
-            if (trueNasClient.HasMailWriteAccess is false)
-            {
-                return new NotificationDeliveryResult(false, Error: "The TrueNAS service account does not expose MAIL_WRITE.");
-            }
-
             var recipients = string.IsNullOrWhiteSpace(settings.EmailRecipientsJson)
                 ? []
                 : System.Text.Json.JsonSerializer.Deserialize<List<string>>(settings.EmailRecipientsJson) ?? [];

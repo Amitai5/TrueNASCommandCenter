@@ -10,6 +10,17 @@ namespace TrueNasAppManager.Tests;
 public sealed class ScheduleAndSecretTests
 {
     [TestMethod]
+    public void IanaTimeZoneCatalog_ProvidesSortedCanonicalChoices()
+    {
+        var expectedOrder = IanaTimeZoneCatalog.Ids.OrderBy(id => id, StringComparer.Ordinal).ToArray();
+
+        Assert.IsNotEmpty(IanaTimeZoneCatalog.Ids);
+        CollectionAssert.Contains(IanaTimeZoneCatalog.Ids.ToList(), "America/Los_Angeles");
+        CollectionAssert.Contains(IanaTimeZoneCatalog.Ids.ToList(), "Etc/UTC");
+        CollectionAssert.AreEqual(expectedOrder, IanaTimeZoneCatalog.Ids.ToArray());
+    }
+
+    [TestMethod]
     public void Validate_RejectsSecondsField()
     {
         var service = new ScheduleService(new FixedTimeProvider(DateTimeOffset.UnixEpoch));

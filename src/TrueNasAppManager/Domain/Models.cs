@@ -52,7 +52,6 @@ public sealed record ConnectionTestResult(
     string Message,
     bool HasReadAccess,
     bool HasWriteAccess,
-    bool HasMailWriteAccess = false,
     string? ErrorCode = null,
     string? DiagnosticId = null);
 

@@ -151,8 +151,7 @@ public sealed class InventoryHealthAndLinkTests
     private sealed class InventoryTrueNasClient(IReadOnlyList<TrueNasAppDto> apps) : ITrueNasClient
     {
         public bool? HasWriteAccess => true;
-        public bool? HasMailWriteAccess => true;
-        public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ConnectionTestResult(true, "Connected", true, true, true));
+        public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ConnectionTestResult(true, "Connected", true, true));
         public Task<IReadOnlyList<TrueNasAppDto>> QueryAppsAsync(CancellationToken cancellationToken = default) => Task.FromResult(apps);
         public Task<TrueNasAppDto> GetAppAsync(string appId, CancellationToken cancellationToken = default) => Task.FromResult(apps.Single(app => app.Id == appId));
         public Task<IReadOnlyList<string>> GetOutdatedImagesAsync(string appId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>([]);

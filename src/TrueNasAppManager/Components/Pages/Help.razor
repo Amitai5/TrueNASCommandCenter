@@ -15,7 +15,7 @@
     </header>
 
     <div class="notice" role="note">
-        <strong>Connection rule:</strong> Continue stays disabled until Test connection succeeds. Use the API key owner's exact username and a key with <code>APPS_READ</code> and <code>APPS_WRITE</code>; add <code>MAIL_WRITE</code> for email.
+        <strong>Connection rule:</strong> Continue stays disabled until Test connection succeeds. Use the API key owner's exact username and a key with <code>APPS_READ</code> and <code>APPS_WRITE</code>.
     </div>
 
     <nav class="panel help-toc" aria-label="Setup topics">
@@ -37,7 +37,7 @@
         <ol class="help-list">
             <li>In TrueNAS, open <strong>Credentials → Users</strong>, click <strong>Add</strong>, and create a user such as <code>autoupdate</code>. Keep Shell and SSH access disabled.</li>
             <li>Note the user's primary group. Open <strong>Credentials → Groups → Privileges</strong> and click <strong>Add</strong>.</li>
-            <li>Select the service account's group under <strong>Local Groups</strong>. Add <code>APPS_READ</code> and <code>APPS_WRITE</code>, plus <code>MAIL_WRITE</code> only when email is enabled. Leave Web Shell Access disabled and save.</li>
+            <li>Select the service account's group under <strong>Local Groups</strong>. Add <code>APPS_READ</code> and <code>APPS_WRITE</code>. Leave Web Shell Access disabled and save.</li>
             <li>Return to <strong>Credentials → Users</strong>, select the service account, and choose <strong>Add API Key</strong>. Copy the generated key immediately.</li>
         </ol>
 

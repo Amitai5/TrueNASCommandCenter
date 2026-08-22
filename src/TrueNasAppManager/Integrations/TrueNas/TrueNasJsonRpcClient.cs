@@ -39,11 +39,9 @@ public sealed class TrueNasJsonRpcClient(
     private bool rolesDetected;
     private bool hasReadAccess;
     private bool hasWriteAccess;
-    private bool hasMailWriteAccess;
     private long nextRequestId;
 
     public bool? HasWriteAccess => rolesDetected ? hasWriteAccess : null;
-    public bool? HasMailWriteAccess => rolesDetected ? hasMailWriteAccess : null;
 
     public async Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
@@ -70,24 +68,15 @@ public sealed class TrueNasJsonRpcClient(
                 diagnosticId: diagnosticId);
 
             await RecordConnectionResultAsync(true, null, null, cancellationToken);
-            var missingRoles = new List<string>();
-            if (rolesDetected && !hasWriteAccess)
-            {
-                missingRoles.Add("APPS_WRITE");
-            }
-            if (rolesDetected && !hasMailWriteAccess)
-            {
-                missingRoles.Add("MAIL_WRITE");
-            }
-            var writeMessage = missingRoles.Count == 0
+            var writeMessage = !rolesDetected || hasWriteAccess
                 ? "Connected and app discovery succeeded."
-                : $"Connected, but {string.Join(" and ", missingRoles)} {(missingRoles.Count == 1 ? "was" : "were")} not detected.";
+                : "Connected, but APPS_WRITE was not detected.";
             logger.LogInformation(
                 "TrueNAS connection test {DiagnosticId} succeeded. ReadAccess={HasReadAccess} WriteAccess={HasWriteAccess}",
                 diagnosticId,
                 hasReadAccess,
                 !rolesDetected || hasWriteAccess);
-            return new ConnectionTestResult(true, writeMessage, true, !rolesDetected || hasWriteAccess, !rolesDetected || hasMailWriteAccess, DiagnosticId: diagnosticId);
+            return new ConnectionTestResult(true, writeMessage, true, !rolesDetected || hasWriteAccess, DiagnosticId: diagnosticId);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -101,7 +90,7 @@ public sealed class TrueNasJsonRpcClient(
                 code,
                 message);
             await RecordConnectionResultAsync(false, code, diagnosticMessage, cancellationToken);
-            return new ConnectionTestResult(false, diagnosticMessage, false, false, false, code, diagnosticId);
+            return new ConnectionTestResult(false, diagnosticMessage, false, false, code, diagnosticId);
         }
     }
 
@@ -652,7 +641,6 @@ public sealed class TrueNasJsonRpcClient(
         rolesDetected = false;
         hasReadAccess = false;
         hasWriteAccess = false;
-        hasMailWriteAccess = false;
         if (userInfo is null)
         {
             return;
@@ -664,7 +652,6 @@ public sealed class TrueNasJsonRpcClient(
                                           role.EndsWith("_WRITE", StringComparison.OrdinalIgnoreCase));
         hasReadAccess = roles.Contains("APPS_READ") || roles.Contains("APPS_WRITE");
         hasWriteAccess = roles.Contains("APPS_WRITE");
-        hasMailWriteAccess = roles.Contains("MAIL_WRITE");
     }
 
     private static void CollectRoleStrings(JsonElement element, ISet<string> roles)

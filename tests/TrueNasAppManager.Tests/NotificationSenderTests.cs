@@ -142,10 +142,9 @@ public sealed class NotificationSenderTests
 
     private sealed class RecordingMailClient : ITrueNasClient
     {
-        public bool? HasWriteAccess => true;
-        public bool? HasMailWriteAccess => true;
+        public bool? HasWriteAccess => false;
         public TrueNasMailMessage? Message { get; private set; }
-        public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ConnectionTestResult(true, "Connected", true, true, true));
+        public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ConnectionTestResult(true, "Connected", true, false));
         public Task<IReadOnlyList<TrueNasAppDto>> QueryAppsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TrueNasAppDto>>([]);
         public Task<TrueNasAppDto> GetAppAsync(string appId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<string>> GetOutdatedImagesAsync(string appId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>([]);

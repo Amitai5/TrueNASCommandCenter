@@ -157,6 +157,35 @@ public sealed class TrueNasJsonRpcClientTests
     }
 
     [TestMethod]
+    public async Task ConnectionTest_WithAppRolesDoesNotRequireAnAdditionalMailRole()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "core.ping":
+                    transport.Respond(id, "pong");
+                    break;
+                case "app.query":
+                    transport.Respond(id, Array.Empty<object>());
+                    break;
+            }
+
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var result = await client.TestConnectionAsync();
+
+        Assert.IsTrue(result.Success);
+        Assert.IsTrue(result.HasReadAccess);
+        Assert.IsTrue(result.HasWriteAccess);
+        Assert.AreEqual("Connected and app discovery succeeded.", result.Message);
+    }
+
+    [TestMethod]
     public async Task ConnectionTest_LogsDiagnosticIdWithoutApiKey()
     {
         var logger = new RecordingLogger<TrueNasJsonRpcClient>();

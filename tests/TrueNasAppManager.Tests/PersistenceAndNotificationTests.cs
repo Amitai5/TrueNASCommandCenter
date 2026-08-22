@@ -9,6 +9,29 @@ namespace TrueNasAppManager.Tests;
 public sealed class PersistenceAndNotificationTests
 {
     [TestMethod]
+    public async Task AppDbContext_ConcurrentWritesAreSerialized()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var writes = Enumerable.Range(0, 20).Select(async index =>
+        {
+            await using var db = await database.CreateDbContextAsync();
+            db.UpdateRuns.Add(new UpdateRun
+            {
+                Trigger = RunTrigger.RefreshApps,
+                StartedUtc = new DateTime(2026, 8, 22, 12, index, 0, DateTimeKind.Utc),
+                Status = RunStatus.Succeeded
+            });
+            await db.SaveChangesAsync();
+        });
+
+        await Task.WhenAll(writes);
+
+        await using var verificationDb = await database.CreateDbContextAsync();
+        Assert.AreEqual(20, await verificationDb.UpdateRuns.CountAsync());
+    }
+
+    [TestMethod]
     public async Task Migration_MapsLegacyDowntimeChoiceAndKeepsExistingAppsInstalled()
     {
         await using var database = new TestDatabase();

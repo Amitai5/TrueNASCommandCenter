@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 using TrueNasAppManager.Data;
 using TrueNasAppManager.Domain;
 using TrueNasAppManager.Integrations.TrueNas;
@@ -27,17 +28,13 @@ public interface IUpdateCoordinator
     /// <param name="riskyStateConfirmed">Whether the user confirmed a risky manual update.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The run result.</returns>
-    Task<RunResult> RunAsync(
-        RunTrigger trigger,
-        bool executeUpdates,
-        string? appId = null,
-        bool riskyStateConfirmed = false,
-        CancellationToken cancellationToken = default);
-
-    Task<RunResult> RollbackAsync(
-        string appId,
-        string targetVersion,
-        CancellationToken cancellationToken = default);
+    Task<RunResult> RunAsync(RunTrigger trigger, bool executeUpdates, string? appId = null, bool riskyStateConfirmed = false, CancellationToken cancellationToken = default);
+    /// <summary>Rolls one application back to a previously available version.</summary>
+    /// <param name="appId">The application identifier.</param>
+    /// <param name="targetVersion">The version to restore.</param>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The rollback run result.</returns>
+    Task<RunResult> RollbackAsync(string appId, string targetVersion, CancellationToken cancellationToken = default);
 }
 
 public sealed class UpdateCoordinator(
@@ -58,12 +55,8 @@ public sealed class UpdateCoordinator(
 
     public Task<RunResult> CheckAndUpdateAsync(RunTrigger trigger, bool executeUpdates, string? appId = null, bool riskyStateConfirmed = false, CancellationToken cancellationToken = default) => RunAsync(trigger, executeUpdates, appId, riskyStateConfirmed, cancellationToken);
 
-    public async Task<RunResult> RunAsync(
-        RunTrigger trigger,
-        bool executeUpdates,
-        string? appId = null,
-        bool riskyStateConfirmed = false,
-        CancellationToken cancellationToken = default)
+    /// <inheritdoc cref="IUpdateCoordinator.RunAsync"/>
+    public async Task<RunResult> RunAsync(RunTrigger trigger, bool executeUpdates, string? appId = null, bool riskyStateConfirmed = false, CancellationToken cancellationToken = default)
     {
         var run = await CreateRunAsync(trigger, cancellationToken);
         await using var lease = await runLock.TryAcquireAsync(cancellationToken);
@@ -81,13 +74,13 @@ public sealed class UpdateCoordinator(
         {
             var refresh = await discoveryService.RefreshAsync(cancellationToken);
             _ = await healthMonitorService.EvaluateAsync(refresh.AppIds, cancellationToken);
-            _ = gitHubMetadataService.RefreshStaleAsync(refresh.AppIds, CancellationToken.None);
             if (trigger == RunTrigger.RefreshApps)
             {
                 run.CheckedCount = refresh.Discovered;
                 run.Status = RunStatus.Succeeded;
                 run.EndedUtc = timeProvider.GetUtcNow().UtcDateTime;
                 await SaveRunAsync(run, cancellationToken);
+                _ = gitHubMetadataService.RefreshStaleAsync(refresh.AppIds, CancellationToken.None);
                 return ToResult(run, $"Refreshed {refresh.Discovered} apps; {refresh.Missing} previously known apps are no longer installed.");
             }
 
@@ -211,6 +204,7 @@ public sealed class UpdateCoordinator(
             run.Status = CalculateStatus(run);
             run.EndedUtc = timeProvider.GetUtcNow().UtcDateTime;
             await SaveRunAndScheduleStateAsync(run, trigger, cancellationToken);
+            _ = gitHubMetadataService.RefreshStaleAsync(refresh.AppIds, CancellationToken.None);
             return ToResult(run, "Run completed.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -218,7 +212,7 @@ public sealed class UpdateCoordinator(
             run.Status = RunStatus.Cancelled;
             run.ErrorSummary = "The run was cancelled.";
             run.EndedUtc = timeProvider.GetUtcNow().UtcDateTime;
-            await SaveRunAsync(run, CancellationToken.None);
+            await TrySaveRunAsync(run);
             return ToResult(run, run.ErrorSummary);
         }
         catch (Exception exception)
@@ -228,8 +222,8 @@ public sealed class UpdateCoordinator(
             run.FailedCount++;
             run.ErrorSummary = message;
             run.EndedUtc = timeProvider.GetUtcNow().UtcDateTime;
-            await SaveRunAsync(run, CancellationToken.None);
-            logger.LogWarning("Run {RunId} failed with {ReasonCode}", run.Id, code);
+            await TrySaveRunAsync(run);
+            logger.LogWarning(exception, "Run {RunId} failed with {ReasonCode}", run.Id, code);
 
             if (exception is TrueNasClientException or InvalidOperationException)
             {
@@ -252,10 +246,8 @@ public sealed class UpdateCoordinator(
         }
     }
 
-    public async Task<RunResult> RollbackAsync(
-        string appId,
-        string targetVersion,
-        CancellationToken cancellationToken = default)
+    /// <inheritdoc cref="IUpdateCoordinator.RollbackAsync"/>
+    public async Task<RunResult> RollbackAsync(string appId, string targetVersion, CancellationToken cancellationToken = default)
     {
         var run = await CreateRunAsync(RunTrigger.Rollback, cancellationToken);
         await using var lease = await runLock.TryAcquireAsync(cancellationToken);
@@ -305,7 +297,8 @@ public sealed class UpdateCoordinator(
             run.FailedCount = 1;
             run.ErrorSummary = message;
             run.EndedUtc = timeProvider.GetUtcNow().UtcDateTime;
-            await SaveRunAsync(run, CancellationToken.None);
+            await TrySaveRunAsync(run);
+            logger.LogWarning(exception, "Rollback run {RunId} failed", run.Id);
             return ToResult(run, message);
         }
     }
@@ -323,11 +316,7 @@ public sealed class UpdateCoordinator(
         return run;
     }
 
-    private async Task RecordDecisionAsync(
-        Guid runId,
-        AppRecord app,
-        UpdateDecision decision,
-        CancellationToken cancellationToken)
+    private async Task RecordDecisionAsync(Guid runId, AppRecord app, UpdateDecision decision, CancellationToken cancellationToken)
     {
         var status = decision.Kind == UpdateDecisionKind.Blocked &&
                      decision.ReasonCode != "SERVER_CONDITION"
@@ -356,13 +345,7 @@ public sealed class UpdateCoordinator(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private Task DispatchUpdateEventAsync(
-        AppRecord app,
-        NotificationEventType eventType,
-        string reasonCode,
-        string message,
-        string? target,
-        CancellationToken cancellationToken)
+    private Task DispatchUpdateEventAsync(AppRecord app, NotificationEventType eventType, string reasonCode, string message, string? target, CancellationToken cancellationToken)
     {
         var targetOrImages = target ?? app.OutdatedImagesJson ?? "image-update";
         var dedupe = $"{eventType}|{app.Id}|{targetOrImages}|{reasonCode}";
@@ -381,11 +364,7 @@ public sealed class UpdateCoordinator(
         return notifications.DispatchAsync(notification, cancellationToken);
     }
 
-    private Task DispatchSystemEventAsync(
-        NotificationEventType eventType,
-        string reasonCode,
-        string message,
-        CancellationToken cancellationToken)
+    private Task DispatchSystemEventAsync(NotificationEventType eventType, string reasonCode, string message, CancellationToken cancellationToken)
     {
         var notification = new NotificationEvent(
             Guid.NewGuid(),
@@ -398,10 +377,7 @@ public sealed class UpdateCoordinator(
         return notifications.DispatchAsync(notification, cancellationToken);
     }
 
-    private async Task SaveRunAndScheduleStateAsync(
-        UpdateRun run,
-        RunTrigger trigger,
-        CancellationToken cancellationToken)
+    private async Task SaveRunAndScheduleStateAsync(UpdateRun run, RunTrigger trigger, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.UpdateRuns.Update(run);
@@ -423,6 +399,18 @@ public sealed class UpdateCoordinator(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.UpdateRuns.Update(run);
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task TrySaveRunAsync(UpdateRun run)
+    {
+        try
+        {
+            await SaveRunAsync(run, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Failed to persist terminal state for run {RunId}", run.Id);
+        }
     }
 
     private static RunStatus CalculateStatus(UpdateRun run)
@@ -448,14 +436,40 @@ public sealed class UpdateCoordinator(
             run.FailedCount,
             run.SkippedCount);
 
-    private static (string Code, string Message) SanitizeFailure(Exception exception) =>
-        exception switch
+    private static (string Code, string Message) SanitizeFailure(Exception exception)
+    {
+        if (exception is DbUpdateException databaseFailure)
+        {
+            return FindSqliteException(databaseFailure)?.SqliteErrorCode switch
+            {
+                5 or 6 => ("DATABASE_BUSY", "The local database stayed busy too long. Try again; if this repeats, restart TrueNAS App Manager."),
+                8 => ("DATABASE_READ_ONLY", "The /data storage volume is not writable. Verify its permissions, then restart TrueNAS App Manager."),
+                13 => ("DATABASE_FULL", "The TrueNAS storage used by the app is full. Free space, then try again."),
+                19 => ("DATABASE_CONSTRAINT", "The refreshed app data conflicted with the local database. Check the container logs for the detailed SQLite error."),
+                _ => ("DATABASE_ERROR", "The local database could not save this run. Check the container logs for the detailed SQLite error.")
+            };
+        }
+
+        return exception switch
         {
             TrueNasClientException trueNas => (trueNas.Code, Truncate(trueNas.Message)),
             InvalidOperationException configuration => ("CONFIGURATION_ERROR", Truncate(configuration.Message)),
-            DbUpdateException => ("DATABASE_ERROR", "The run stopped because audit state could not be persisted."),
             _ => ("RUN_FAILED", "The run failed unexpectedly.")
         };
+    }
+
+    private static SqliteException? FindSqliteException(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SqliteException sqliteException)
+            {
+                return sqliteException;
+            }
+        }
+
+        return null;
+    }
 
     private static bool IsServerWideFailure(string reasonCode) =>
         reasonCode is "NETWORK_ERROR" or

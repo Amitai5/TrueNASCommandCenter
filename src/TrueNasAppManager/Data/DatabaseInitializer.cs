@@ -18,13 +18,14 @@ public sealed class DatabaseInitializer(
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await db.Database.MigrateAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", cancellationToken);
         if (!await db.Settings.AnyAsync(cancellationToken))
         {
             db.Settings.Add(new SettingsRecord());
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        logger.LogInformation("Database initialization completed");
+        logger.LogInformation("Database initialization completed with SQLite WAL journaling enabled");
     }
 
     private static async Task<FileStream> AcquireLockAsync(string path, CancellationToken cancellationToken)

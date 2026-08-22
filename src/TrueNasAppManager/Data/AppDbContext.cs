@@ -5,6 +5,8 @@ namespace TrueNasAppManager.Data;
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    private static readonly SemaphoreSlim writeGate = new(1, 1);
+
     public DbSet<AppRecord> Apps => Set<AppRecord>();
     public DbSet<UpdateRun> UpdateRuns => Set<UpdateRun>();
     public DbSet<UpdateAttempt> UpdateAttempts => Set<UpdateAttempt>();
@@ -14,6 +16,34 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AppPortalRecord> AppPortals => Set<AppPortalRecord>();
     public DbSet<AppContainerRecord> AppContainers => Set<AppContainerRecord>();
     public DbSet<GitHubRepositoryCache> GitHubRepositories => Set<GitHubRepositoryCache>();
+
+    /// <inheritdoc />
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        writeGate.Wait();
+        try
+        {
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        await writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

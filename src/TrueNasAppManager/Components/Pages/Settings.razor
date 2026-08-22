@@ -101,13 +101,17 @@
                 </div>
                 <div class="field">
                     <label for="timezone">IANA timezone</label>
-                    <input id="timezone" list="timezones" placeholder="Area/City" @bind="_model.TimeZoneId" />
-                    <datalist id="timezones">
-                        @foreach (var zone in TimeZoneInfo.GetSystemTimeZones())
+                    <select id="timezone" @bind="_model.TimeZoneId">
+                        <option value="">Select a timezone</option>
+                        @if (!string.IsNullOrWhiteSpace(_model.TimeZoneId) && !IanaTimeZoneCatalog.Ids.Contains(_model.TimeZoneId, StringComparer.Ordinal))
                         {
-                            <option value="@zone.Id"></option>
+                            <option value="@_model.TimeZoneId">@_model.TimeZoneId</option>
                         }
-                    </datalist>
+                        @foreach (var timeZoneId in IanaTimeZoneCatalog.Ids)
+                        {
+                            <option value="@timeZoneId">@timeZoneId</option>
+                        }
+                    </select>
                 </div>
             </div>
 
@@ -165,7 +169,7 @@
                     <div class="panel-header">
                         <div>
                             <h2>TrueNAS email</h2>
-                            <p class="field-help">Uses the mail service already configured in TrueNAS. The API key needs MAIL_WRITE.</p>
+                            <p class="field-help">Uses the mail service already configured in TrueNAS through the authenticated API connection.</p>
                         </div>
                         <input aria-label="Email enabled" type="checkbox" @bind="_model.EmailEnabled" />
                     </div>

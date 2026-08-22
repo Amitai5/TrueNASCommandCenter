@@ -21,7 +21,7 @@ if (string.IsNullOrWhiteSpace(dataPath))
 
 var databasePath = Path.Combine(dataPath, "app.db");
 var dataProtectionPath = Path.Combine(dataPath, "data-protection");
-var connectionString = $"Data Source={databasePath};Cache=Shared;Foreign Keys=True;Pooling=True";
+var connectionString = $"Data Source={databasePath};Cache=Shared;Foreign Keys=True;Pooling=True;Default Timeout=30";
 
 Directory.CreateDirectory(dataProtectionPath);
 if (!OperatingSystem.IsWindows())

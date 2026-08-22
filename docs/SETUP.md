@@ -45,10 +45,9 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Ap
 5. Under **Roles**, select:
    - `APPS_READ`
    - `APPS_WRITE`
-   - `MAIL_WRITE` when TrueNAS email notifications will be enabled
 6. Leave **Web Shell Access** disabled and save the privilege.
 
-`APPS_READ` allows discovery, health, ports, portals, containers, and logs. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. `MAIL_WRITE` submits messages through the mail service configured in TrueNAS. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or update actions through this account.
+`APPS_READ` allows discovery, health, ports, portals, containers, and logs. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or update actions through this account.
 
 ### Create the API key
 
@@ -191,7 +190,7 @@ The schedule is stored in `/data`; no separate TrueNAS cron task is needed. Miss
 
 Email and generic webhook notifications are optional. Enable only the providers and event types you want.
 
-- Email uses the existing TrueNAS mail configuration. Add `MAIL_WRITE`; leave recipients blank to use TrueNAS administrator addresses, or enter explicit recipients.
+- Email uses the existing TrueNAS mail configuration through the authenticated `mail.send` method. Leave recipients blank to use TrueNAS administrator addresses, or enter explicit recipients.
 - Webhooks require an HTTPS endpoint and can include an Authorization value or secret headers.
 - Use the test button for each configured provider before continuing.
 

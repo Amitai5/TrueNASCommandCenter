@@ -85,7 +85,30 @@
     }
     else
     {
-        <div class="table-wrap desktop-app-table">
+        var filteredApps = FilterApps();
+        <div class="app-search-bar">
+            <div class="field">
+                <label class="visually-hidden" for="app-search">Search applications</label>
+                <input id="app-search" type="search" placeholder="Search apps by name, status, version, or port" autocomplete="off" @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <span class="muted" aria-live="polite">Showing @filteredApps.Count of @_apps.Count</span>
+            @if (!string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                <button class="small" @onclick="ClearSearch">Clear</button>
+            }
+        </div>
+
+        @if (filteredApps.Count == 0)
+        {
+            <div class="panel empty-state">
+                <h2>No matching apps</h2>
+                <p class="muted">Try a different app name, status, version, or port.</p>
+                <button @onclick="ClearSearch">Clear search</button>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap desktop-app-table">
             <table>
                 <thead>
                     <tr>
@@ -98,7 +121,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var app in _apps)
+                    @foreach (var app in filteredApps)
                     {
                         var webUi = AppLinkService.ResolveWebUiUrl(app, _settings?.PortalHostOverride);
                         <tr>
@@ -150,10 +173,10 @@
                     }
                 </tbody>
             </table>
-        </div>
+            </div>
 
-        <div class="mobile-app-list">
-            @foreach (var app in _apps)
+            <div class="mobile-app-list">
+            @foreach (var app in filteredApps)
             {
                 var webUi = AppLinkService.ResolveWebUiUrl(app, _settings?.PortalHostOverride);
                 <article class="mobile-app-card">
@@ -194,7 +217,8 @@
                     </div>
                 </article>
             }
-        </div>
+            </div>
+        }
     }
 </div>
 
@@ -205,6 +229,7 @@
     private bool _busy;
     private bool _messageIsError;
     private string? _message;
+    private string _searchTerm = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -222,6 +247,31 @@
         _settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1);
         _loading = false;
     }
+
+    private List<AppRecord> FilterApps()
+    {
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            return _apps;
+        }
+
+        var searchTerm = _searchTerm.Trim();
+        return _apps.Where(app =>
+            Contains(app.Name, searchTerm) ||
+            Contains(app.State, searchTerm) ||
+            Contains(app.StatusLabel, searchTerm) ||
+            Contains(HealthText(app.HealthState), searchTerm) ||
+            Contains(PolicyText(app.Policy), searchTerm) ||
+            Contains(app.HumanVersion, searchTerm) ||
+            Contains(app.InstalledVersion, searchTerm) ||
+            Contains(app.LatestHumanVersion, searchTerm) ||
+            Contains(app.LatestVersion, searchTerm) ||
+            Contains(app.Train, searchTerm) ||
+            app.Ports.Any(port => Contains($"{port.HostPort}/{port.Protocol}", searchTerm)))
+            .ToList();
+    }
+
+    private void ClearSearch() => _searchTerm = string.Empty;
 
     private async Task RefreshAppsAsync()
     {
@@ -378,6 +428,8 @@
             : app.ImageUpdateAvailable
                 ? "Image update"
                 : "—";
+
+    private static bool Contains(string? value, string searchTerm) => value?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true;
 
     private static string PolicyText(AppPolicy? policy) => policy switch
     {
