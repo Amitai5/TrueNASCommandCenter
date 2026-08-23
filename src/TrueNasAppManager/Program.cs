@@ -73,6 +73,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+app.Logger.LogInformation("Starting TrueNAS App Manager {ApplicationVersion}", ApplicationVersion.Current);
 app.Logger.LogInformation("Persistent ASP.NET Data Protection key ring configured at {DataProtectionPath}", dataProtectionPath);
 
 if (!app.Environment.IsDevelopment())
@@ -84,6 +85,7 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers.XContentTypeOptions = "nosniff";
     context.Response.Headers.XFrameOptions = "DENY";
+    context.Response.Headers["X-Application-Version"] = ApplicationVersion.Current;
     context.Response.Headers.ContentSecurityPolicy =
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
         "script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'";
@@ -101,6 +103,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready")
 });
+app.MapGet("/version", () => Results.Ok(new { Name = "TrueNAS App Manager", Version = ApplicationVersion.Current }));
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

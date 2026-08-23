@@ -53,10 +53,17 @@ public sealed class EmailNotificationSender(
             await trueNasClient.SendMailAsync(EmailMessageFactory.Create(notification, recipients), cancellationToken);
             return new NotificationDeliveryResult(true);
         }
+        catch (TrueNasClientException exception)
+        {
+            var diagnosticId = Guid.NewGuid().ToString("N");
+            logger.LogWarning(exception, "TrueNAS email delivery failed with code {ErrorCode}. Diagnostic ID: {DiagnosticId}", exception.Code, diagnosticId);
+            return new NotificationDeliveryResult(false, Error: $"TrueNAS email failed ({exception.Code}): {exception.Message} Diagnostic ID: {diagnosticId}. Check the container logs for this ID.");
+        }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            logger.LogWarning("Email delivery failed: {ErrorType}", exception.GetType().Name);
-            return new NotificationDeliveryResult(false, Error: "Email delivery failed.");
+            var diagnosticId = Guid.NewGuid().ToString("N");
+            logger.LogWarning(exception, "Email delivery failed. Diagnostic ID: {DiagnosticId}", diagnosticId);
+            return new NotificationDeliveryResult(false, Error: $"Email delivery failed. Diagnostic ID: {diagnosticId}. Check the container logs for this ID.");
         }
     }
 }

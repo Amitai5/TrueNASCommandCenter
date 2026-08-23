@@ -134,20 +134,23 @@ API DTOs are intentionally narrow. Validate the installed TrueNAS API schemas wh
 
 ## Container publishing
 
-GitHub Actions validates pull requests by building the image without publishing it. Pushes to `production` publish to GitHub Container Registry.
+[`VERSION`](../VERSION) is the canonical semantic release version. It is embedded into the .NET assembly, UI, startup logs, version endpoint, response headers, and OCI image metadata. Increment it before merging the next production release. Verification rejects malformed versions, and publishing rejects a version tag that already belongs to another commit.
+
+GitHub Actions validates every branch and pull request without publishing it. A successful push to `production` publishes to GitHub Container Registry and creates the matching `v<version>` Git tag.
 
 Published tags are:
 
 - `latest` and `production` for the current `production` branch
-- `1.2.3` and `1.2` for a Git tag such as `v1.2.3`
+- `1.2.3` and `1.2` from the repository `VERSION`
 - `sha-<commit>` for an immutable commit build
 
 After the first successful publish, the GitHub package must be public if anonymous TrueNAS pulls are required.
 
 ## Change checklist
 
-1. Keep changes localized and avoid adding dependencies without a concrete need.
-2. Add or update MSTest coverage for behavior changes.
-3. Run restore, build, and tests.
-4. For frontend changes, publish and inspect the real static-asset responses as well as the rendered desktop and mobile UI.
-5. Never commit API keys, notification secrets, encryption keys, databases, or user-specific deployment configuration.
+1. Increment `VERSION` for every production release.
+2. Keep changes localized and avoid adding dependencies without a concrete need.
+3. Add or update MSTest coverage for behavior changes.
+4. Run restore, build, and tests.
+5. For frontend changes, publish and inspect the real static-asset responses as well as the rendered desktop and mobile UI.
+6. Never commit API keys, notification secrets, encryption keys, databases, or user-specific deployment configuration.

@@ -2,6 +2,7 @@
 
 [![Production build](https://img.shields.io/github/actions/workflow/status/Amitai5/TrueNASAppManager/publish-container.yml?branch=production&style=for-the-badge&label=production)](https://github.com/Amitai5/TrueNASAppManager/actions/workflows/publish-container.yml)
 [![Container image](https://img.shields.io/badge/GHCR-latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Amitai5/TrueNASAppManager/pkgs/container/truenasappmanager)
+[![Version](https://img.shields.io/github/v/tag/Amitai5/TrueNASAppManager?style=for-the-badge&label=version)](https://github.com/Amitai5/TrueNASAppManager/tags)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![TrueNAS](https://img.shields.io/badge/TrueNAS-25.10%2B-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://www.truenas.com/)
 [![License](https://img.shields.io/badge/license-MIT-16A34A?style=for-the-badge)](LICENSE)
@@ -245,7 +246,9 @@ Host networking is intentionally enabled so this single-purpose manager can reac
 
 ## Updating
 
-The `latest` and `production` image tags track the current `production` branch. Version tags such as `1.2.3` can be used to pin a deployment. The recommended YAML uses `pull_policy: always`, which makes Compose check GHCR whenever TrueNAS applies or recreates the app instead of trusting a cached tag.
+Every production release has one semantic version stored in [`VERSION`](VERSION). The running version appears in the sidebar, on the Settings page, in startup logs, in the `X-Application-Version` response header, and at `/version`. The container carries the same `org.opencontainers.image.version` label.
+
+The `latest` and `production` image tags track the current `production` branch. Immutable release tags such as `1.1.0`, minor-channel tags such as `1.1`, and commit tags such as `sha-<commit>` are published together. Increment `VERSION` before the next production release; publishing refuses to reuse a version that already belongs to another commit. Pin the image to an exact version when reproducibility matters, or keep `latest` with `pull_policy: always` for automatic image discovery.
 
 In **Apps → Configuration → Settings**, keep **Check for docker image updates** enabled. To apply an available image, update/redeploy the custom app or edit its YAML and save without changing the `/data` volume. `pull_policy: always` does not restart a running container by itself; it takes effect when TrueNAS reapplies the Compose project. After an update, hard-refresh the browser if it has cached older frontend assets.
 
@@ -258,4 +261,4 @@ Temporary TrueNAS downtime does not make application readiness fail.
 
 ## TrueNAS custom-app metadata limits
 
-The YAML supplies a Web UI portal, operator notes, and OCI labels. TrueNAS still identifies YAML installs as custom apps, so its native **Application Info** card can continue to show a generic icon, `App Version: custom`, and `Source: N/A`. TrueNAS App Manager displays the richer TrueNAS workload data and optional GitHub facts inside its own app-details page; it does not create unsupported catalog metadata files or catalog routes.
+The YAML supplies a Web UI portal, operator notes, and OCI labels. TrueNAS still identifies YAML installs as custom apps, so its native **Application Info** card can continue to show a generic icon, `App Version: custom`, and `Source: N/A`. The published image's `org.opencontainers.image.version` label and the App Manager's persistent running-version display provide the authoritative release number. TrueNAS App Manager displays richer workload data and optional GitHub facts inside its own app-details page; it does not create unsupported catalog metadata files or catalog routes.

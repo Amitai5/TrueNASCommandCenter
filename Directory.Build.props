@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <ApplicationVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</ApplicationVersion>
+    <Version>$(ApplicationVersion)</Version>
+    <InformationalVersion>$(ApplicationVersion)</InformationalVersion>
+  </PropertyGroup>
+</Project>

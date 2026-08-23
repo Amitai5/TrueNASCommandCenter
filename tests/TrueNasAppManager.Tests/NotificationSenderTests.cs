@@ -39,6 +39,25 @@ public sealed class NotificationSenderTests
     }
 
     [TestMethod]
+    public async Task EmailSender_ReturnsTrueNasDiagnosticWhenMailJobFails()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync(settings => settings.EmailRecipientsJson = null);
+        var client = new RecordingMailClient
+        {
+            SendException = new TrueNasClientException("SMTP_ERROR", "The configured SMTP server rejected the message.")
+        };
+        var sender = new EmailNotificationSender(database.CreateSettingsService(), client, NullLogger<EmailNotificationSender>.Instance);
+
+        var result = await sender.SendAsync(Notification("Test", "Message"));
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "SMTP_ERROR");
+        StringAssert.Contains(result.Error, "configured SMTP server rejected");
+        StringAssert.Contains(result.Error, "Diagnostic ID:");
+    }
+
+    [TestMethod]
     public async Task Webhook_Treats2xxAsSuccessAndSendsSecretHeaders()
     {
         await using var database = await WebhookDatabaseAsync();
@@ -144,6 +163,7 @@ public sealed class NotificationSenderTests
     {
         public bool? HasWriteAccess => false;
         public TrueNasMailMessage? Message { get; private set; }
+        public Exception? SendException { get; init; }
         public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ConnectionTestResult(true, "Connected", true, false));
         public Task<IReadOnlyList<TrueNasAppDto>> QueryAppsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TrueNasAppDto>>([]);
         public Task<TrueNasAppDto> GetAppAsync(string appId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -158,6 +178,11 @@ public sealed class NotificationSenderTests
         public Task WaitForJobAsync(long jobId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendMailAsync(TrueNasMailMessage message, CancellationToken cancellationToken = default)
         {
+            if (SendException is not null)
+            {
+                return Task.FromException(SendException);
+            }
+
             Message = message;
             return Task.CompletedTask;
         }

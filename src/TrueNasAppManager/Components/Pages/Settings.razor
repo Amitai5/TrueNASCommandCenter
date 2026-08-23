@@ -16,7 +16,7 @@
     <header class="page-header">
         <div>
             <h1>Settings</h1>
-            <p class="subtitle">Connection, schedule, notifications, and safety.</p>
+            <p class="subtitle">Connection, schedule, notifications, and safety. Running @ApplicationVersion.Display.</p>
         </div>
         <button class="primary" disabled="@(_busy || _model is null)" @onclick="SaveAsync">Save settings</button>
     </header>
@@ -180,7 +180,7 @@
                     <div class="field">
                         <label for="recipients">Optional recipients, one per line</label>
                         <textarea id="recipients" placeholder="Leave blank to notify TrueNAS administrators" @bind="_model.EmailRecipients"></textarea>
-                        <p class="field-help">When blank, TrueNAS sends to the administrator addresses configured in its mail settings.</p>
+                        <p class="field-help">When blank, TrueNAS sends to local administrators that have email addresses configured. Configure the TrueNAS mail service and at least one administrator address before testing.</p>
                     </div>
                     <button disabled="@_busy" @onclick="TestEmailAsync">Send test email</button>
                 </div>

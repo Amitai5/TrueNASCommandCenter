@@ -247,6 +247,8 @@ The page can render as static HTML even when the Blazor bootstrap script fails. 
 
 `pull_policy: always` tells Compose to check GHCR whenever TrueNAS applies or recreates the app. It does not periodically restart a running container. If TrueNAS still has not detected the new digest, use **Apps → Configuration → Manage Container Images → Pull Image**, pull `ghcr.io/amitai5/truenasappmanager:latest`, and then save/redeploy the custom app.
 
+Confirm the deployed release number in the App Manager sidebar or Settings header. The same value is available at `/version`, in the container startup logs, and in the image's `org.opencontainers.image.version` label. TrueNAS may continue to label a YAML custom app as `custom`; that native label is not the application release number.
+
 ### Continue is disabled
 
 This is expected until **Test connection** completes successfully. Read the status message above the form and correct the reported connection, authentication, certificate, or role error.

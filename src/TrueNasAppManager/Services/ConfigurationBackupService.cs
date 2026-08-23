@@ -1,5 +1,4 @@
 using System.Net.Mail;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -551,7 +550,7 @@ public sealed class ConfigurationBackupService(
 
     private static string CreateFileName(DateTimeOffset now, bool encrypted) => $"truenas-app-manager-config-{now.UtcDateTime:yyyyMMddTHHmmssZ}{(encrypted ? "-encrypted" : string.Empty)}.json";
 
-    private static string GetApplicationVersion() => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "unknown";
+    private static string GetApplicationVersion() => ApplicationVersion.Current;
 
     private static JsonSerializerOptions CreateJsonOptions()
     {

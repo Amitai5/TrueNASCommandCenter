@@ -272,7 +272,23 @@ label {
 .sidebar-footer {
     margin-top: auto;
     display: grid;
-    gap: 0.25rem;
+    gap: 0.65rem;
+}
+
+.running-version {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.25rem;
+    color: var(--muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+}
+
+.running-version strong {
+    color: var(--secondary);
+    font-family: var(--mono);
+    font-size: 0.7rem;
 }
 
 .sidebar-utilities {
