@@ -58,6 +58,7 @@ builder.Services.AddScoped<IEmailNotificationSender, EmailNotificationSender>();
 builder.Services.AddScoped<IWebhookNotificationSender, WebhookNotificationSender>();
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 builder.Services.AddSingleton<IScheduleService, ScheduleService>();
+builder.Services.AddSingleton<IConfigurationBackupService, ConfigurationBackupService>();
 builder.Services.AddHttpClient("webhook");
 builder.Services.AddHttpClient("github", client =>
 {

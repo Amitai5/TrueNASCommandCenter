@@ -1,5 +1,6 @@
 @page "/apps/{AppId}/policy"
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject IAppLinkService AppLinkService
 @inject NavigationManager Navigation
 
 <PageTitle>App policy · TrueNAS App Manager</PageTitle>
@@ -105,7 +106,18 @@
 
                 <div class="toggle-row" style="margin-top:1rem"><input id="maintenance" type="checkbox" @bind="_maintenanceMode" /><div><label for="maintenance">Maintenance mode</label><p class="field-help">Suppress downtime actions while you intentionally service this app. Starting or restarting it here clears maintenance automatically.</p></div></div>
 
-                <div class="field" style="margin-top:1rem"><label for="manual-portal">Manual Web UI URL</label><input id="manual-portal" type="url" placeholder="https://app.example.com" @bind="_manualPortalUrl" /><p class="field-help">Optional explicit HTTP or HTTPS link. This takes priority over TrueNAS portals.</p></div>
+                <div class="form-grid" style="margin-top:1rem">
+                    <div class="field">
+                        <label for="local-portal">Local Web UI URL</label>
+                        <input id="local-portal" type="url" placeholder="http://truenas.local:10704/web" @bind="_localPortalUrl" />
+                        <p class="field-help">Used when App Manager is opened from a local hostname or private address. Leave blank to use the TrueNAS portal or published port.</p>
+                    </div>
+                    <div class="field">
+                        <label for="remote-portal">Remote Web UI URL</label>
+                        <input id="remote-portal" type="url" placeholder="https://plex.example.com" @bind="_remotePortalUrl" />
+                        <p class="field-help">Used from public App Manager domains. Remote addresses are never guessed.</p>
+                    </div>
+                </div>
 
                 <div class="actions" style="justify-content:flex-end;margin-top:1.5rem">
                     <button @onclick="Cancel">Cancel</button>
@@ -156,7 +168,8 @@
     private string _notifyChoice = "inherit";
     private DowntimeAction _downtimeAction;
     private bool _maintenanceMode;
-    private string? _manualPortalUrl;
+    private string? _localPortalUrl;
+    private string? _remotePortalUrl;
     private bool _saving;
     private bool _error;
     private string? _message;
@@ -177,7 +190,19 @@
         _snapshotHostPaths = _app.SnapshotHostPaths;
         _downtimeAction = _app.DowntimeAction;
         _maintenanceMode = _app.MaintenanceMode;
-        _manualPortalUrl = _app.ManualPortalUrl;
+        _localPortalUrl = _app.LocalPortalUrl;
+        _remotePortalUrl = _app.RemotePortalUrl;
+        if (string.IsNullOrWhiteSpace(_localPortalUrl) && string.IsNullOrWhiteSpace(_remotePortalUrl) && Uri.TryCreate(_app.ManualPortalUrl, UriKind.Absolute, out var legacyPortal))
+        {
+            if (AppLinkService.ClassifyRoute(legacyPortal) == WebUiRoute.Local)
+            {
+                _localPortalUrl = legacyPortal.AbsoluteUri;
+            }
+            else
+            {
+                _remotePortalUrl = legacyPortal.AbsoluteUri;
+            }
+        }
         _notifyChoice = _app.NotifySuccessOverride switch
         {
             true => "on",
@@ -203,14 +228,12 @@
                 "off" => false,
                 _ => null
             };
-            if (!string.IsNullOrWhiteSpace(_manualPortalUrl) && (!Uri.TryCreate(_manualPortalUrl, UriKind.Absolute, out var portal) || (portal.Scheme != Uri.UriSchemeHttp && portal.Scheme != Uri.UriSchemeHttps)))
-            {
-                throw new InvalidOperationException("Manual Web UI URL must use HTTP or HTTPS.");
-            }
             app.DowntimeAction = _downtimeAction;
             app.NotifyOnDowntime = _downtimeAction != DowntimeAction.Ignore;
             app.MaintenanceMode = _maintenanceMode;
-            app.ManualPortalUrl = string.IsNullOrWhiteSpace(_manualPortalUrl) ? null : _manualPortalUrl.Trim();
+            app.LocalPortalUrl = NormalizeWebUiUrl(_localPortalUrl, "Local Web UI URL");
+            app.RemotePortalUrl = NormalizeWebUiUrl(_remotePortalUrl, "Remote Web UI URL");
+            app.ManualPortalUrl = null;
             if (app.DowntimeAction == DowntimeAction.Ignore)
             {
                 app.DowntimeNotificationActive = false;
@@ -260,4 +283,22 @@
             : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
 
     private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
+
+    private static string? NormalizeWebUiUrl(string? value, string label)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrWhiteSpace(uri.Host) ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            throw new InvalidOperationException($"{label} must be an absolute HTTP or HTTPS URL without embedded credentials.");
+        }
+
+        return uri.AbsoluteUri;
+    }
 }

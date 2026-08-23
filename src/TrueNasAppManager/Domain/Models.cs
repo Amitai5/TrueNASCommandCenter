@@ -93,6 +93,16 @@ public sealed record InventoryRefreshResult(int Discovered, int Missing, IReadOn
 
 public sealed record AppHealthEvaluationResult(int Checked, int IncidentsOpened, int Recovered, int RestartAttempts);
 
+public sealed record AppWebUiLinks(string? LocalUrl, string? RemoteUrl, string? SelectedUrl, WebUiRoute SelectedRoute);
+
+public sealed record ConfigurationBackupFile(string FileName, string Json, bool IncludesSecrets);
+
+public sealed record ConfigurationBackupInspection(int SchemaVersion, DateTimeOffset ExportedAtUtc, string ApplicationVersion, bool IncludesSecrets, int? AppCount);
+
+public sealed record ConfigurationBackupPreview(int SchemaVersion, DateTimeOffset ExportedAtUtc, string ApplicationVersion, bool IncludesSecrets, int AppCount);
+
+public sealed record ConfigurationRestoreResult(int AppsRestored, bool SecretsRestored, bool ConnectionReady);
+
 public sealed record ScheduleValidationResult(
     bool IsValid,
     string? Error,

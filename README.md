@@ -21,7 +21,8 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Manual rollback to versions reported by TrueNAS
 - Per-app health policies: Ignore, Notify Only, or one automatic restart attempt plus notification
 - Top-level and container health, maintenance mode, recovery notifications, and lifecycle audit history
-- Prominent published ports, TrueNAS Web UI portals, explicit URL overrides, and on-demand live container logs
+- Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
+- Portable secret-free JSON backups and optional password-encrypted full configuration backups
 - Optional TrueNAS-native email and generic webhook notifications
 - Optional public GitHub repository facts with 24-hour ETag caching and no token
 - Encrypted API, Authorization, and secret-header values
@@ -190,6 +191,20 @@ The wizard uses the secure TrueNAS endpoint configured in the deployment YAML bu
 4. Discover installed apps and assign an explicit policy to each one.
 
 The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
+
+## App access, logs, and configuration backups
+
+Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fields. When the manager is opened through `truenas.local`, localhost, or a private/link-local address, its Web UI buttons use the local route. When it is opened through a public domain such as `apps.example.com`, the buttons use the explicitly configured remote route. Remote addresses are never guessed. The global **Local TrueNAS Web UI host** setting remains available for rewriting TrueNAS-provided portals and pairing local published ports with a stable hostname.
+
+The app-details page prioritizes operations. It shows the current route, ports, health, workloads, versions, and lifecycle controls around a large live-log workspace. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
+
+Open **Settings → Backup & restore** for portable configuration backups:
+
+- **Safe JSON** excludes API keys and webhook secrets. Importing it retains any secrets already stored in the destination.
+- **Encrypted JSON** includes stored secrets and protects them with password-derived AES-256-GCM authenticated encryption.
+- Imports validate the complete file before a transactional merge. Listed app configurations are restored by app ID, unlisted apps and existing history remain unchanged, and undiscovered app policies are held until the next inventory refresh.
+
+Portable backups intentionally exclude inventory, logs, health incidents, GitHub cache, notifications, and update history. Continue backing up the persistent `/data` volume for complete disaster recovery. If `APP_ENCRYPTION_KEY` is configured externally, back it up separately.
 
 ## Runtime configuration
 

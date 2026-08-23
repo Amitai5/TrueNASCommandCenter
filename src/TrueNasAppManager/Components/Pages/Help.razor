@@ -22,7 +22,8 @@
         <a href="/help#account"><span class="help-toc-number">1</span><span><strong>Account and key</strong><small>Create least-privilege access</small></span></a>
         <a href="/help#first-connection"><span class="help-toc-number">2</span><span><strong>Connect</strong><small>Enter and test the fields</small></span></a>
         <a href="/help#wizard"><span class="help-toc-number">3</span><span><strong>Finish setup</strong><small>Schedule, notify, discover</small></span></a>
-        <a href="/help#troubleshooting"><span class="help-toc-number">4</span><span><strong>Troubleshoot</strong><small>Fix common first-run issues</small></span></a>
+        <a href="/help#operations"><span class="help-toc-number">4</span><span><strong>Operate and back up</strong><small>Links, logs, and restore</small></span></a>
+        <a href="/help#troubleshooting"><span class="help-toc-number">5</span><span><strong>Troubleshoot</strong><small>Fix common first-run issues</small></span></a>
     </nav>
 
     <section id="account" class="panel help-section">
@@ -144,14 +145,47 @@ x-portals:
             </article>
             <article>
                 <h3>App management</h3>
-                <p>Open an app to see ports, Web UI links, containers, and live logs. Choose Ignore, Notify only, or one automatic restart attempt for downtime.</p>
+                <p>Open an app to see ports, route-aware Web UI links, containers, and live logs. Choose Ignore, Notify only, or one automatic restart attempt for downtime.</p>
             </article>
+        </div>
+    </section>
+
+    <section id="operations" class="panel help-section">
+        <div class="help-heading">
+            <span class="help-step-number" aria-hidden="true">4</span>
+            <div>
+                <h2>Operate apps and protect configuration</h2>
+                <p class="muted">Use route-aware access, focused logs, and portable backups without exposing secrets by default.</p>
+            </div>
+        </div>
+
+        <div class="help-card-grid">
+            <article>
+                <h3>Local and remote Web UI</h3>
+                <p>Set separate local and remote URLs under <strong>Edit policy</strong>. Local manager hosts use the local route; public manager domains use only the configured remote route.</p>
+            </article>
+            <article>
+                <h3>Live logs</h3>
+                <p>Start a container stream, then use <strong>Copy all</strong> for ISO-8601 plain text or <strong>Fullscreen</strong> for a focused console. The latest 500 lines stay only in browser memory.</p>
+            </article>
+            <article>
+                <h3>Health</h3>
+                <p>Completed one-shot workloads such as <code>permissions</code> appear as <strong>Exited normally</strong> and do not degrade an otherwise running app.</p>
+            </article>
+            <article>
+                <h3>Backup and restore</h3>
+                <p>Use <strong>Settings → Backup &amp; restore</strong>. Safe JSON excludes secrets; encrypted JSON includes them. Imports validate first and merge by app ID without deleting history or unlisted app settings.</p>
+            </article>
+        </div>
+
+        <div class="notice warning help-inline-notice">
+            Portable JSON excludes inventory, logs, incidents, cache, and history. Continue backing up <code>/data</code> for complete disaster recovery.
         </div>
     </section>
 
     <section id="troubleshooting" class="panel help-section">
         <div class="help-heading">
-            <span class="help-step-number" aria-hidden="true">4</span>
+            <span class="help-step-number" aria-hidden="true">5</span>
             <div>
                 <h2>Troubleshooting</h2>
                 <p class="muted">Start with the symptom you see.</p>

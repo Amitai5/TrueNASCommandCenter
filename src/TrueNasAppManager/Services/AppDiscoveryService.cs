@@ -162,12 +162,29 @@ public sealed class AppDiscoveryService(
 
     private static void ReplaceWorkloads(AppDbContext db, Domain.AppRecord app, TrueNasAppDto source)
     {
-        db.AppPorts.RemoveRange(app.Ports);
-        db.AppPortals.RemoveRange(app.Portals);
-        db.AppContainers.RemoveRange(app.Containers);
-        app.Ports = ParsePorts(source.ActiveWorkloads, app.Id);
-        app.Portals = ParsePortals(source.Portals, app.Id);
-        app.Containers = ParseContainers(source.ActiveWorkloads, app.Id);
+        app.Ports.Clear();
+        var ports = ParsePorts(source.ActiveWorkloads, app.Id);
+        foreach (var port in ports)
+        {
+            app.Ports.Add(port);
+        }
+        db.AppPorts.AddRange(ports);
+
+        app.Portals.Clear();
+        var portals = ParsePortals(source.Portals, app.Id);
+        foreach (var portal in portals)
+        {
+            app.Portals.Add(portal);
+        }
+        db.AppPortals.AddRange(portals);
+
+        app.Containers.Clear();
+        var containers = ParseContainers(source.ActiveWorkloads, app.Id);
+        foreach (var container in containers)
+        {
+            app.Containers.Add(container);
+        }
+        db.AppContainers.AddRange(containers);
     }
 
     private static List<Domain.AppPortRecord> ParsePorts(JsonElement workloads, string appId)
@@ -314,15 +331,19 @@ public sealed class AppDiscoveryService(
             return Domain.AppHealthState.Running;
         }
 
-        return containers.EnumerateArray().Any(IsCrashedContainer) ? Domain.AppHealthState.Degraded : Domain.AppHealthState.Running;
+        return containers.EnumerateArray().Any(IsFailedContainer) ? Domain.AppHealthState.Degraded : Domain.AppHealthState.Running;
     }
 
-    private static bool IsCrashedContainer(JsonElement container) => string.Equals(ReadString(container, "state") ?? ReadString(container, "status"), "CRASHED", StringComparison.OrdinalIgnoreCase);
+    private static bool IsFailedContainer(JsonElement container)
+    {
+        var state = ReadString(container, "state") ?? ReadString(container, "status");
+        return state is not null && (state.Equals("CRASHED", StringComparison.OrdinalIgnoreCase) || state.Equals("FAILED", StringComparison.OrdinalIgnoreCase) || state.Equals("ERROR", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string HealthMessage(Domain.AppHealthState state) => state switch
     {
         Domain.AppHealthState.Running => "TrueNAS reports the app running. Completed one-shot containers may remain exited.",
-        Domain.AppHealthState.Degraded => "The app is running, but TrueNAS reports at least one crashed container.",
+        Domain.AppHealthState.Degraded => "The app is running, but TrueNAS reports at least one failed container.",
         Domain.AppHealthState.Stopped => "The app is stopped or crashed.",
         Domain.AppHealthState.Maintenance => "Monitoring is paused for an intentional maintenance stop.",
         _ => "TrueNAS did not report enough workload information to determine health."

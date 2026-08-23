@@ -57,6 +57,12 @@ public sealed class AppRecord
     public string? ManualPortalUrl { get; set; }
 
     [MaxLength(2048)]
+    public string? LocalPortalUrl { get; set; }
+
+    [MaxLength(2048)]
+    public string? RemotePortalUrl { get; set; }
+
+    [MaxLength(2048)]
     public string? Description { get; set; }
 
     [MaxLength(2048)]

@@ -5,7 +5,10 @@
 @inject IEmailNotificationSender EmailSender
 @inject IWebhookNotificationSender WebhookSender
 @inject IUpdateCoordinator Coordinator
+@inject IAppDiscoveryService AppDiscoveryService
+@inject IConfigurationBackupService BackupService
 @inject TrueNasEndpointOptions TrueNasEndpoint
+@inject IJSRuntime JS
 
 <PageTitle>Settings · TrueNAS App Manager</PageTitle>
 
@@ -35,6 +38,7 @@
         <button class="@TabClass("schedule")" @onclick='() => _tab = "schedule"'>Schedule</button>
         <button class="@TabClass("notifications")" @onclick='() => _tab = "notifications"'>Notifications</button>
         <button class="@TabClass("advanced")" @onclick='() => _tab = "advanced"'>Advanced / Safety</button>
+        <button class="@TabClass("backup")" @onclick='() => _tab = "backup"'>Backup &amp; restore</button>
     </div>
 
     @if (_model is null)
@@ -214,7 +218,7 @@
             </aside>
         </div>
     }
-    else
+    else if (_tab == "advanced")
     {
         <section class="panel">
             <h2>Advanced / Safety</h2>
@@ -225,9 +229,9 @@
                     <p class="field-help">Matching app IDs are always blocked from self-update.</p>
                 </div>
                 <div class="field">
-                    <label for="portal-host">Web UI host override</label>
-                    <input id="portal-host" type="url" placeholder="https://truenas.example.com" @bind="_model.PortalHostOverride" />
-                    <p class="field-help">Optional approved origin used to rewrite TrueNAS portal hosts or pair with published ports.</p>
+                    <label for="portal-host">Local TrueNAS Web UI host</label>
+                    <input id="portal-host" type="url" placeholder="https://truenas.local" @bind="_model.PortalHostOverride" />
+                    <p class="field-help">Optional local origin used to rewrite TrueNAS portals or pair with published ports. Remote Web UI links are configured per app.</p>
                 </div>
                 <div class="toggle-row">
                     <input id="github-enrichment" type="checkbox" @bind="_model.GitHubEnrichmentEnabled" />
@@ -255,6 +259,90 @@
             <p class="muted">V1 has no built-in authentication. Expose this UI only on a trusted LAN/VPN or behind an authenticated reverse proxy.</p>
         </section>
     }
+    else
+    {
+        <div class="backup-layout">
+            <section class="panel">
+                <h2>Download configuration</h2>
+                <p>Portable JSON backups include global settings, app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI links.</p>
+                <div class="backup-option">
+                    <div>
+                        <h3>Safe backup</h3>
+                        <p class="field-help">Recommended for routine exports. API keys and webhook secrets are excluded.</p>
+                    </div>
+                    <button disabled="@_busy" @onclick="ExportSafeBackupAsync">Download safe JSON</button>
+                </div>
+                <div class="backup-option encrypted">
+                    <div>
+                        <h3>Encrypted full backup</h3>
+                        <p class="field-help">Includes the TrueNAS API key and webhook secrets, encrypted with your password.</p>
+                    </div>
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="backup-password">Backup password</label>
+                            <input id="backup-password" type="password" autocomplete="new-password" @bind="_backupPassword" />
+                        </div>
+                        <div class="field">
+                            <label for="backup-password-confirm">Confirm password</label>
+                            <input id="backup-password-confirm" type="password" autocomplete="new-password" @bind="_backupPasswordConfirmation" />
+                        </div>
+                    </div>
+                    <button disabled="@_busy" @onclick="ExportEncryptedBackupAsync">Download encrypted JSON</button>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Restore configuration</h2>
+                <p>Select a TrueNAS App Manager JSON backup up to 2 MB. Restored apps are merged by app ID; apps not present in the backup are unchanged.</p>
+                <div class="field">
+                    <label for="backup-file">Backup JSON</label>
+                    <InputFile id="backup-file" accept=".json,application/json" OnChange="SelectBackupAsync" />
+                </div>
+
+                @if (_importInspection is not null)
+                {
+                    <div class="backup-summary">
+                        <dl class="details-list">
+                            <dt>File</dt><dd>@_importFileName</dd>
+                            <dt>Schema</dt><dd>@_importInspection.SchemaVersion</dd>
+                            <dt>Exported</dt><dd>@_importInspection.ExportedAtUtc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
+                            <dt>App version</dt><dd>@_importInspection.ApplicationVersion</dd>
+                            <dt>Secrets</dt><dd>@(_importInspection.IncludesSecrets ? "Password encrypted" : "Excluded")</dd>
+                        </dl>
+                    </div>
+
+                    @if (_importInspection.IncludesSecrets)
+                    {
+                        <div class="field" style="margin-top:1rem">
+                            <label for="import-password">Backup password</label>
+                            <input id="import-password" type="password" autocomplete="current-password" @bind="_importPassword" />
+                        </div>
+                    }
+
+                    <div class="actions" style="margin-top:1rem">
+                        <button disabled="@_busy" @onclick="PreviewImportAsync">Validate &amp; preview</button>
+                        @if (_importPreview is not null)
+                        {
+                            <button class="primary" disabled="@_busy" @onclick="ImportBackupAsync">Import configuration</button>
+                        }
+                    </div>
+                }
+
+                @if (_importPreview is not null)
+                {
+                    <div class="notice success backup-preview" role="status">
+                        <strong>Backup validated.</strong>
+                        @_importPreview.AppCount app configuration entries will be merged. Existing history and apps not listed in the backup will be preserved.
+                    </div>
+                }
+            </section>
+        </div>
+
+        <section class="panel">
+            <h2>What is not included</h2>
+            <p class="muted">Portable backups exclude discovered inventory, live state, logs, health incidents, GitHub cache, notifications, and update history. Continue backing up the persistent <code>/data</code> volume when you need a complete database and history restore.</p>
+        </section>
+    }
 </div>
 
 @code {
@@ -265,6 +353,13 @@
     private string? _message;
     private bool _error;
     private bool _busy;
+    private string _backupPassword = string.Empty;
+    private string _backupPasswordConfirmation = string.Empty;
+    private string _importPassword = string.Empty;
+    private string? _importContent;
+    private string? _importFileName;
+    private ConfigurationBackupInspection? _importInspection;
+    private ConfigurationBackupPreview? _importPreview;
 
     protected override async Task OnInitializedAsync()
     {
@@ -406,6 +501,141 @@
             _message = result.Message;
             _error = result.Status is RunStatus.Failed or RunStatus.PartiallySucceeded;
             await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ExportSafeBackupAsync()
+    {
+        await RunBackupActionAsync(async () =>
+        {
+            var backup = await BackupService.ExportSafeAsync();
+            await JS.InvokeVoidAsync("trueNasAppManager.downloadText", backup.FileName, backup.Json, "application/json");
+            _message = "Safe configuration backup downloaded.";
+        });
+    }
+
+    private async Task ExportEncryptedBackupAsync()
+    {
+        await RunBackupActionAsync(async () =>
+        {
+            if (string.IsNullOrEmpty(_backupPassword) || _backupPassword != _backupPasswordConfirmation)
+            {
+                throw new InvalidOperationException("Enter matching passwords for the encrypted backup.");
+            }
+
+            var backup = await BackupService.ExportEncryptedAsync(_backupPassword);
+            await JS.InvokeVoidAsync("trueNasAppManager.downloadText", backup.FileName, backup.Json, "application/json");
+            _backupPassword = string.Empty;
+            _backupPasswordConfirmation = string.Empty;
+            _message = "Encrypted configuration backup downloaded.";
+        });
+    }
+
+    private async Task SelectBackupAsync(InputFileChangeEventArgs eventArgs)
+    {
+        _busy = true;
+        _message = null;
+        _importInspection = null;
+        _importPreview = null;
+        _importContent = null;
+        _importPassword = string.Empty;
+        try
+        {
+            var file = eventArgs.File;
+            await using var stream = file.OpenReadStream(2 * 1024 * 1024);
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            _importContent = await reader.ReadToEndAsync();
+            _importFileName = file.Name;
+            _importInspection = BackupService.Inspect(_importContent);
+            _message = _importInspection.IncludesSecrets ? "Encrypted backup selected. Enter its password, then validate it." : "Safe backup selected. Validate it before importing.";
+            _error = false;
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PreviewImportAsync()
+    {
+        if (_importContent is null)
+        {
+            return;
+        }
+
+        await RunBackupActionAsync(async () =>
+        {
+            _importPreview = await BackupService.PreviewAsync(_importContent, _importPassword);
+            _message = "Backup validated. Review the summary before importing.";
+        });
+    }
+
+    private async Task ImportBackupAsync()
+    {
+        if (_importContent is null || _importPreview is null)
+        {
+            return;
+        }
+
+        if (!await JS.InvokeAsync<bool>("confirm", $"Import {_importPreview.AppCount} app configurations and the backed-up global settings? Existing history and unlisted apps will be preserved."))
+        {
+            return;
+        }
+
+        await RunBackupActionAsync(async () =>
+        {
+            var result = await BackupService.ImportAsync(_importContent, _importPassword);
+            await TrueNasClient.ResetConnectionAsync();
+            var refreshMessage = "";
+            if (result.ConnectionReady)
+            {
+                try
+                {
+                    var refresh = await AppDiscoveryService.RefreshAsync();
+                    refreshMessage = $" Inventory refreshed with {refresh.Discovered} installed apps.";
+                }
+                catch (Exception exception)
+                {
+                    refreshMessage = $" Configuration was restored, but inventory refresh failed: {exception.Message}";
+                }
+            }
+            else
+            {
+                refreshMessage = " Enter the TrueNAS API key before refreshing inventory.";
+            }
+
+            _message = $"Restored {result.AppsRestored} app configurations.{refreshMessage}";
+            _importContent = null;
+            _importFileName = null;
+            _importInspection = null;
+            _importPreview = null;
+            _importPassword = string.Empty;
+            await ReloadAsync();
+        });
+    }
+
+    private async Task RunBackupActionAsync(Func<Task> action)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            await action();
+            _error = false;
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
         }
         finally
         {

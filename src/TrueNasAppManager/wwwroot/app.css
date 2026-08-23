@@ -700,10 +700,106 @@ tr:last-child td {
     font-weight: 850;
 }
 
+.app-details-page {
+    width: min(1480px, 100%);
+}
+
+.app-detail-header {
+    align-items: end;
+}
+
+.app-detail-identity {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.app-detail-title-row {
+    display: flex;
+    gap: 0.85rem;
+    align-items: center;
+}
+
+.app-detail-title-row h1 {
+    margin: 0 0 0.2rem;
+}
+
+.app-monogram.compact {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+}
+
+.app-detail-actions {
+    justify-content: flex-end;
+}
+
+.app-detail-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.app-detail-summary > div {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.9rem 1rem;
+    border-right: 1px solid var(--border);
+}
+
+.app-detail-summary > div:last-child {
+    border-right: 0;
+}
+
+.app-detail-summary span {
+    color: var(--secondary);
+    font-size: 0.73rem;
+}
+
+.app-detail-summary strong {
+    overflow: hidden;
+    color: var(--heading);
+    font-size: 0.92rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-detail-summary strong .status-dot {
+    margin-right: 0.45rem;
+}
+
+.app-detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2.15fr) minmax(300px, 0.85fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.app-detail-primary, .app-detail-rail {
+    min-width: 0;
+}
+
+.app-detail-rail {
+    display: grid;
+    gap: 1rem;
+}
+
+.app-detail-rail .panel + .panel {
+    margin-top: 0;
+}
+
 .port-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 0.65rem;
+}
+
+.port-grid.compact {
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
 }
 
 .port-card {
@@ -728,8 +824,27 @@ tr:last-child td {
     align-items: end;
 }
 
+.log-panel {
+    min-width: 0;
+}
+
+.log-panel-header {
+    align-items: start;
+}
+
+.log-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.log-container-field {
+    min-width: 0;
+}
+
 .log-viewer {
-    height: 320px;
+    height: 440px;
     margin-top: 1rem;
     padding: 0.85rem;
     overflow: auto;
@@ -738,12 +853,125 @@ tr:last-child td {
     background: #090b10;
     color: #dbe4f0;
     font: 0.76rem/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    white-space: normal;
+    user-select: text;
 }
 
 .log-viewer time, .log-stream {
     color: #94a3b8;
+}
+
+.log-line {
+    display: grid;
+    grid-template-columns: 88px 48px minmax(0, 1fr);
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.log-line.stderr .log-stream, .log-line.stderr .log-message {
+    color: #fca5a5;
+}
+
+.log-stream {
+    text-transform: lowercase;
+}
+
+.log-message {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.log-status {
+    margin: 0.65rem 0 -0.35rem;
+    color: var(--secondary);
+    font-size: 0.78rem;
+}
+
+.log-panel:fullscreen, .log-panel.log-panel-fallback {
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem;
+    background: var(--surface);
+}
+
+.log-panel:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    border-radius: 0;
+}
+
+.log-panel.log-panel-fallback {
+    position: fixed;
+    z-index: 100;
+    inset: 1rem;
+    margin: 0;
+    box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+}
+
+.log-panel:fullscreen .log-viewer, .log-panel.log-panel-fallback .log-viewer {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+}
+
+.route-list {
+    display: grid;
+    gap: 0;
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.route-list > div {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.route-list span {
+    color: var(--secondary);
+}
+
+.backup-layout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.backup-option {
+    display: grid;
+    gap: 0.8rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--border);
+}
+
+.backup-option:first-of-type {
+    margin-top: 1rem;
+}
+
+.backup-option h3, .backup-option p {
+    margin-bottom: 0;
+}
+
+.backup-option.encrypted {
+    padding-bottom: 0;
+}
+
+.backup-summary {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-alt);
+}
+
+.backup-preview {
+    margin-top: 1rem;
+    margin-bottom: 0;
 }
 
 .workload-row {
@@ -807,6 +1035,10 @@ tr:last-child td {
 
 .status-dot.danger {
     background: var(--danger);
+}
+
+.status-dot.info {
+    background: var(--primary);
 }
 
 .status-dot.muted {
@@ -1008,6 +1240,18 @@ tr:last-child td {
     .page {
         padding: 1.25rem 1rem 6rem;
     }
+
+    .app-detail-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .app-detail-rail {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .backup-layout {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 720px) {
@@ -1025,6 +1269,22 @@ tr:last-child td {
 
     .summary-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .app-detail-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .app-detail-summary > div:nth-child(2) {
+        border-right: 0;
+    }
+
+    .app-detail-summary > div:nth-child(-n+2) {
+        border-bottom: 1px solid var(--border);
+    }
+
+    .app-detail-rail, .log-toolbar {
+        grid-template-columns: 1fr;
     }
 
     .desktop-app-table {
@@ -1072,7 +1332,18 @@ tr:last-child td {
     }
 
     .log-viewer {
-        height: 240px;
+        height: 320px;
+    }
+
+    .log-line {
+        grid-template-columns: 78px 42px minmax(0, 1fr);
+        gap: 0.45rem;
+    }
+
+    .log-panel.log-panel-fallback {
+        inset: 0;
+        border: 0;
+        border-radius: 0;
     }
 
     .help-toc, .help-card-grid {

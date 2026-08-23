@@ -5,12 +5,13 @@
 @inject IAppManagementService AppManagementService
 @inject IAppLinkService AppLinkService
 @inject IGitHubMetadataService GitHubMetadataService
+@inject NavigationManager Navigation
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <PageTitle>App details · TrueNAS App Manager</PageTitle>
 
-<div class="page">
+<div class="page app-details-page">
     @if (_loading)
     {
         <div class="panel empty-state"><span class="spinner"></span> Loading app…</div>
@@ -24,16 +25,25 @@
     }
     else
     {
-        <header class="page-header">
-            <div>
+        <header class="page-header app-detail-header">
+            <div class="app-detail-identity">
                 <a href="/">← Apps</a>
-                <h1 style="margin-top:.6rem">@_app.Name</h1>
-                <p class="subtitle">@(_app.IsCustom ? "Custom app" : _app.Train ?? "Catalog app") · <span class="badge @HealthClass()">@_app.HealthState</span></p>
+                <div class="app-detail-title-row">
+                    <div class="app-monogram compact" aria-hidden="true">@AppInitials()</div>
+                    <div>
+                        <h1>@_app.Name</h1>
+                        <p class="subtitle">@(_app.IsCustom ? "Custom app" : _app.Train ?? "Catalog app") · <span class="badge @HealthClass()">@HealthText()</span></p>
+                    </div>
+                </div>
             </div>
-            <div class="actions">
-                @if (_webUi is not null)
+            <div class="actions app-detail-actions">
+                @if (_webUiLinks?.SelectedUrl is not null)
                 {
-                    <a class="button primary" href="@_webUi" target="_blank" rel="noopener noreferrer">Open Web UI ↗</a>
+                    <a class="button primary" href="@_webUiLinks.SelectedUrl" target="_blank" rel="noopener noreferrer">Open @RouteLabel() Web UI ↗</a>
+                }
+                else
+                {
+                    <a class="button" href="@PolicyPath()">Configure @RouteLabel() Web UI</a>
                 }
                 <a class="button" href="@PolicyPath()">Edit policy</a>
                 <button disabled="@_busy" @onclick="CheckAsync">Check app now</button>
@@ -66,9 +76,80 @@
             </div>
         }
 
-        <div class="split-layout">
-            <section>
-                <div class="panel app-info-hero">
+        <section class="app-detail-summary" aria-label="Application summary">
+            <div><span>Health</span><strong><span class="status-dot @HealthClass()"></span>@HealthText()</strong></div>
+            <div><span>Version</span><strong>@(_app.HumanVersion ?? _app.InstalledVersion ?? "Unknown")</strong></div>
+            <div><span>Published ports</span><strong>@PortSummary()</strong></div>
+            <div><span>Current route</span><strong>@RouteLabel()</strong></div>
+        </section>
+
+        <div class="app-detail-layout">
+            <main class="app-detail-primary">
+                <section id="app-log-panel" class="@LogPanelClass()">
+                    <div class="panel-header log-panel-header">
+                        <div>
+                            <h2>Containers &amp; live logs</h2>
+                            <p class="field-help">The latest 500 lines plus live output. Logs stay in browser memory and are never stored.</p>
+                        </div>
+                        <span class="badge">@_logs.Count loaded</span>
+                    </div>
+                    @if (_app.Containers.Count == 0)
+                    {
+                        <p class="muted">TrueNAS did not report container details for this app.</p>
+                    }
+                    else
+                    {
+                        <div class="log-toolbar">
+                            <div class="field log-container-field">
+                                <label for="log-container">Container</label>
+                                <select id="log-container" disabled="@(_logTask is not null)" @bind="_selectedContainerId">
+                                    @foreach (var container in _app.Containers)
+                                    {
+                                        <option value="@container.ContainerId">@container.Name · @WorkloadStatusText(container)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="actions log-actions">
+                                @if (_logTask is null)
+                                {
+                                    <button class="primary" disabled="@string.IsNullOrWhiteSpace(_selectedContainerId)" @onclick="StartLogsAsync">Start logs</button>
+                                }
+                                else
+                                {
+                                    <button @onclick="ToggleLogPause">@(_logsPaused ? "Resume" : "Pause")</button>
+                                    <button @onclick="StopLogsAsync">Stop</button>
+                                }
+                                <button disabled="@(_logs.Count == 0)" @onclick="CopyLogsAsync">Copy all</button>
+                                <button @onclick="ToggleLogFullscreenAsync">@FullscreenButtonText()</button>
+                                <button disabled="@(_logs.Count == 0)" @onclick="ClearLogs">Clear</button>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_logError))
+                        {
+                            <div class="notice danger">@_logError</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_copyMessage))
+                        {
+                            <p class="log-status" role="status">@_copyMessage</p>
+                        }
+                        <div id="app-log-output" class="log-viewer" role="log" aria-live="off" aria-label="Live application logs">
+                            @if (_logs.Count == 0)
+                            {
+                                <span class="muted">Start the stream to load recent output.</span>
+                            }
+                            @foreach (var entry in _logs)
+                            {
+                                <div class="log-line @(entry.Stream.Equals("stderr", StringComparison.OrdinalIgnoreCase) ? "stderr" : string.Empty)">
+                                    <time datetime="@entry.Timestamp.ToString("O")">@entry.Timestamp.ToString("HH:mm:ss.fff")</time>
+                                    <span class="log-stream">@entry.Stream</span>
+                                    <span class="log-message">@entry.Message</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="panel app-info-hero">
                     <div class="app-monogram" aria-hidden="true">@AppInitials()</div>
                     <div>
                         <h2>About</h2>
@@ -84,75 +165,9 @@
                             }
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <div class="panel">
-                    <div class="panel-header"><h2>Ports &amp; access</h2>@if (_webUi is not null) { <a href="@_webUi" target="_blank" rel="noopener noreferrer">Open Web UI ↗</a> }</div>
-                    @if (_app.Ports.Count == 0)
-                    {
-                        <p class="muted">TrueNAS did not report published ports. Host-networked custom apps may show no workload ports.</p>
-                    }
-                    else
-                    {
-                        <div class="port-grid">
-                            @foreach (var port in _app.Ports.OrderBy(port => port.HostPort))
-                            {
-                                <div class="port-card"><strong>@port.HostPort</strong><span>@port.Protocol.ToUpperInvariant() @if (port.ContainerPort is not null) { <text>→ @port.ContainerPort</text> }</span><small>@(port.ContainerName ?? "Published port")</small></div>
-                            }
-                        </div>
-                    }
-                    @if (_app.Portals.Count > 0)
-                    {
-                        <dl class="details-list" style="margin-top:1rem">
-                            @foreach (var portal in _app.Portals)
-                            {
-                                <dt>@portal.Name</dt><dd><a href="@portal.Url" target="_blank" rel="noopener noreferrer">@portal.Url ↗</a></dd>
-                            }
-                        </dl>
-                    }
-                </div>
-
-                <div class="panel">
-                    <div class="panel-header"><div><h2>Containers &amp; live logs</h2><p class="field-help">The last 500 lines plus live output. Logs stay in browser memory and are never stored.</p></div></div>
-                    @if (_app.Containers.Count == 0)
-                    {
-                        <p class="muted">TrueNAS did not report container details for this app.</p>
-                    }
-                    else
-                    {
-                        <div class="form-grid">
-                            <div class="field"><label for="log-container">Container</label><select id="log-container" @bind="_selectedContainerId">@foreach (var container in _app.Containers) { <option value="@container.ContainerId">@container.Name · @container.State</option> }</select></div>
-                            <div class="actions log-actions">
-                                @if (_logTask is null)
-                                {
-                                    <button class="primary" disabled="@string.IsNullOrWhiteSpace(_selectedContainerId)" @onclick="StartLogsAsync">Start logs</button>
-                                }
-                                else
-                                {
-                                    <button @onclick="ToggleLogPause">@(_logsPaused ? "Resume" : "Pause")</button>
-                                    <button @onclick="StopLogsAsync">Stop</button>
-                                }
-                                <button @onclick="ClearLogs">Clear</button>
-                            </div>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(_logError))
-                        {
-                            <div class="notice danger">@_logError</div>
-                        }
-                        <div class="log-viewer" role="log" aria-live="polite">
-                            @if (_logs.Count == 0)
-                            {
-                                <span class="muted">Start the stream to load recent output.</span>
-                            }
-                            @foreach (var entry in _logs)
-                            {
-                                <div><time>@entry.Timestamp.ToString("HH:mm:ss")</time> <span class="log-stream">@entry.Stream</span> @entry.Message</div>
-                            }
-                        </div>
-                    }
-                </div>
-
-                <div class="panel">
+                <section class="panel">
                     <div class="panel-header">
                         <h2>Update details</h2>
                         <span class="badge @StatusClass()">@_app.StatusLabel</span>
@@ -165,7 +180,6 @@
                         <dt>Last check</dt><dd>@FormatDate(_app.LastCheckUtc)</dd>
                         <dt>Last successful update</dt><dd>@FormatDate(_app.LastSuccessfulUpdateUtc)</dd>
                     </dl>
-
                     @if (_images.Count > 0)
                     {
                         <h3 style="margin-top:1.25rem">Outdated images</h3>
@@ -176,9 +190,9 @@
                             }
                         </ul>
                     }
-                </div>
+                </section>
 
-                <div class="panel">
+                <section class="panel">
                     <div class="panel-header">
                         <h2>Recent history</h2>
                         <a href="@HistoryPath()">View all history</a>
@@ -206,19 +220,64 @@
                             </table>
                         </div>
                     }
-                </div>
-            </section>
+                </section>
+            </main>
 
-            <aside>
+            <aside class="app-detail-rail">
+                <section class="panel">
+                    <div class="panel-header"><h2>Ports &amp; access</h2><a href="@PolicyPath()">Edit access</a></div>
+                    @if (_app.Ports.Count == 0)
+                    {
+                        <p class="muted">TrueNAS did not report published ports. Host-networked custom apps may show no workload ports.</p>
+                    }
+                    else
+                    {
+                        <div class="port-grid compact">
+                            @foreach (var port in _app.Ports.OrderBy(port => port.HostPort))
+                            {
+                                <div class="port-card"><strong>@port.HostPort</strong><span>@port.Protocol.ToUpperInvariant() @if (port.ContainerPort is not null) { <text>→ @port.ContainerPort</text> }</span><small>@(port.ContainerName ?? "Published port")</small></div>
+                            }
+                        </div>
+                    }
+                    <div class="route-list">
+                        <div>
+                            <span>Local Web UI</span>
+                            @if (_webUiLinks?.LocalUrl is not null)
+                            {
+                                <a href="@_webUiLinks.LocalUrl" target="_blank" rel="noopener noreferrer">Open local ↗</a>
+                            }
+                            else
+                            {
+                                <a href="@PolicyPath()">Configure</a>
+                            }
+                        </div>
+                        <div>
+                            <span>Remote Web UI</span>
+                            @if (_webUiLinks?.RemoteUrl is not null)
+                            {
+                                <a href="@_webUiLinks.RemoteUrl" target="_blank" rel="noopener noreferrer">Open remote ↗</a>
+                            }
+                            else
+                            {
+                                <a href="@PolicyPath()">Configure</a>
+                            }
+                        </div>
+                    </div>
+                </section>
+
                 <section class="panel">
                     <h2>Application info</h2>
                     <dl class="details-list">
-                        <dt>Health</dt><dd><span class="badge @HealthClass()">@_app.HealthState</span></dd>
+                        <dt>Health</dt><dd><span class="badge @HealthClass()">@HealthText()</span></dd>
                         <dt>App version</dt><dd>@(_app.HumanVersion ?? "Unknown")</dd>
                         <dt>Chart version</dt><dd>@(_app.InstalledVersion ?? "Unknown")</dd>
                         <dt>Train</dt><dd>@(_app.Train ?? (_app.IsCustom ? "Custom" : "Unknown"))</dd>
                         <dt>Containers</dt><dd>@_app.Containers.Count</dd>
                     </dl>
+                    @if (!string.IsNullOrWhiteSpace(_app.HealthMessage))
+                    {
+                        <p class="field-help">@_app.HealthMessage</p>
+                    }
                     @if (_gitHub is not null)
                     {
                         <hr />
@@ -235,7 +294,7 @@
                     <h2>Workloads</h2>
                     @foreach (var container in _app.Containers)
                     {
-                        <div class="workload-row"><div><strong>@container.Name</strong><span class="app-meta">@container.Image</span></div><span class="badge @(container.State.Equals("RUNNING", StringComparison.OrdinalIgnoreCase) ? "success" : "warning")">@container.State</span></div>
+                        <div class="workload-row"><div><strong>@container.Name</strong><span class="app-meta">@container.Image</span></div><span class="badge @WorkloadClass(container)">@WorkloadStatusText(container)</span></div>
                     }
                 </section>
 
@@ -255,9 +314,7 @@
                             }
                         </select>
                         <p class="field-help">Only versions returned by TrueNAS can be selected.</p>
-                        <button class="danger" style="width:100%;margin-top:1rem" disabled="@_busy" @onclick="RollbackAsync">
-                            Roll back
-                        </button>
+                        <button class="danger" style="width:100%;margin-top:1rem" disabled="@_busy" @onclick="RollbackAsync">Roll back</button>
                     }
                 </section>
 
@@ -289,12 +346,16 @@
     private List<TrueNasLogEntry> _logs = [];
     private SettingsRecord? _settings;
     private GitHubRepositoryCache? _gitHub;
-    private string? _webUi;
+    private AppWebUiLinks? _webUiLinks;
     private string? _selectedContainerId;
     private string? _logError;
+    private string? _copyMessage;
     private CancellationTokenSource? _logCancellation;
     private Task? _logTask;
+    private DotNetObjectReference<AppDetails>? _dotNetReference;
     private bool _logsPaused;
+    private bool _nativeFullscreen;
+    private bool _fallbackFullscreen;
     private string? _rollbackTarget;
     private string? _message;
     private bool _loading = true;
@@ -307,20 +368,25 @@
         await LoadAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetReference = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("trueNasAppManager.registerLogFullscreen", "app-log-panel", _dotNetReference);
+        }
+    }
+
     private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _app = await db.Apps.AsNoTracking().AsSplitQuery().Include(app => app.Ports).Include(app => app.Portals).Include(app => app.Containers).SingleOrDefaultAsync(app => app.Id == AppId);
         _settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1);
         _timeZoneId = _settings.TimeZoneId;
-        _attempts = await db.UpdateAttempts.AsNoTracking()
-            .Where(attempt => attempt.AppId == AppId)
-            .OrderByDescending(attempt => attempt.StartedUtc)
-            .Take(10)
-            .ToListAsync();
-        _images = DeserializeImages(_app?.OutdatedImagesJson);
+        _attempts = await db.UpdateAttempts.AsNoTracking().Where(attempt => attempt.AppId == AppId).OrderByDescending(attempt => attempt.StartedUtc).Take(10).ToListAsync();
+        _images = DeserializeStrings(_app?.OutdatedImagesJson);
         _sources = DeserializeStrings(_app?.SourceUrlsJson);
-        _webUi = _app is null ? null : AppLinkService.ResolveWebUiUrl(_app, _settings.PortalHostOverride);
+        _webUiLinks = _app is null ? null : AppLinkService.ResolveWebUiLinks(_app, _settings.PortalHostOverride, new Uri(Navigation.Uri));
         _gitHub = _app is null ? null : await GitHubMetadataService.GetForAppAsync(_app.Id);
         _topics = DeserializeStrings(_gitHub?.TopicsJson);
         _selectedContainerId ??= _app?.Containers.FirstOrDefault()?.ContainerId;
@@ -350,9 +416,7 @@
             return;
         }
 
-        var warning = _app.State is "STOPPED" or "CRASHED"
-            ? $"The app is {_app.State}. Continue with the TrueNAS update?"
-            : $"Update {_app.Name} through TrueNAS now?";
+        var warning = _app.State is "STOPPED" or "CRASHED" ? $"The app is {_app.State}. Continue with the TrueNAS update?" : $"Update {_app.Name} through TrueNAS now?";
         if (await JS.InvokeAsync<bool>("confirm", warning))
         {
             await RunAsync(RunTrigger.UpdateNow, true, riskyStateConfirmed: true);
@@ -398,9 +462,7 @@
             return;
         }
 
-        if (!await JS.InvokeAsync<bool>(
-                "confirm",
-                $"Roll back {_app.Name} to {_rollbackTarget}? TrueNAS will perform and verify the rollback."))
+        if (!await JS.InvokeAsync<bool>("confirm", $"Roll back {_app.Name} to {_rollbackTarget}? TrueNAS will perform and verify the rollback."))
         {
             return;
         }
@@ -435,7 +497,7 @@
         }
     }
 
-    private static List<string> DeserializeImages(string? value)
+    private static List<string> DeserializeStrings(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -452,8 +514,6 @@
         }
     }
 
-    private static List<string> DeserializeStrings(string? value) => DeserializeImages(value);
-
     private Task StartLogsAsync()
     {
         if (_logTask is not null || string.IsNullOrWhiteSpace(_selectedContainerId))
@@ -463,10 +523,10 @@
 
         _logs.Clear();
         _logError = null;
+        _copyMessage = null;
         _logsPaused = false;
         _logCancellation = new CancellationTokenSource();
-        var containerId = _selectedContainerId;
-        _logTask = StreamLogsAsync(containerId, _logCancellation.Token);
+        _logTask = StreamLogsAsync(_selectedContainerId, _logCancellation.Token);
         return Task.CompletedTask;
     }
 
@@ -484,7 +544,12 @@
                         _logs.RemoveRange(0, _logs.Count - 500);
                     }
 
-                    await InvokeAsync(StateHasChanged);
+                    await InvokeAsync(async () =>
+                    {
+                        StateHasChanged();
+                        await Task.Yield();
+                        await JS.InvokeVoidAsync("trueNasAppManager.followLogTail", "app-log-output");
+                    });
                 }
             }
         }
@@ -507,7 +572,33 @@
 
     private void ToggleLogPause() => _logsPaused = !_logsPaused;
 
-    private void ClearLogs() => _logs.Clear();
+    private void ClearLogs()
+    {
+        _logs.Clear();
+        _copyMessage = null;
+    }
+
+    private async Task CopyLogsAsync()
+    {
+        var content = string.Join(Environment.NewLine, _logs.Select(entry => $"{entry.Timestamp.ToUniversalTime():O}\t{entry.Stream}\t{entry.Message}"));
+        var copied = await JS.InvokeAsync<bool>("trueNasAppManager.copyText", content);
+        _copyMessage = copied ? $"Copied {_logs.Count} log lines." : "The browser could not copy the logs. Select the log text and copy it manually.";
+    }
+
+    private async Task ToggleLogFullscreenAsync()
+    {
+        if (_fallbackFullscreen)
+        {
+            _fallbackFullscreen = false;
+            return;
+        }
+
+        var supported = await JS.InvokeAsync<bool>("trueNasAppManager.toggleFullscreen", "app-log-panel");
+        if (!supported)
+        {
+            _fallbackFullscreen = true;
+        }
+    }
 
     private async Task StopLogsAsync()
     {
@@ -519,10 +610,41 @@
         }
     }
 
-    /// <summary>Stops any active TrueNAS log subscription when the page is disposed.</summary>
+    /// <summary>Updates the component when the browser enters or exits native fullscreen.</summary>
+    /// <param name="fullscreen">Whether the log panel is currently fullscreen.</param>
+    /// <returns>A task representing the UI refresh.</returns>
+    [JSInvokable]
+    public Task OnLogFullscreenChanged(bool fullscreen)
+    {
+        _nativeFullscreen = fullscreen;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Exits the CSS fullscreen fallback when Escape is pressed.</summary>
+    /// <returns>A task representing the UI refresh.</returns>
+    [JSInvokable]
+    public Task OnLogFullscreenEscape()
+    {
+        _fallbackFullscreen = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Stops active logs and releases browser callbacks when the page is disposed.</summary>
     public async ValueTask DisposeAsync()
     {
         await StopLogsAsync();
+        if (_dotNetReference is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("trueNasAppManager.unregisterLogFullscreen", "app-log-panel");
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            _dotNetReference.Dispose();
+        }
     }
 
     private string PolicyPath() => $"/apps/{Uri.EscapeDataString(AppId)}/policy";
@@ -541,11 +663,8 @@
         VersionScope.PatchOnly => "Patch only",
         _ => "—"
     };
-    private string AvailableText() => _app?.CatalogUpdateAvailable == true
-        ? _app.LatestHumanVersion ?? _app.LatestVersion ?? "Catalog update"
-        : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
-    private string StatusClass() => _app?.StatusLabel == "Up to date" ? "success" :
-        _app?.StatusLabel is "Failed" or "Crashed" or "Blocked: action required" ? "danger" : "warning";
+    private string AvailableText() => _app?.CatalogUpdateAvailable == true ? _app.LatestHumanVersion ?? _app.LatestVersion ?? "Catalog update" : _app?.ImageUpdateAvailable == true ? "Image update" : "No update";
+    private string StatusClass() => _app?.StatusLabel == "Up to date" ? "success" : _app?.StatusLabel is "Failed" or "Crashed" or "Blocked: action required" ? "danger" : "warning";
     private string HealthClass() => _app?.HealthState switch
     {
         AppHealthState.Running => "success",
@@ -554,6 +673,22 @@
         AppHealthState.Maintenance => "info",
         _ => string.Empty
     };
+    private string HealthText() => _app?.HealthState switch
+    {
+        AppHealthState.Running => "Running",
+        AppHealthState.Degraded => "Degraded",
+        AppHealthState.Stopped => "Stopped",
+        AppHealthState.Maintenance => "Maintenance",
+        _ => "Unknown"
+    };
+    private string PortSummary() => _app is null || _app.Ports.Count == 0 ? "None reported" : string.Join(", ", _app.Ports.OrderBy(port => port.HostPort).Select(port => port.HostPort));
+    private string RouteLabel() => _webUiLinks?.SelectedRoute == WebUiRoute.Remote ? "Remote" : "Local";
+    private string LogPanelClass() => $"panel log-panel{(_fallbackFullscreen ? " log-panel-fallback" : string.Empty)}";
+    private string FullscreenButtonText() => _nativeFullscreen || _fallbackFullscreen ? "Exit fullscreen" : "Fullscreen";
+    private static string WorkloadStatusText(AppContainerRecord container) => IsCompletedPermissionsWorkload(container) ? "Exited normally" : ToTitleCase(container.State);
+    private static string WorkloadClass(AppContainerRecord container) => IsCompletedPermissionsWorkload(container) || container.State.Equals("RUNNING", StringComparison.OrdinalIgnoreCase) ? "success" : container.State.Equals("CRASHED", StringComparison.OrdinalIgnoreCase) || container.State.Equals("FAILED", StringComparison.OrdinalIgnoreCase) || container.State.Equals("ERROR", StringComparison.OrdinalIgnoreCase) ? "danger" : "info";
+    private static bool IsCompletedPermissionsWorkload(AppContainerRecord container) => container.Name.Equals("permissions", StringComparison.OrdinalIgnoreCase) && container.State.Equals("EXITED", StringComparison.OrdinalIgnoreCase);
+    private static string ToTitleCase(string value) => string.IsNullOrWhiteSpace(value) ? "Unknown" : char.ToUpperInvariant(value[0]) + value[1..].ToLowerInvariant();
     private string AppInitials()
     {
         if (string.IsNullOrWhiteSpace(_app?.Name))
@@ -565,7 +700,6 @@
         return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
     }
     private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
-
     private static string PastTense(AppLifecycleAction action) => action switch
     {
         AppLifecycleAction.Start => "started",

@@ -204,6 +204,10 @@ namespace TrueNasAppManager.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LocalPortalUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("MaintenanceMode")
                         .HasColumnType("INTEGER");
 
@@ -232,6 +236,10 @@ namespace TrueNasAppManager.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("RecoveryAttemptedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RemotePortalUrl")
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("SnapshotHostPaths")

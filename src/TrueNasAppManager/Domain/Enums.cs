@@ -102,6 +102,12 @@ public enum AppHealthState
     Maintenance
 }
 
+public enum WebUiRoute
+{
+    Local,
+    Remote
+}
+
 public enum NotificationProvider
 {
     Email,

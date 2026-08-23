@@ -123,7 +123,7 @@
                 <tbody>
                     @foreach (var app in filteredApps)
                     {
-                        var webUi = AppLinkService.ResolveWebUiUrl(app, _settings?.PortalHostOverride);
+                        var webUi = AppLinkService.ResolveWebUiLinks(app, _settings?.PortalHostOverride, new Uri(Navigation.Uri)).SelectedUrl;
                         <tr>
                             <td>
                                 <a class="app-name" href="@AppPath(app.Id)">@app.Name</a>
@@ -175,7 +175,7 @@
             <div class="mobile-app-list">
             @foreach (var app in filteredApps)
             {
-                var webUi = AppLinkService.ResolveWebUiUrl(app, _settings?.PortalHostOverride);
+                var webUi = AppLinkService.ResolveWebUiLinks(app, _settings?.PortalHostOverride, new Uri(Navigation.Uri)).SelectedUrl;
                 <article class="mobile-app-card">
                     <div class="row">
                         <div>

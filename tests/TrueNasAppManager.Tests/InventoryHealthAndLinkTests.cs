@@ -46,9 +46,46 @@ public sealed class InventoryHealthAndLinkTests
     }
 
     [TestMethod]
+    public async Task Refresh_ReplacesExistingWorkloadsWithoutConcurrencyFailure()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var service = new AppDiscoveryService(new InventoryTrueNasClient([AppWithWorkloads()]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)));
+
+        await service.RefreshAsync();
+        await service.RefreshAsync();
+
+        await using var db = await database.CreateDbContextAsync();
+        var app = await db.Apps.Include(item => item.Ports).Include(item => item.Portals).Include(item => item.Containers).SingleAsync();
+        Assert.HasCount(1, app.Ports);
+        Assert.HasCount(1, app.Portals);
+        Assert.HasCount(1, app.Containers);
+    }
+
+    [TestMethod]
+    public async Task Refresh_ReplacesStaleDegradedHealthWithCurrentRunningState()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        await using (var seed = await database.CreateDbContextAsync())
+        {
+            seed.Apps.Add(new AppRecord { Id = "immich", Name = "Immich", State = "RUNNING", HealthState = AppHealthState.Degraded, LastSeenUtc = DateTime.UtcNow });
+            await seed.SaveChangesAsync();
+        }
+        var service = new AppDiscoveryService(new InventoryTrueNasClient([AppWithWorkloads()]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)));
+
+        await service.RefreshAsync();
+
+        await using var db = await database.CreateDbContextAsync();
+        Assert.AreEqual(AppHealthState.Running, (await db.Apps.SingleAsync()).HealthState);
+    }
+
+    [TestMethod]
     [DataRow("exited", AppHealthState.Running)]
     [DataRow("starting", AppHealthState.Running)]
     [DataRow("crashed", AppHealthState.Degraded)]
+    [DataRow("failed", AppHealthState.Degraded)]
+    [DataRow("error", AppHealthState.Degraded)]
     public async Task Refresh_ClassifiesContainerStateWithoutFlaggingCompletedOneShotContainers(string containerState, AppHealthState expectedHealth)
     {
         await using var database = new TestDatabase();
@@ -101,17 +138,23 @@ public sealed class InventoryHealthAndLinkTests
     }
 
     [TestMethod]
-    public void LinkResolver_UsesManualUrlBeforePortal()
+    public void LinkResolver_SelectsConfiguredUrlForCurrentManagerRoute()
     {
         var app = new AppRecord
         {
-            ManualPortalUrl = "https://photos.example.test/",
+            LocalPortalUrl = "http://truenas.local:2283/",
+            RemotePortalUrl = "https://photos.example.test/",
             Portals = [new AppPortalRecord { Url = "http://0.0.0.0:2283/" }]
         };
+        var service = new AppLinkService();
 
-        var result = new AppLinkService().ResolveWebUiUrl(app, "https://nas.example.test");
+        var local = service.ResolveWebUiLinks(app, "https://nas.example.test", new Uri("http://truenas.local:2600/apps/immich"));
+        var remote = service.ResolveWebUiLinks(app, "https://nas.example.test", new Uri("https://apps.amitai.tech/apps/immich"));
 
-        Assert.AreEqual("https://photos.example.test/", result);
+        Assert.AreEqual(WebUiRoute.Local, local.SelectedRoute);
+        Assert.AreEqual("http://truenas.local:2283/", local.SelectedUrl);
+        Assert.AreEqual(WebUiRoute.Remote, remote.SelectedRoute);
+        Assert.AreEqual("https://photos.example.test/", remote.SelectedUrl);
     }
 
     [TestMethod]
@@ -119,22 +162,65 @@ public sealed class InventoryHealthAndLinkTests
     {
         var app = new AppRecord { Portals = [new AppPortalRecord { Url = "http://0.0.0.0:2283/" }] };
 
-        var result = new AppLinkService().ResolveWebUiUrl(app, "https://nas.example.test");
+        var result = new AppLinkService().ResolveWebUiLinks(app, "https://nas.example.test", new Uri("http://truenas.local:2600"));
 
-        Assert.AreEqual("https://nas.example.test:2283/", result);
+        Assert.AreEqual("https://nas.example.test:2283/", result.LocalUrl);
+        Assert.AreEqual(result.LocalUrl, result.SelectedUrl);
+    }
+
+    [TestMethod]
+    public void LinkResolver_DoesNotGuessRemoteUrlFromTrueNasPortal()
+    {
+        var app = new AppRecord { Portals = [new AppPortalRecord { Url = "http://0.0.0.0:2283/" }] };
+
+        var result = new AppLinkService().ResolveWebUiLinks(app, "https://nas.example.test", new Uri("https://apps.amitai.tech"));
+
+        Assert.AreEqual(WebUiRoute.Remote, result.SelectedRoute);
+        Assert.IsNull(result.RemoteUrl);
+        Assert.IsNull(result.SelectedUrl);
+    }
+
+    [TestMethod]
+    public void LinkResolver_BuildsLocalUrlFromPrivateManagerHostAndPublishedPort()
+    {
+        var app = new AppRecord { Ports = [new AppPortRecord { HostPort = 10704, Protocol = "tcp" }] };
+
+        var result = new AppLinkService().ResolveWebUiLinks(app, null, new Uri("http://10.0.0.21:2600/apps/plex"));
+
+        Assert.AreEqual(WebUiRoute.Local, result.SelectedRoute);
+        Assert.AreEqual("http://10.0.0.21:10704/", result.LocalUrl);
+        Assert.AreEqual(result.LocalUrl, result.SelectedUrl);
+    }
+
+    [TestMethod]
+    [DataRow("http://10.0.0.21:10704/web", WebUiRoute.Local)]
+    [DataRow("http://truenas.local:10704/web", WebUiRoute.Local)]
+    [DataRow("https://plex.amitai.tech/", WebUiRoute.Remote)]
+    public void LinkResolver_ClassifiesLegacyManualUrl(string legacyUrl, WebUiRoute expectedRoute)
+    {
+        var app = new AppRecord { ManualPortalUrl = legacyUrl };
+        var managerUri = expectedRoute == WebUiRoute.Local ? new Uri("http://truenas.local:2600") : new Uri("https://apps.amitai.tech");
+
+        var result = new AppLinkService().ResolveWebUiLinks(app, null, managerUri);
+
+        Assert.AreEqual(expectedRoute, result.SelectedRoute);
+        Assert.AreEqual(new Uri(legacyUrl).AbsoluteUri, result.SelectedUrl);
     }
 
     [TestMethod]
     [DataRow("javascript:alert(1)")]
     [DataRow("file:///etc/passwd")]
     [DataRow("not a url")]
+    [DataRow("https://user:password@example.test")]
     public void LinkResolver_RejectsUnsafeManualUrls(string unsafeUrl)
     {
-        var app = new AppRecord { ManualPortalUrl = unsafeUrl };
+        var app = new AppRecord { LocalPortalUrl = unsafeUrl, RemotePortalUrl = unsafeUrl };
 
-        var result = new AppLinkService().ResolveWebUiUrl(app, null);
+        var result = new AppLinkService().ResolveWebUiLinks(app, null, new Uri("https://apps.amitai.tech"));
 
-        Assert.IsNull(result);
+        Assert.IsNull(result.LocalUrl);
+        Assert.IsNull(result.RemoteUrl);
+        Assert.IsNull(result.SelectedUrl);
     }
 
     private static TrueNasAppDto AppWithWorkloads() => new()

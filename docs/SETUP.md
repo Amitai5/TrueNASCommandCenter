@@ -212,9 +212,22 @@ This fail-closed default prevents newly discovered applications from updating wi
 
 Open an app from the **Apps** page to start, stop, or restart it through TrueNAS. The app list also provides a quick **Start** action for stopped or crashed apps and a **Restart** action for running apps. Lifecycle actions wait for the TrueNAS job to finish before refreshing the displayed state.
 
-To monitor an app, open **Edit policy** and choose **Notify only** or **Restart once and notify** under **When this app is down**. Health checks include the top-level app state and reported containers. Each incident sends one downtime event; recovery sends a separate event. Automatic recovery is attempted at most once per incident. Stops initiated from this manager enter maintenance mode and do not alert.
+To monitor an app, open **Edit policy** and choose **Notify only** or **Restart once and notify** under **When this app is down**. Health checks include the top-level app state and reported containers. Each incident sends one downtime event; recovery sends a separate event. Automatic recovery is attempted at most once per incident. Stops initiated from this manager enter maintenance mode and do not alert. A completed `permissions` initialization workload is neutral and appears as **Exited normally** rather than degrading a running app.
 
-The app-details page shows published ports, safe Web UI and source links, versions, train, containers, images, networks, volumes, recent lifecycle/update history, and on-demand live logs. Logs are bounded to 500 lines in browser memory and are never persisted. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
+The app-details page shows published ports, safe Web UI and source links, versions, train, containers, images, networks, volumes, recent lifecycle/update history, and on-demand live logs. Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
+
+Configure separate **Local Web UI URL** and **Remote Web UI URL** values under **Edit policy** when an app is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Public manager domains use only the explicitly configured remote route; the manager does not guess subdomains. The global **Local TrueNAS Web UI host** setting can rewrite TrueNAS portals and supply the hostname for published local ports.
+
+## 7. Back up and restore configuration
+
+Open **Settings → Backup & restore** and choose the appropriate portable export:
+
+- **Download safe JSON** backs up global settings and per-app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI URLs without secrets.
+- **Download encrypted JSON** includes the saved TrueNAS API key and webhook secrets. Enter and confirm a password; the file is authenticated and encrypted with AES-256-GCM using a PBKDF2-SHA256-derived key.
+
+To restore, select a JSON file up to 2 MB, enter its password if encrypted, select **Validate & preview**, review the number of app configurations, and confirm the import. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. A safe restore preserves secrets already stored on the destination; a full encrypted restore replaces the secrets contained in the backup.
+
+Portable configuration JSON does not contain inventory, logs, health incidents, GitHub cache, notification deliveries, or update history. Back up the persistent `/data` volume for a complete database/history recovery, and separately protect `APP_ENCRYPTION_KEY` when you provide it externally.
 
 ## Troubleshooting
 
@@ -279,7 +292,8 @@ Confirm that the TrueNAS Apps service is running, at least one app is installed,
 - Keep privileged mode disabled. Host networking is the reliable default for TrueNAS loopback access and broadens the container's access to host network services; use the documented bridge alternative only when its connection test succeeds.
 - Retain the read-only root filesystem, dropped capabilities, non-root user, and `no-new-privileges` restriction.
 - Do not mount `/var/run/docker.sock`.
-- Persist and back up `/data`, which contains the database and generated encryption key.
+- Download portable configuration JSON from **Settings → Backup & restore** for policy and settings recovery.
+- Persist and back up `/data`, which contains the complete database, history, and generated encryption key.
 - If `APP_ENCRYPTION_KEY` is supplied externally, back it up separately. Losing it makes saved secrets unrecoverable.
 - Set `TRUENAS_APP_ID` to the manager's TrueNAS app ID if you want it to block attempts to update itself.
 
