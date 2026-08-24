@@ -92,7 +92,7 @@ public sealed class SettingsService(
             ConnectionFailureCooldownMinutes = settings.ConnectionFailureCooldownMinutes,
             HistoryRetentionDays = settings.HistoryRetentionDays,
             ManagerAppId = settings.ManagerAppId,
-            UptimeKumaEnabled = settings.UptimeKumaEnabled,
+            UptimeKumaEnabled = !string.IsNullOrWhiteSpace(settings.UptimeKumaBaseUrl),
             UptimeKumaBaseUrl = settings.UptimeKumaBaseUrl,
             UptimeKumaBrowserUrl = settings.UptimeKumaBrowserUrl,
             HasSavedUptimeKumaApiKey = !string.IsNullOrWhiteSpace(settings.UptimeKumaApiKeyEncrypted),
@@ -134,8 +134,8 @@ public sealed class SettingsService(
         settings.ConnectionFailureCooldownMinutes = model.ConnectionFailureCooldownMinutes;
         settings.HistoryRetentionDays = model.HistoryRetentionDays;
         settings.ManagerAppId = NullIfWhiteSpace(model.ManagerAppId);
-        settings.UptimeKumaEnabled = model.UptimeKumaEnabled;
         settings.UptimeKumaBaseUrl = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
+        settings.UptimeKumaEnabled = settings.UptimeKumaBaseUrl is not null;
         settings.UptimeKumaBrowserUrl = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
         settings.UptimeKumaVerifyTls = model.UptimeKumaVerifyTls;
         settings.UptimeKumaRefreshIntervalSeconds = model.UptimeKumaRefreshIntervalSeconds;
@@ -219,11 +219,6 @@ public sealed class SettingsService(
 
         _ = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
         _ = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
-        if (model.UptimeKumaEnabled && string.IsNullOrWhiteSpace(model.UptimeKumaBaseUrl))
-        {
-            throw new InvalidOperationException("An enabled Uptime Kuma integration requires a connection URL.");
-        }
-
         if (model.WebhookTimeoutSeconds is < 1 or > 120 ||
             model.VerificationTimeoutSeconds is < 30 or > 1800 ||
             model.ConnectionFailureCooldownMinutes is < 1 or > 10080 ||

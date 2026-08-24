@@ -161,7 +161,7 @@ public sealed class UptimeKumaSyncServiceTests
     public async Task SynchronizeAsync_CurrentMetrics_UpdatesCacheAndPreservesMissingMonitorMapping()
     {
         await using var database = new TestDatabase();
-        await database.InitializeAsync(settings => { settings.UptimeKumaEnabled = true; settings.UptimeKumaBaseUrl = "http://kuma.local:3001/"; });
+        await database.InitializeAsync(settings => settings.UptimeKumaBaseUrl = "http://kuma.local:3001/");
         await using (var seed = await database.CreateDbContextAsync())
         {
             seed.Apps.Add(new AppRecord { Id = "plex", Name = "Plex", LastSeenUtc = SyncTime.UtcDateTime });
@@ -182,6 +182,7 @@ public sealed class UptimeKumaSyncServiceTests
         Assert.IsFalse(missing.IsPresent);
         Assert.AreEqual("plex", missing.AppId);
         var settings = await verify.Settings.SingleAsync();
+        Assert.IsTrue(settings.UptimeKumaEnabled);
         Assert.AreEqual(SyncTime.UtcDateTime, settings.LastUptimeKumaSuccessUtc);
         Assert.IsNull(settings.LastUptimeKumaError);
     }
@@ -191,7 +192,7 @@ public sealed class UptimeKumaSyncServiceTests
     public async Task SynchronizeAsync_RequestFails_RetainsCachedStatusAndRecordsStaleError()
     {
         await using var database = new TestDatabase();
-        await database.InitializeAsync(settings => { settings.UptimeKumaEnabled = true; settings.UptimeKumaBaseUrl = "http://kuma.local:3001/"; });
+        await database.InitializeAsync(settings => settings.UptimeKumaBaseUrl = "http://kuma.local:3001/");
         await using (var seed = await database.CreateDbContextAsync())
         {
             seed.UptimeKumaMonitors.Add(new UptimeKumaMonitorRecord { MonitorId = "7", Name = "Plex", Type = "http", Status = UptimeKumaMonitorStatus.Up, IsPresent = true, LastSeenUtc = SyncTime.AddMinutes(-1).UtcDateTime });
@@ -204,7 +205,9 @@ public sealed class UptimeKumaSyncServiceTests
         Assert.IsFalse(result.Success);
         await using var verify = await database.CreateDbContextAsync();
         Assert.AreEqual(UptimeKumaMonitorStatus.Up, (await verify.UptimeKumaMonitors.SingleAsync()).Status);
-        StringAssert.Contains((await verify.Settings.SingleAsync()).LastUptimeKumaError!, "unavailable");
+        var settings = await verify.Settings.SingleAsync();
+        Assert.IsTrue(settings.UptimeKumaEnabled);
+        StringAssert.Contains(settings.LastUptimeKumaError!, "unavailable");
     }
 
     private sealed class FakeUptimeKumaClient : IUptimeKumaClient

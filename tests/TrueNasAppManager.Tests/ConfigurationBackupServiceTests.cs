@@ -241,7 +241,6 @@ public sealed class ConfigurationBackupServiceTests
         settings.WebhookAuthorizationEncrypted = protector.Protect("Bearer original");
         settings.WebhookHeadersEncrypted = protector.Protect("X-Test: original");
         settings.PortalHostOverride = "https://truenas.local";
-        settings.UptimeKumaEnabled = true;
         settings.UptimeKumaBaseUrl = "http://kuma.local:3001/";
         settings.UptimeKumaBrowserUrl = "https://status.example.test/";
         settings.UptimeKumaApiKeyEncrypted = protector.Protect("kuma-original");

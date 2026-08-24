@@ -13,7 +13,7 @@ public sealed class UptimeKumaSyncBackgroundService(SettingsService settingsServ
             try
             {
                 var settings = await settingsService.GetRecordAsync(stoppingToken);
-                if (settings.UptimeKumaEnabled && !string.IsNullOrWhiteSpace(settings.UptimeKumaBaseUrl))
+                if (!string.IsNullOrWhiteSpace(settings.UptimeKumaBaseUrl))
                 {
                     await syncService.SynchronizeAsync(cancellationToken: stoppingToken);
                     delay = TimeSpan.FromSeconds(Math.Clamp(settings.UptimeKumaRefreshIntervalSeconds, 30, 3600));

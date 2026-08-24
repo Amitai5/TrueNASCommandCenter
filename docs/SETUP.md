@@ -212,11 +212,11 @@ This fail-closed default prevents newly discovered applications from updating wi
 
 Open an app from the **Apps** page to start, stop, or restart it through TrueNAS. The app list also provides a quick **Start** action for stopped or crashed apps and a **Restart** action for running apps. Lifecycle actions wait for the TrueNAS job to finish before refreshing the displayed state.
 
-To monitor an app, open **Edit policy** and choose **Notify only** or **Restart once and notify** under **When this app is down**. Health checks include the top-level app state and reported containers. Each incident sends one downtime event; recovery sends a separate event. Automatic recovery is attempted at most once per incident. Stops initiated from this manager enter maintenance mode and do not alert. A completed `permissions` initialization workload is neutral and appears as **Exited normally** rather than degrading a running app.
+To monitor an app, open its **Settings** page and choose **Notify only** or **Restart once and notify** under **When this app is down**. Health checks include the top-level app state and reported containers. Each incident sends one downtime event; recovery sends a separate event. Automatic recovery is attempted at most once per incident. Stops initiated from this manager enter maintenance mode and do not alert. A completed `permissions` initialization workload is neutral and appears as **Exited normally** rather than degrading a running app.
 
 The app-details page shows published ports, safe Web UI and source links, versions, train, containers, images, networks, volumes, recent lifecycle/update history, and on-demand live logs. Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
 
-Configure separate **Local Web UI URL** and **Remote Web UI URL** values under **Edit policy** when an app is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Public manager domains use only the explicitly configured remote route; the manager does not guess subdomains. The global **Local TrueNAS Web UI host** setting can rewrite TrueNAS portals and supply the hostname for published local ports.
+Configure separate **Local Web UI URL** and **Remote Web UI URL** values under the app's **Settings** page when it is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Generated local links default to `http://truenas.local`; the global **Local TrueNAS Web UI host** setting can override that origin. Public manager domains use only the explicitly configured remote route, and the manager does not guess subdomains.
 
 ## 7. Back up and restore configuration
 
@@ -233,16 +233,18 @@ Portable configuration JSON does not contain inventory, logs, health incidents, 
 This integration is optional and read-only. Uptime Kuma remains responsible for probes, checks, alerts, and incident history; TrueNAS App Manager imports its current report instead of recreating those features.
 
 1. In Uptime Kuma, open **Settings → Security → API Keys** and create a Prometheus API key.
-2. In TrueNAS App Manager, open **Settings → Uptime Kuma** and enable the integration.
+2. In TrueNAS App Manager, open **Settings → Uptime Kuma**.
 3. Enter the **Connection URL** reachable from the App Manager container, for example `http://truenas.local:3001`.
 4. Optionally enter a separate **Browser URL**, for example `https://status.example.com`. Open links use this address, while background synchronization continues to use the connection URL.
 5. Enter the Uptime Kuma API key, keep TLS verification enabled for a trusted HTTPS certificate, choose a refresh interval, and select **Test connection**.
-6. Select **Sync now**, then open an app's **Edit policy** page to map one or more imported monitors.
+6. Select **Sync now**, then open an app's **Settings** page to map one or more imported monitors.
 7. Open **Monitoring** for the consolidated report or the app's details page for its mapped monitor status.
 
 The manager reads `/metrics` using HTTP Basic authentication with an empty username and the API key as the password. Prometheus API keys require Uptime Kuma 1.21 or later. Detailed uptime-window and average-response metrics require Uptime Kuma 2.x; older releases still provide current status, response, and certificate metrics, while unavailable values display as a dash. It never stores Kuma administrator credentials or writes to Kuma.
 
 If a sync fails, confirm the connection address is reachable from the container, the API key is active, and the certificate is valid for the configured hostname. The last successful report remains cached and is labeled stale until synchronization succeeds again.
+
+Saving a connection URL starts scheduled imports automatically. Clear the connection URL to disconnect Kuma; the last imported report remains cached, and **Sync now** remains available whenever a connection is configured.
 
 ## Troubleshooting
 

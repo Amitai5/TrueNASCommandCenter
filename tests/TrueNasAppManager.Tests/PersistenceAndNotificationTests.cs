@@ -59,7 +59,6 @@ public sealed class PersistenceAndNotificationTests
         var model = await service.GetFormAsync();
         model.TrueNasUsername = "service";
         model.NewTrueNasApiKey = "plain-api-secret";
-        model.UptimeKumaEnabled = true;
         model.UptimeKumaBaseUrl = "http://kuma.local:3001";
         model.UptimeKumaBrowserUrl = "https://status.example.test";
         model.NewUptimeKumaApiKey = "plain-kuma-secret";
@@ -96,6 +95,28 @@ public sealed class PersistenceAndNotificationTests
         Assert.DoesNotContain("plain-kuma-secret", settings.UptimeKumaApiKeyEncrypted!);
         Assert.IsTrue(form.HasSavedUptimeKumaApiKey);
         Assert.AreEqual(90, form.UptimeKumaRefreshIntervalSeconds);
+    }
+
+    /// <summary>Verifies that removing the Kuma connection URL disables scheduled imports.</summary>
+    [TestMethod]
+    public async Task SettingsService_SaveWithoutUptimeKumaUrl_DisablesAutomaticImports()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync(settings =>
+        {
+            settings.UptimeKumaEnabled = true;
+            settings.UptimeKumaBaseUrl = "http://kuma.local:3001/";
+        });
+        var service = database.CreateSettingsService();
+        var model = await service.GetFormAsync();
+        model.UptimeKumaBaseUrl = " ";
+
+        await service.SaveAsync(model);
+
+        await using var verification = await database.CreateDbContextAsync();
+        var settings = await verification.Settings.SingleAsync();
+        Assert.IsFalse(settings.UptimeKumaEnabled);
+        Assert.IsNull(settings.UptimeKumaBaseUrl);
     }
 
     /// <summary>Verifies that legacy database settings cannot override the deployment-configured endpoint.</summary>

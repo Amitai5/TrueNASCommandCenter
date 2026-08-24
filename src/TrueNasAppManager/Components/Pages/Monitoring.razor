@@ -15,7 +15,7 @@
             {
                 <a class="button" href="@KumaBrowserUrl()" target="_blank" rel="noopener noreferrer">Open Uptime Kuma ↗</a>
             }
-            <button class="primary" disabled="@(_busy || _settings?.UptimeKumaEnabled != true)" @onclick="SyncAsync">@(_busy ? "Syncing…" : "Sync now")</button>
+            <button class="primary" disabled="@(_busy || !HasConnectionSettings())" @onclick="SyncAsync">@(_busy ? "Syncing…" : "Sync now")</button>
         </div>
     </header>
 
@@ -28,16 +28,23 @@
     {
         <div class="panel empty-state"><span class="spinner"></span> Loading Uptime Kuma reports…</div>
     }
-    else if (_settings?.UptimeKumaEnabled != true)
+    else if (!HasConnectionSettings() && PresentMonitors().Count == 0)
     {
         <div class="panel empty-state">
-            <h2>Uptime Kuma is not connected</h2>
-            <p class="muted">Add the Kuma connection URL and Prometheus API key, then test the connection.</p>
+            <h2>Uptime Kuma is not configured</h2>
+            <p class="muted">Add a Kuma connection URL and, when required, a Prometheus API key.</p>
             <a class="button primary" href="/settings">Configure Uptime Kuma</a>
         </div>
     }
     else
     {
+        @if (!HasConnectionSettings())
+        {
+            <div class="notice warning" role="status">
+                <strong>Connection settings are missing.</strong>
+                <p>Showing the last imported report. <a href="/settings">Configure Uptime Kuma</a> to refresh it.</p>
+            </div>
+        }
         <section class="summary-grid monitoring-summary" aria-label="Uptime Kuma summary">
             <div class="summary-item"><strong>@PresentMonitors().Count</strong><span>Monitors</span></div>
             <div class="summary-item"><strong>@Count(UptimeKumaMonitorStatus.Up)</strong><span>Up</span></div>
@@ -46,13 +53,13 @@
         </section>
 
         <div class="monitoring-connection-row">
-            <p class="muted">Last successful import: @FormatDate(_settings.LastUptimeKumaSuccessUtc) · Refresh every @_settings.UptimeKumaRefreshIntervalSeconds seconds</p>
+            <p class="muted">Last successful import: @FormatDate(_settings?.LastUptimeKumaSuccessUtc) · @RefreshDescription()</p>
             <span class="badge @ConnectionClass()">@ConnectionText()</span>
         </div>
 
-        @if (!string.IsNullOrWhiteSpace(_settings.LastUptimeKumaError))
+        @if (!string.IsNullOrWhiteSpace(_settings?.LastUptimeKumaError))
         {
-            <div class="notice warning"><strong>Most recent sync failed.</strong> Showing the last successfully imported data. @_settings.LastUptimeKumaError</div>
+            <div class="notice warning"><strong>Most recent sync failed.</strong> Showing the last successfully imported data. @_settings?.LastUptimeKumaError</div>
         }
 
         <div class="monitor-filters panel-toolbar">
@@ -174,9 +181,11 @@
     private int Count(UptimeKumaMonitorStatus status) => PresentMonitors().Count(monitor => monitor.Status == status);
     private void ClearFilters() { _searchTerm = string.Empty; _statusFilter = "all"; }
     private string? KumaBrowserUrl() => _settings?.UptimeKumaBrowserUrl ?? _settings?.UptimeKumaBaseUrl;
-    private string ConnectionText() => IsStale() ? "Data stale" : _settings?.LastUptimeKumaSuccessUtc is null ? "Not synchronized" : "Connected";
-    private string ConnectionClass() => IsStale() ? "warning" : _settings?.LastUptimeKumaSuccessUtc is null ? "info" : "success";
-    private bool IsStale() => _settings?.LastUptimeKumaSuccessUtc is { } success && DateTime.UtcNow - DateTime.SpecifyKind(success, DateTimeKind.Utc) > TimeSpan.FromSeconds(Math.Max(90, _settings.UptimeKumaRefreshIntervalSeconds * 3));
+    private bool HasConnectionSettings() => !string.IsNullOrWhiteSpace(_settings?.UptimeKumaBaseUrl);
+    private string RefreshDescription() => HasConnectionSettings() ? $"Automatic refresh every {_settings!.UptimeKumaRefreshIntervalSeconds} seconds" : "Automatic refresh unavailable";
+    private string ConnectionText() => !HasConnectionSettings() ? "Configuration needed" : IsStale() ? "Data stale" : _settings!.LastUptimeKumaSuccessUtc is null ? "Not synchronized" : "Connected";
+    private string ConnectionClass() => !HasConnectionSettings() ? "info" : IsStale() ? "warning" : _settings!.LastUptimeKumaSuccessUtc is null ? "info" : "success";
+    private bool IsStale() => HasConnectionSettings() && _settings!.LastUptimeKumaSuccessUtc is { } success && DateTime.UtcNow - DateTime.SpecifyKind(success, DateTimeKind.Utc) > TimeSpan.FromSeconds(Math.Max(90, _settings.UptimeKumaRefreshIntervalSeconds * 3));
     private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _settings?.TimeZoneId);
     private static string FormatPercent(double? value) => value is null ? "—" : $"{value.Value:P2}";
     private static string FormatMilliseconds(double? value) => value is null ? "—" : $"{value.Value:N0} ms";

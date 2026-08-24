@@ -41,12 +41,8 @@
                 {
                     <a class="button primary" href="@_webUiLinks.SelectedUrl" target="_blank" rel="noopener noreferrer">Open @RouteLabel() Web UI ↗</a>
                 }
-                else
-                {
-                    <a class="button" href="@PolicyPath()">Configure @RouteLabel() Web UI</a>
-                }
-                <a class="button" href="@PolicyPath()">Edit policy</a>
-                    <button disabled="@_busy" @onclick="CheckAsync">Check now</button>
+                <a class="button" href="@AppSettingsPath()">App settings</a>
+                <button disabled="@_busy" @onclick="CheckAsync">Check now</button>
                 @if (_app.State is "STOPPED" or "CRASHED")
                 {
                     <button class="primary" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Start)">Start</button>
@@ -226,7 +222,7 @@
 
             <aside class="app-detail-rail">
                 <section class="panel">
-                    <div class="panel-header"><h2>Ports &amp; access</h2><a href="@PolicyPath()">Edit access</a></div>
+                    <div class="panel-header"><h2>Ports &amp; access</h2><a href="@AppSettingsPath()">Access settings</a></div>
                     @if (_app.Ports.Count == 0)
                     {
                         <p class="muted">TrueNAS did not report published ports. Host-networked custom apps may show no workload ports.</p>
@@ -249,7 +245,7 @@
                             }
                             else
                             {
-                                <a href="@PolicyPath()">Configure</a>
+                                <a href="@AppSettingsPath()">Configure</a>
                             }
                         </div>
                         <div>
@@ -260,7 +256,7 @@
                             }
                             else
                             {
-                                <a href="@PolicyPath()">Configure</a>
+                                <a href="@AppSettingsPath()">Configure</a>
                             }
                         </div>
                     </div>
@@ -302,7 +298,7 @@
                     @if (_app.UptimeKumaMonitors.Count == 0)
                     {
                         <p class="muted">No Kuma monitors are linked to this app.</p>
-                        <a class="button small" href="@PolicyPath()">Link monitors</a>
+                        <a class="button small" href="@AppSettingsPath()">Monitoring settings</a>
                     }
                     else
                     {
@@ -396,9 +392,9 @@
     protected override async Task OnParametersSetAsync()
     {
         await LoadAsync();
-        if (string.Equals(SavedState, "policy", StringComparison.Ordinal))
+        if (string.Equals(SavedState, "settings", StringComparison.Ordinal) || string.Equals(SavedState, "policy", StringComparison.Ordinal))
         {
-            _message = "Policy saved.";
+            _message = "App settings saved.";
             _error = false;
         }
     }
@@ -682,7 +678,7 @@
         }
     }
 
-    private string PolicyPath() => $"/apps/{Uri.EscapeDataString(AppId)}/policy";
+    private string AppSettingsPath() => $"/apps/{Uri.EscapeDataString(AppId)}/settings";
     private string HistoryPath() => $"/history?app={Uri.EscapeDataString(AppId)}";
     private string PolicyText() => _app?.Policy switch
     {

@@ -181,15 +181,39 @@ public sealed class InventoryHealthAndLinkTests
     }
 
     [TestMethod]
-    public void LinkResolver_BuildsLocalUrlFromPrivateManagerHostAndPublishedPort()
+    public void LinkResolver_BuildsLocalUrlFromDefaultTrueNasHostAndPublishedPort()
     {
         var app = new AppRecord { Ports = [new AppPortRecord { HostPort = 10704, Protocol = "tcp" }] };
 
         var result = new AppLinkService().ResolveWebUiLinks(app, null, new Uri("http://10.0.0.21:2600/apps/plex"));
 
         Assert.AreEqual(WebUiRoute.Local, result.SelectedRoute);
-        Assert.AreEqual("http://10.0.0.21:10704/", result.LocalUrl);
+        Assert.AreEqual("http://truenas.local:10704/", result.LocalUrl);
         Assert.AreEqual(result.LocalUrl, result.SelectedUrl);
+    }
+
+    [TestMethod]
+    public void LinkResolver_BuildsDefaultLocalUrlWhenManagerUsesRemoteHost()
+    {
+        var app = new AppRecord { Ports = [new AppPortRecord { HostPort = 10704, Protocol = "tcp" }] };
+
+        var result = new AppLinkService().ResolveWebUiLinks(app, null, new Uri("https://apps.amitai.tech/apps/plex"));
+
+        Assert.AreEqual("http://truenas.local:10704/", result.LocalUrl);
+        Assert.AreEqual(WebUiRoute.Remote, result.SelectedRoute);
+        Assert.IsNull(result.SelectedUrl);
+    }
+
+    [TestMethod]
+    public void LinkResolver_RewritesIpBasedTrueNasPortalWithDefaultLocalHost()
+    {
+        var app = new AppRecord { Portals = [new AppPortalRecord { Url = "http://10.0.0.21:10704/web" }] };
+
+        var result = new AppLinkService().ResolveWebUiLinks(app, null, new Uri("https://apps.amitai.tech"));
+
+        Assert.AreEqual("http://truenas.local:10704/web", result.LocalUrl);
+        Assert.AreEqual(WebUiRoute.Remote, result.SelectedRoute);
+        Assert.IsNull(result.SelectedUrl);
     }
 
     [TestMethod]

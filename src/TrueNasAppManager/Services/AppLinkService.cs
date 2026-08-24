@@ -21,6 +21,8 @@ public interface IAppLinkService
 
 public sealed class AppLinkService : IAppLinkService
 {
+    private const string DefaultLocalOrigin = "http://truenas.local";
+
     /// <inheritdoc cref="IAppLinkService.ResolveWebUiLinks"/>
     public AppWebUiLinks ResolveWebUiLinks(AppRecord app, string? portalHostOverride, Uri currentManagerUri)
     {
@@ -43,7 +45,7 @@ public sealed class AppLinkService : IAppLinkService
             }
         }
 
-        localUrl ??= ResolveLocalUrl(app, portalHostOverride, currentManagerUri);
+        localUrl ??= ResolveLocalUrl(app, portalHostOverride);
         var selectedUrl = selectedRoute == WebUiRoute.Local ? localUrl : remoteUrl;
         return new AppWebUiLinks(localUrl, remoteUrl, selectedUrl, selectedRoute);
     }
@@ -66,7 +68,7 @@ public sealed class AppLinkService : IAppLinkService
         return IPAddress.TryParse(host, out var address) && IsLocalAddress(address) ? WebUiRoute.Local : WebUiRoute.Remote;
     }
 
-    private static string? ResolveLocalUrl(AppRecord app, string? portalHostOverride, Uri currentManagerUri)
+    private static string? ResolveLocalUrl(AppRecord app, string? portalHostOverride)
     {
         var portal = app.Portals.Select(item => NormalizeHttpUrl(item.Url)).FirstOrDefault(url => url is not null);
         var approvedHost = NormalizeHttpUrl(portalHostOverride);
@@ -77,7 +79,7 @@ public sealed class AppLinkService : IAppLinkService
 
         if (portal is not null)
         {
-            return portal;
+            return ShouldUseDefaultLocalHost(portal) ? RewritePortal(portal, DefaultLocalOrigin) : portal;
         }
 
         var firstPort = app.Ports.Where(item => item.Protocol.Equals("tcp", StringComparison.OrdinalIgnoreCase)).OrderBy(item => item.HostPort).FirstOrDefault();
@@ -86,19 +88,15 @@ public sealed class AppLinkService : IAppLinkService
             return null;
         }
 
-        var localHost = approvedHost;
-        if (localHost is null && IsSafeHttpUri(currentManagerUri) && IsLocalAddressOrName(currentManagerUri.Host))
-        {
-            localHost = currentManagerUri.GetLeftPart(UriPartial.Authority);
-        }
-
-        if (localHost is null)
-        {
-            return null;
-        }
-
+        var localHost = approvedHost ?? DefaultLocalOrigin;
         var hostUri = new Uri(localHost);
         return new UriBuilder(hostUri) { Port = firstPort.HostPort, Path = string.Empty, Query = string.Empty, Fragment = string.Empty }.Uri.AbsoluteUri;
+    }
+
+    private static bool ShouldUseDefaultLocalHost(string portal)
+    {
+        var host = new Uri(portal).Host;
+        return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) || IPAddress.TryParse(host, out _);
     }
 
     private static string RewritePortal(string portal, string approvedHost)
@@ -111,16 +109,6 @@ public sealed class AppLinkService : IAppLinkService
             Host = target.Host,
             Port = target.IsDefaultPort ? source.Port : target.Port
         }.Uri.AbsoluteUri;
-    }
-
-    private static bool IsLocalAddressOrName(string host)
-    {
-        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return IPAddress.TryParse(host, out var address) && IsLocalAddress(address);
     }
 
     private static bool IsLocalAddress(IPAddress address)

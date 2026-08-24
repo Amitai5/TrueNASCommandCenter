@@ -7,7 +7,7 @@ namespace TrueNasAppManager.Integrations.UptimeKuma;
 public interface IUptimeKumaSyncService
 {
     /// <summary>Imports the current read-only Uptime Kuma metrics into the local dashboard cache.</summary>
-    /// <param name="force">Whether to synchronize even when the integration is disabled.</param>
+    /// <param name="force">Whether the request is an explicit synchronization.</param>
     /// <param name="cancellationToken">A token that cancels synchronization.</param>
     /// <returns>The synchronization result.</returns>
     Task<UptimeKumaSyncResult> SynchronizeAsync(bool force = false, CancellationToken cancellationToken = default);
@@ -25,9 +25,9 @@ public sealed class UptimeKumaSyncService(IDbContextFactory<AppDbContext> dbFact
         {
             await using var initialDb = await dbFactory.CreateDbContextAsync(cancellationToken);
             var initialSettings = await initialDb.Settings.AsNoTracking().SingleAsync(item => item.Id == 1, cancellationToken);
-            if (!force && !initialSettings.UptimeKumaEnabled)
+            if (string.IsNullOrWhiteSpace(initialSettings.UptimeKumaBaseUrl))
             {
-                return new UptimeKumaSyncResult(false, "Uptime Kuma integration is disabled.");
+                return new UptimeKumaSyncResult(false, "Uptime Kuma is not configured.");
             }
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -56,6 +56,7 @@ public sealed class UptimeKumaSyncService(IDbContextFactory<AppDbContext> dbFact
                 settings.LastUptimeKumaSyncUtc = now;
                 settings.LastUptimeKumaSuccessUtc = now;
                 settings.LastUptimeKumaError = null;
+                settings.UptimeKumaEnabled = true;
                 await db.SaveChangesAsync(cancellationToken);
                 return new UptimeKumaSyncResult(true, $"Imported {metrics.Count} Uptime Kuma monitor{(metrics.Count == 1 ? string.Empty : "s")}.", metrics.Count);
             }
@@ -70,6 +71,7 @@ public sealed class UptimeKumaSyncService(IDbContextFactory<AppDbContext> dbFact
                 var settings = await db.Settings.SingleAsync(item => item.Id == 1, cancellationToken);
                 settings.LastUptimeKumaSyncUtc = now;
                 settings.LastUptimeKumaError = exception.Message;
+                settings.UptimeKumaEnabled = true;
                 await db.SaveChangesAsync(cancellationToken);
                 return new UptimeKumaSyncResult(false, exception.Message);
             }

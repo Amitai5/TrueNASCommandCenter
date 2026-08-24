@@ -153,7 +153,7 @@
                             </td>
                             <td>
                                 <div class="actions">
-                                    <a class="button small" href="@PolicyPath(app.Id)">Policy</a>
+                                    <a class="button small" href="@AppSettingsPath(app.Id)">Settings</a>
                                     <a class="button small" href="@AppPath(app.Id)">Details</a>
                                     @if (webUi is not null)
                                     {
@@ -193,7 +193,7 @@
                         <span class="badge @KumaClass(app)">Kuma: @KumaText(app)</span>
                     </div>
                     <div class="actions">
-                        <a class="button small" href="@PolicyPath(app.Id)">Edit policy</a>
+                        <a class="button small" href="@AppSettingsPath(app.Id)">Settings</a>
                         <a class="button small" href="@AppPath(app.Id)">View details</a>
                         @if (webUi is not null)
                         {
@@ -510,7 +510,7 @@
 
     private static string AppPath(string appId) => $"/apps/{Uri.EscapeDataString(appId)}";
 
-    private static string PolicyPath(string appId) => $"/apps/{Uri.EscapeDataString(appId)}/policy";
+    private static string AppSettingsPath(string appId) => $"/apps/{Uri.EscapeDataString(appId)}/settings";
 
     private static bool IsDown(string state) => state is "STOPPED" or "CRASHED";
 

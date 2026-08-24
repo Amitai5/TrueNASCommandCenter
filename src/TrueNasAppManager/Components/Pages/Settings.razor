@@ -101,7 +101,6 @@
                         <h2>Uptime Kuma integration</h2>
                         <p class="field-help">Imports read-only Prometheus metrics. Uptime Kuma remains responsible for probes, alerts, and incident history.</p>
                     </div>
-                    <input aria-label="Uptime Kuma integration enabled" type="checkbox" @bind="_model.UptimeKumaEnabled" />
                 </div>
 
                 <div class="field">
@@ -143,13 +142,14 @@
                     <button class="primary" disabled="@_busy" @onclick="SyncUptimeKumaAsync">Sync now</button>
                     <a class="button" href="/monitoring">View monitoring</a>
                 </div>
+                <p class="field-help">Saving a connection URL starts automatic imports on the configured interval. Testing validates the saved connection, and Sync now imports a report immediately.</p>
             </section>
 
             <aside>
                 <section class="panel">
                     <h2>Connection state</h2>
                     <dl class="details-list">
-                        <dt>Enabled</dt><dd>@(_record?.UptimeKumaEnabled == true ? "Yes" : "No")</dd>
+                        <dt>Status</dt><dd>@(!string.IsNullOrWhiteSpace(_record?.UptimeKumaBaseUrl) ? "Automatic" : "Not configured")</dd>
                         <dt>Last attempt</dt><dd>@FormatDate(_record?.LastUptimeKumaSyncUtc)</dd>
                         <dt>Last success</dt><dd>@FormatDate(_record?.LastUptimeKumaSuccessUtc)</dd>
                     </dl>
@@ -317,8 +317,8 @@
                 </div>
                 <div class="field">
                     <label for="portal-host">Local TrueNAS Web UI host</label>
-                    <input id="portal-host" type="url" placeholder="https://truenas.local" @bind="_model.PortalHostOverride" />
-                    <p class="field-help">Optional local origin used to rewrite TrueNAS portals or pair with published ports. Remote Web UI links are configured per app.</p>
+                    <input id="portal-host" type="url" placeholder="http://truenas.local" @bind="_model.PortalHostOverride" />
+                    <p class="field-help">Defaults to <code>http://truenas.local</code>. Set an override only when your TrueNAS host uses a different local name or HTTPS origin.</p>
                 </div>
                 <div class="toggle-row">
                     <input id="github-enrichment" type="checkbox" @bind="_model.GitHubEnrichmentEnabled" />

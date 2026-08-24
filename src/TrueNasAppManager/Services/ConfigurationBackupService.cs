@@ -211,7 +211,7 @@ public sealed class ConfigurationBackupService(
         settings.ConnectionFailureCooldownMinutes,
         settings.HistoryRetentionDays,
         settings.ManagerAppId,
-        settings.UptimeKumaEnabled,
+        !string.IsNullOrWhiteSpace(settings.UptimeKumaBaseUrl),
         settings.UptimeKumaBaseUrl,
         settings.UptimeKumaBrowserUrl,
         settings.UptimeKumaVerifyTls,
@@ -328,8 +328,8 @@ public sealed class ConfigurationBackupService(
         target.ManagerAppId = NullIfWhiteSpace(source.ManagerAppId);
         if (schemaVersion >= 2)
         {
-            target.UptimeKumaEnabled = source.UptimeKumaEnabled ?? false;
             target.UptimeKumaBaseUrl = NormalizeOptionalHttpUrl(source.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
+            target.UptimeKumaEnabled = target.UptimeKumaBaseUrl is not null;
             target.UptimeKumaBrowserUrl = NormalizeOptionalHttpUrl(source.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
             target.UptimeKumaVerifyTls = source.UptimeKumaVerifyTls ?? true;
             target.UptimeKumaRefreshIntervalSeconds = source.UptimeKumaRefreshIntervalSeconds ?? 60;
