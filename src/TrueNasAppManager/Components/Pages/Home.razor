@@ -11,7 +11,7 @@
 
 <PageTitle>Apps · TrueNAS App Manager</PageTitle>
 
-<div class="page">
+<div class="page apps-page">
     <header class="page-header">
         <div>
             <h1>Apps</h1>
@@ -86,7 +86,7 @@
     else
     {
         var filteredApps = FilterApps();
-        <div class="app-search-bar">
+        <div class="app-search-bar panel-toolbar">
             <div class="field">
                 <label class="visually-hidden" for="app-search">Search applications</label>
                 <input id="app-search" type="search" placeholder="Search apps by name, status, version, or port" autocomplete="off" @bind="_searchTerm" @bind:event="oninput" />
@@ -114,7 +114,6 @@
                     <tr>
                         <th>Application</th>
                         <th>Health</th>
-                        <th>Kuma</th>
                         <th>Ports</th>
                         <th>Version / update</th>
                         <th>Policy</th>
@@ -130,8 +129,10 @@
                                 <a class="app-name" href="@AppPath(app.Id)">@app.Name</a>
                                 <span class="app-meta">@(app.IsCustom ? "Custom" : app.Train ?? "Catalog")</span>
                             </td>
-                            <td><span class="badge @HealthClass(app.HealthState)">@HealthText(app.HealthState)</span></td>
-                            <td><span class="badge @KumaClass(app)">@KumaText(app)</span></td>
+                            <td class="health-monitoring-cell">
+                                <span class="badge @HealthClass(app.HealthState)">@HealthText(app.HealthState)</span>
+                                <span class="app-meta">Kuma: @KumaText(app)</span>
+                            </td>
                             <td>
                                 @if (app.Ports.Count == 0)
                                 {
@@ -152,8 +153,8 @@
                             </td>
                             <td>
                                 <div class="actions">
-                                    <a class="button small" href="@PolicyPath(app.Id)">Edit policy</a>
-                                    <a class="button small" href="@AppPath(app.Id)">View details</a>
+                                    <a class="button small" href="@PolicyPath(app.Id)">Policy</a>
+                                    <a class="button small" href="@AppPath(app.Id)">Details</a>
                                     @if (webUi is not null)
                                     {
                                         <a class="button small primary" href="@webUi" target="_blank" rel="noopener noreferrer">Web UI ↗</a>

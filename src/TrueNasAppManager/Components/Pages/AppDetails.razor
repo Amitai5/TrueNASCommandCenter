@@ -46,19 +46,19 @@
                     <a class="button" href="@PolicyPath()">Configure @RouteLabel() Web UI</a>
                 }
                 <a class="button" href="@PolicyPath()">Edit policy</a>
-                <button disabled="@_busy" @onclick="CheckAsync">Check app now</button>
+                    <button disabled="@_busy" @onclick="CheckAsync">Check now</button>
                 @if (_app.State is "STOPPED" or "CRASHED")
                 {
-                    <button class="primary" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Start)">Start app</button>
+                    <button class="primary" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Start)">Start</button>
                 }
                 else
                 {
-                    <button disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Restart)">Restart app</button>
-                    <button class="danger" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Stop)">Stop app</button>
+                    <button disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Restart)">Restart</button>
+                    <button class="danger" disabled="@_busy" @onclick="() => ManageAsync(AppLifecycleAction.Stop)">Stop</button>
                 }
                 @if (_app.CatalogUpdateAvailable || _app.ImageUpdateAvailable)
                 {
-                    <button class="primary" disabled="@(_busy || _app.ActionRequired)" @onclick="UpdateAsync">Update now</button>
+                    <button class="primary" disabled="@(_busy || _app.ActionRequired)" @onclick="UpdateAsync">Update</button>
                 }
             </div>
         </header>
@@ -364,6 +364,9 @@
     [Parameter]
     public string AppId { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery(Name = "saved")]
+    public string? SavedState { get; set; }
+
     private AppRecord? _app;
     private List<UpdateAttempt> _attempts = [];
     private List<string> _images = [];
@@ -393,6 +396,11 @@
     protected override async Task OnParametersSetAsync()
     {
         await LoadAsync();
+        if (string.Equals(SavedState, "policy", StringComparison.Ordinal))
+        {
+            _message = "Policy saved.";
+            _error = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

@@ -14,18 +14,21 @@
 
 <PageTitle>Settings · TrueNAS App Manager</PageTitle>
 
-<div class="page">
-    <header class="page-header">
+<div class="page settings-page">
+    <header class="page-header settings-header">
         <div>
             <h1>Settings</h1>
             <p class="subtitle">Connection, schedule, notifications, and safety. Running @ApplicationVersion.Display.</p>
         </div>
-        <button class="primary" disabled="@(_busy || _model is null)" @onclick="SaveAsync">Save settings</button>
+        <button class="primary" disabled="@(_busy || _model is null)" aria-busy="@_busy" @onclick="SaveAsync">@(_busy ? "Saving…" : "Save settings")</button>
     </header>
 
     @if (!string.IsNullOrWhiteSpace(_message))
     {
-        <div class="notice @(_error ? "danger" : "success")" role="status">@_message</div>
+        <div class="notice settings-toast @(_error ? "danger" : "success")" role="status">
+            <span>@_message</span>
+            <button class="notice-dismiss" type="button" aria-label="Dismiss message" @onclick="DismissMessage">×</button>
+        </div>
     }
     else if (!string.IsNullOrWhiteSpace(_record?.LastConnectionError))
     {
@@ -35,7 +38,7 @@
         </div>
     }
 
-    <div class="tabs" role="tablist">
+    <div class="tabs settings-tabs" role="tablist" aria-label="Settings sections">
         <button class="@TabClass("connection")" @onclick='() => _tab = "connection"'>Connection</button>
         <button class="@TabClass("monitoring")" @onclick='() => _tab = "monitoring"'>Uptime Kuma</button>
         <button class="@TabClass("schedule")" @onclick='() => _tab = "schedule"'>Schedule</button>
@@ -410,6 +413,7 @@
             <p class="muted">Portable backups exclude discovered inventory, live state, logs, health incidents, GitHub cache, notifications, and update history. Continue backing up the persistent <code>/data</code> volume when you need a complete database and history restore.</p>
         </section>
     }
+
 </div>
 
 @code {
@@ -435,6 +439,12 @@
     {
         _model = await SettingsService.GetFormAsync();
         _record = await SettingsService.GetRecordAsync();
+    }
+
+    private void DismissMessage()
+    {
+        _message = null;
+        _error = false;
     }
 
     private async Task SaveAsync()

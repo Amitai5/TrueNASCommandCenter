@@ -7,16 +7,16 @@
         </a>
         <nav>
             <NavLink href="/" Match="NavLinkMatch.All">
-                <span aria-hidden="true">◉</span> Apps
+                <NavIcon Name="apps" /> Apps
             </NavLink>
             <NavLink href="/history">
-                <span aria-hidden="true">≡</span> History
+                <NavIcon Name="history" /> History
             </NavLink>
             <NavLink href="/monitoring">
-                <span aria-hidden="true">⌁</span> Monitoring
+                <NavIcon Name="monitoring" /> Monitoring
             </NavLink>
             <NavLink href="/settings">
-                <span aria-hidden="true">⚙</span> Settings
+                <NavIcon Name="settings" /> Settings
             </NavLink>
         </nav>
         <div class="sidebar-footer">
@@ -30,7 +30,7 @@
                     <span data-theme-label>Theme</span>
                 </button>
                 <NavLink class="sidebar-utility" href="/help">
-                    <span aria-hidden="true">?</span> Help
+                    <NavIcon Name="help" /> Help
                 </NavLink>
             </div>
         </div>
@@ -41,11 +41,11 @@
     </main>
 
     <nav class="mobile-nav" aria-label="Primary navigation">
-        <NavLink href="/" Match="NavLinkMatch.All"><span>◉</span>Apps</NavLink>
-        <NavLink href="/history"><span>≡</span>History</NavLink>
-        <NavLink href="/monitoring"><span>⌁</span>Monitor</NavLink>
-        <NavLink href="/settings"><span>⚙</span>Settings</NavLink>
-        <NavLink href="/help"><span>?</span>Help</NavLink>
+        <NavLink href="/" Match="NavLinkMatch.All"><NavIcon Name="apps" />Apps</NavLink>
+        <NavLink href="/history"><NavIcon Name="history" />History</NavLink>
+        <NavLink href="/monitoring"><NavIcon Name="monitoring" />Monitor</NavLink>
+        <NavLink href="/settings"><NavIcon Name="settings" />Settings</NavLink>
+        <NavLink href="/help"><NavIcon Name="help" />Help</NavLink>
         <button type="button" class="theme-toggle mobile-theme-toggle" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
             <span data-theme-icon aria-hidden="true">◐</span>
             <span data-theme-label>Theme</span>

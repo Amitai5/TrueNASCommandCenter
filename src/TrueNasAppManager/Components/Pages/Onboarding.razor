@@ -10,7 +10,7 @@
 
 <PageTitle>Setup · TrueNAS App Manager</PageTitle>
 
-<div class="page" style="max-width:900px">
+<div class="page onboarding-page">
     <header class="page-header">
         <div>
             <h1>First launch setup</h1>
@@ -20,6 +20,16 @@
             <a class="button small" href="/help#first-connection" target="_blank" rel="noopener">Setup help ↗</a>
         </div>
     </header>
+
+    <ol class="setup-progress" aria-label="Setup progress">
+        @for (var step = 1; step <= 4; step++)
+        {
+            <li class="@(step < _step ? "complete" : step == _step ? "active" : string.Empty)" aria-current="@(step == _step ? "step" : null)">
+                <span>@(step < _step ? "✓" : step)</span>
+                <strong>@SetupStepName(step)</strong>
+            </li>
+        }
+    </ol>
 
     @if (!string.IsNullOrWhiteSpace(_message))
     {
@@ -325,6 +335,14 @@
     }
 
     private void Finish() => Navigation.NavigateTo("/");
+
+    private static string SetupStepName(int step) => step switch
+    {
+        1 => "Connect",
+        2 => "Schedule",
+        3 => "Notify",
+        _ => "Discover"
+    };
 
     private RenderFragment WizardNavigation() => @<div class="actions" style="justify-content:space-between;margin-top:1.5rem">
         <button @onclick="Back">Back</button>

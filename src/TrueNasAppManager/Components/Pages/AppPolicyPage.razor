@@ -5,7 +5,7 @@
 
 <PageTitle>App policy · TrueNAS App Manager</PageTitle>
 
-<div class="page">
+<div class="page policy-page">
     @if (_app is null)
     {
         <div class="panel empty-state">
@@ -29,8 +29,8 @@
             <div class="notice @(_error ? "danger" : "success")">@_message</div>
         }
 
-        <div class="split-layout">
-            <section class="panel">
+        <div class="split-layout policy-layout">
+            <section class="panel policy-form">
                 <div class="panel-header">
                     <h2>Update policy</h2>
                     <span class="badge @(_app.ActionRequired ? "danger" : "success")">
@@ -145,9 +145,12 @@
                     }
                 </div>
 
-                <div class="actions" style="justify-content:flex-end;margin-top:1.5rem">
-                    <button @onclick="Cancel">Cancel</button>
-                    <button class="primary" disabled="@_saving" @onclick="SaveAsync">Save policy</button>
+                <div class="form-action-bar">
+                    <span>Saving returns you to app details.</span>
+                    <div class="actions">
+                        <button disabled="@_saving" @onclick="Cancel">Cancel</button>
+                        <button class="primary" disabled="@_saving" aria-busy="@_saving" @onclick="SaveAsync">@(_saving ? "Saving…" : "Save & return")</button>
+                    </div>
                 </div>
             </section>
 
@@ -298,9 +301,7 @@
             }
 
             await db.SaveChangesAsync();
-            _message = "Policy saved.";
-            _error = false;
-            await OnParametersSetAsync();
+            Navigation.NavigateTo($"{AppPath()}?saved=policy", replace: true);
         }
         catch (Exception exception)
         {

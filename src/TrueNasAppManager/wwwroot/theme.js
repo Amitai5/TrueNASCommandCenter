@@ -18,12 +18,16 @@
 
     function applyTheme() {
         const theme = resolveTheme();
-        const nextTheme = theme === "dark" ? "light" : "dark";
         const root = document.documentElement;
 
         root.dataset.theme = theme;
         root.style.colorScheme = theme;
-        document.getElementById("theme-color")?.setAttribute("content", theme === "dark" ? "#0f1117" : "#fafafc");
+        document.getElementById("theme-color")?.setAttribute("content", theme === "dark" ? "#0d1118" : "#f4f6fa");
+        updateThemeButtons(theme);
+    }
+
+    function updateThemeButtons(theme) {
+        const nextTheme = theme === "dark" ? "light" : "dark";
 
         document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
             button.setAttribute("aria-pressed", String(theme === "dark"));
@@ -76,6 +80,19 @@
             applyTheme();
         }
     });
+
+    const themeControlObserver = new MutationObserver((records) => {
+        const hasNewThemeControl = records.some((record) =>
+            Array.from(record.addedNodes).some((node) =>
+                node instanceof Element &&
+                (node.matches("[data-theme-toggle]") || node.querySelector("[data-theme-toggle]"))));
+
+        if (hasNewThemeControl) {
+            updateThemeButtons(resolveTheme());
+        }
+    });
+
+    themeControlObserver.observe(document.body, { childList: true, subtree: true });
 
     applyTheme();
 })();
