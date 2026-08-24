@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TrueNasAppManager.Data;
 using TrueNasAppManager.Domain;
+using TrueNasAppManager.Integrations.UptimeKuma;
 
 namespace TrueNasAppManager.Services;
 
@@ -37,6 +38,13 @@ public sealed class SettingsFormModel
     public int ConnectionFailureCooldownMinutes { get; set; } = 360;
     public int? HistoryRetentionDays { get; set; }
     public string? ManagerAppId { get; set; }
+    public bool UptimeKumaEnabled { get; set; }
+    public string? UptimeKumaBaseUrl { get; set; }
+    public string? UptimeKumaBrowserUrl { get; set; }
+    public string? NewUptimeKumaApiKey { get; set; }
+    public bool HasSavedUptimeKumaApiKey { get; set; }
+    public bool UptimeKumaVerifyTls { get; set; } = true;
+    public int UptimeKumaRefreshIntervalSeconds { get; set; } = 60;
 }
 
 public sealed class SettingsService(
@@ -83,7 +91,13 @@ public sealed class SettingsService(
             VerificationTimeoutSeconds = settings.VerificationTimeoutSeconds,
             ConnectionFailureCooldownMinutes = settings.ConnectionFailureCooldownMinutes,
             HistoryRetentionDays = settings.HistoryRetentionDays,
-            ManagerAppId = settings.ManagerAppId
+            ManagerAppId = settings.ManagerAppId,
+            UptimeKumaEnabled = settings.UptimeKumaEnabled,
+            UptimeKumaBaseUrl = settings.UptimeKumaBaseUrl,
+            UptimeKumaBrowserUrl = settings.UptimeKumaBrowserUrl,
+            HasSavedUptimeKumaApiKey = !string.IsNullOrWhiteSpace(settings.UptimeKumaApiKeyEncrypted),
+            UptimeKumaVerifyTls = settings.UptimeKumaVerifyTls,
+            UptimeKumaRefreshIntervalSeconds = settings.UptimeKumaRefreshIntervalSeconds
         };
     }
 
@@ -120,10 +134,16 @@ public sealed class SettingsService(
         settings.ConnectionFailureCooldownMinutes = model.ConnectionFailureCooldownMinutes;
         settings.HistoryRetentionDays = model.HistoryRetentionDays;
         settings.ManagerAppId = NullIfWhiteSpace(model.ManagerAppId);
+        settings.UptimeKumaEnabled = model.UptimeKumaEnabled;
+        settings.UptimeKumaBaseUrl = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
+        settings.UptimeKumaBrowserUrl = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
+        settings.UptimeKumaVerifyTls = model.UptimeKumaVerifyTls;
+        settings.UptimeKumaRefreshIntervalSeconds = model.UptimeKumaRefreshIntervalSeconds;
 
         ReplaceSecret(model.NewTrueNasApiKey, value => settings.TrueNasApiKeyEncrypted = value);
         ReplaceSecret(model.NewWebhookAuthorization, value => settings.WebhookAuthorizationEncrypted = value);
         ReplaceSecret(model.WebhookHeaders, value => settings.WebhookHeadersEncrypted = value);
+        ReplaceSecret(model.NewUptimeKumaApiKey, value => settings.UptimeKumaApiKeyEncrypted = value);
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -157,6 +177,11 @@ public sealed class SettingsService(
 
         return ParseHeaders(value);
     }
+
+    /// <summary>Decrypts the saved Uptime Kuma Prometheus API key when one is configured.</summary>
+    /// <param name="settings">The persisted settings record containing the protected key.</param>
+    /// <returns>The plaintext key for an outbound request, or null when no key is configured.</returns>
+    public string? ReadUptimeKumaApiKey(SettingsRecord settings) => ReadSecret(settings.UptimeKumaApiKeyEncrypted);
 
     private static void Validate(SettingsFormModel model)
     {
@@ -192,10 +217,18 @@ public sealed class SettingsService(
 
         _ = ParseHeaders(model.WebhookHeaders);
 
+        _ = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
+        _ = NormalizeOptionalUptimeKumaUrl(model.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
+        if (model.UptimeKumaEnabled && string.IsNullOrWhiteSpace(model.UptimeKumaBaseUrl))
+        {
+            throw new InvalidOperationException("An enabled Uptime Kuma integration requires a connection URL.");
+        }
+
         if (model.WebhookTimeoutSeconds is < 1 or > 120 ||
             model.VerificationTimeoutSeconds is < 30 or > 1800 ||
             model.ConnectionFailureCooldownMinutes is < 1 or > 10080 ||
-            model.HistoryRetentionDays is < 1)
+            model.HistoryRetentionDays is < 1 ||
+            model.UptimeKumaRefreshIntervalSeconds is < 30 or > 3600)
         {
             throw new InvalidOperationException("One or more advanced settings are outside the allowed range.");
         }
@@ -276,6 +309,16 @@ public sealed class SettingsService(
         }
 
         return uri.GetLeftPart(UriPartial.Authority);
+    }
+
+    private static string? NormalizeOptionalUptimeKumaUrl(string? value, string label)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return UptimeKumaClient.ParseBaseUri(value, label).AbsoluteUri;
     }
 }
 

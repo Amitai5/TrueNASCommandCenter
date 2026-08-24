@@ -29,9 +29,11 @@ public sealed class ConfigurationBackupServiceTests
             var settings = await mutate.Settings.SingleAsync();
             settings.SchedulerEnabled = false;
             settings.TrueNasApiKeyEncrypted = protector.Protect("replacement-key");
+            settings.UptimeKumaApiKeyEncrypted = protector.Protect("kuma-replacement");
             var plex = await mutate.Apps.SingleAsync(app => app.Id == "plex");
             plex.Name = "Plex current";
             plex.Policy = AppPolicy.Ignore;
+            (await mutate.UptimeKumaMonitors.SingleAsync()).AppId = null;
             mutate.Apps.Add(CreateConfiguredApp("unlisted", AppPolicy.NotifyOnly));
             await mutate.SaveChangesAsync();
         }
@@ -44,9 +46,13 @@ public sealed class ConfigurationBackupServiceTests
         var restoredSettings = await verify.Settings.SingleAsync();
         Assert.IsTrue(restoredSettings.SchedulerEnabled);
         Assert.AreEqual("replacement-key", protector.Unprotect(restoredSettings.TrueNasApiKeyEncrypted!));
+        Assert.IsTrue(restoredSettings.UptimeKumaEnabled);
+        Assert.AreEqual("http://kuma.local:3001/", restoredSettings.UptimeKumaBaseUrl);
+        Assert.AreEqual("kuma-replacement", protector.Unprotect(restoredSettings.UptimeKumaApiKeyEncrypted!));
         var restoredPlex = await verify.Apps.SingleAsync(app => app.Id == "plex");
         Assert.AreEqual("Plex current", restoredPlex.Name);
         Assert.AreEqual(AppPolicy.AutoUpdate, restoredPlex.Policy);
+        Assert.AreEqual("plex", (await verify.UptimeKumaMonitors.SingleAsync()).AppId);
         Assert.AreEqual(AppPolicy.NotifyOnly, (await verify.Apps.SingleAsync(app => app.Id == "unlisted")).Policy);
         Assert.AreEqual(1, await verify.UpdateRuns.CountAsync());
     }
@@ -75,6 +81,7 @@ public sealed class ConfigurationBackupServiceTests
             var settings = await mutate.Settings.SingleAsync();
             settings.TrueNasApiKeyEncrypted = protector.Protect("replacement-key");
             settings.WebhookAuthorizationEncrypted = null;
+            settings.UptimeKumaApiKeyEncrypted = protector.Protect("kuma-replacement");
             await mutate.SaveChangesAsync();
         }
 
@@ -85,6 +92,7 @@ public sealed class ConfigurationBackupServiceTests
         var restored = await verify.Settings.SingleAsync();
         Assert.AreEqual("original-key", protector.Unprotect(restored.TrueNasApiKeyEncrypted!));
         Assert.AreEqual("Bearer original", protector.Unprotect(restored.WebhookAuthorizationEncrypted!));
+        Assert.AreEqual("kuma-original", protector.Unprotect(restored.UptimeKumaApiKeyEncrypted!));
     }
 
     [TestMethod]
@@ -160,6 +168,28 @@ public sealed class ConfigurationBackupServiceTests
     }
 
     [TestMethod]
+    [TestCategory("Unit")]
+    public async Task Preview_MonitorLinkedToMultipleAppsRejectsBackup()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        await SeedAppsAndHistoryAsync(database);
+        var service = CreateService(database, protector);
+        var backup = await service.ExportSafeAsync();
+        var document = JsonNode.Parse(backup.Json)!.AsObject();
+        var apps = document["configuration"]!["apps"]!.AsArray();
+        var duplicate = apps[0]!.DeepClone();
+        duplicate["appId"] = "duplicate-app";
+        duplicate["name"] = "Duplicate app";
+        apps.Add(duplicate);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(document.ToJsonString(), password: null));
+
+        StringAssert.Contains(exception.Message, "more than one app");
+    }
+
+    [TestMethod]
     [DataRow(99)]
     [DataRow(0)]
     [TestCategory("Unit")]
@@ -211,12 +241,19 @@ public sealed class ConfigurationBackupServiceTests
         settings.WebhookAuthorizationEncrypted = protector.Protect("Bearer original");
         settings.WebhookHeadersEncrypted = protector.Protect("X-Test: original");
         settings.PortalHostOverride = "https://truenas.local";
+        settings.UptimeKumaEnabled = true;
+        settings.UptimeKumaBaseUrl = "http://kuma.local:3001/";
+        settings.UptimeKumaBrowserUrl = "https://status.example.test/";
+        settings.UptimeKumaApiKeyEncrypted = protector.Protect("kuma-original");
+        settings.UptimeKumaVerifyTls = true;
+        settings.UptimeKumaRefreshIntervalSeconds = 60;
     }
 
     private static async Task SeedAppsAndHistoryAsync(TestDatabase database)
     {
         await using var db = await database.CreateDbContextAsync();
         db.Apps.Add(CreateConfiguredApp("plex", AppPolicy.AutoUpdate));
+        db.UptimeKumaMonitors.Add(new UptimeKumaMonitorRecord { MonitorId = "7", AppId = "plex", Name = "Plex", Type = "http", Status = UptimeKumaMonitorStatus.Up, IsPresent = true, LastSeenUtc = BackupTime.UtcDateTime });
         db.UpdateRuns.Add(new UpdateRun { Trigger = RunTrigger.CheckNow, StartedUtc = BackupTime.UtcDateTime, Status = RunStatus.Succeeded });
         await db.SaveChangesAsync();
     }

@@ -752,7 +752,7 @@ tr:last-child td {
 
 .app-detail-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     margin-bottom: 1rem;
     overflow: hidden;
     border: 1px solid var(--border);
@@ -973,10 +973,6 @@ tr:last-child td {
     margin-bottom: 0;
 }
 
-.backup-option.encrypted {
-    padding-bottom: 0;
-}
-
 .backup-summary {
     margin-top: 1rem;
     padding: 1rem;
@@ -1173,6 +1169,88 @@ tr:last-child td {
     display: none;
 }
 
+.monitoring-connection-row, .monitor-filters {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.monitoring-connection-row p {
+    margin: 0;
+}
+
+.monitor-filters .field:first-child {
+    flex: 1 1 420px;
+}
+
+.monitor-filter-status {
+    flex: 0 1 190px;
+}
+
+.uptime-values {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(55px, 1fr));
+    gap: 0.55rem;
+    min-width: 210px;
+}
+
+.uptime-values span {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.uptime-values small, .monitor-picker-item small {
+    color: var(--secondary);
+}
+
+.mobile-monitor-list {
+    display: none;
+}
+
+.monitor-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.6rem;
+    max-height: 320px;
+    padding: 0.75rem;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-alt);
+}
+
+.monitor-picker-item {
+    display: flex;
+    gap: 0.65rem;
+    align-items: flex-start;
+    padding: 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer;
+}
+
+.monitor-picker-item span, .monitor-picker-item small {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.kuma-monitor-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.kuma-monitor-row:last-of-type {
+    margin-bottom: 0.9rem;
+}
+
 .spinner {
     display: inline-block;
     width: 14px;
@@ -1216,7 +1294,7 @@ tr:last-child td {
         bottom: 0;
         left: 0;
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(6, 1fr);
         padding: 0.45rem max(0.45rem, env(safe-area-inset-right)) calc(0.45rem + env(safe-area-inset-bottom)) max(0.45rem, env(safe-area-inset-left));
         border-top: 1px solid var(--border);
         background: var(--mobile-nav-background);
@@ -1299,6 +1377,15 @@ tr:last-child td {
         border-bottom: 1px solid var(--border);
     }
 
+    .app-detail-summary > div:nth-child(4) {
+        border-right: 0;
+    }
+
+    .app-detail-summary > div:last-child {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--border);
+    }
+
     .app-detail-rail, .log-toolbar {
         grid-template-columns: 1fr;
     }
@@ -1310,6 +1397,40 @@ tr:last-child td {
     .mobile-app-list {
         display: grid;
         gap: 0.65rem;
+    }
+
+    .desktop-monitor-table {
+        display: none;
+    }
+
+    .mobile-monitor-list {
+        display: grid;
+        gap: 0.7rem;
+    }
+
+    .monitor-card {
+        margin: 0;
+    }
+
+    .monitor-card .row {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+        justify-content: space-between;
+    }
+
+    .monitor-card h2 {
+        margin-bottom: 0.2rem;
+    }
+
+    .monitor-filters {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .monitoring-connection-row {
+        align-items: flex-start;
     }
 
     .app-search-bar {

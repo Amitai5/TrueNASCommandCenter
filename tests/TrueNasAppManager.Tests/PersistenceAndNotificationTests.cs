@@ -59,6 +59,11 @@ public sealed class PersistenceAndNotificationTests
         var model = await service.GetFormAsync();
         model.TrueNasUsername = "service";
         model.NewTrueNasApiKey = "plain-api-secret";
+        model.UptimeKumaEnabled = true;
+        model.UptimeKumaBaseUrl = "http://kuma.local:3001";
+        model.UptimeKumaBrowserUrl = "https://status.example.test";
+        model.NewUptimeKumaApiKey = "plain-kuma-secret";
+        model.UptimeKumaRefreshIntervalSeconds = 90;
 
         await service.SaveAsync(model);
         await using (var db = await database.CreateDbContextAsync())
@@ -85,6 +90,12 @@ public sealed class PersistenceAndNotificationTests
         Assert.IsFalse(settings.AllowInsecureWebSocket);
         Assert.IsNull(form.NewTrueNasApiKey);
         Assert.IsTrue(form.HasSavedTrueNasApiKey);
+        Assert.IsTrue(settings.UptimeKumaEnabled);
+        Assert.AreEqual("http://kuma.local:3001/", settings.UptimeKumaBaseUrl);
+        Assert.AreEqual("https://status.example.test/", settings.UptimeKumaBrowserUrl);
+        Assert.DoesNotContain("plain-kuma-secret", settings.UptimeKumaApiKeyEncrypted!);
+        Assert.IsTrue(form.HasSavedUptimeKumaApiKey);
+        Assert.AreEqual(90, form.UptimeKumaRefreshIntervalSeconds);
     }
 
     /// <summary>Verifies that legacy database settings cannot override the deployment-configured endpoint.</summary>

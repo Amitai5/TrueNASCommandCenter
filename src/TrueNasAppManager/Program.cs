@@ -5,6 +5,7 @@ using TrueNasAppManager.Components;
 using TrueNasAppManager.Data;
 using TrueNasAppManager.Domain;
 using TrueNasAppManager.Integrations.TrueNas;
+using TrueNasAppManager.Integrations.UptimeKuma;
 using TrueNasAppManager.Notifications;
 using TrueNasAppManager.Scheduling;
 using TrueNasAppManager.Services;
@@ -54,6 +55,9 @@ builder.Services.AddScoped<IUpdateExecutor, UpdateExecutor>();
 builder.Services.AddScoped<IUpdateCoordinator, UpdateCoordinator>();
 builder.Services.AddSingleton<IAppLinkService, AppLinkService>();
 builder.Services.AddSingleton<IGitHubMetadataService, GitHubMetadataService>();
+builder.Services.AddSingleton<UptimeKumaMetricsParser>();
+builder.Services.AddSingleton<IUptimeKumaClient, UptimeKumaClient>();
+builder.Services.AddSingleton<IUptimeKumaSyncService, UptimeKumaSyncService>();
 builder.Services.AddScoped<IEmailNotificationSender, EmailNotificationSender>();
 builder.Services.AddScoped<IWebhookNotificationSender, WebhookNotificationSender>();
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
@@ -65,7 +69,16 @@ builder.Services.AddHttpClient("github", client =>
     client.BaseAddress = new Uri("https://api.github.com/");
     client.Timeout = TimeSpan.FromSeconds(5);
 });
+builder.Services.AddHttpClient("uptime-kuma", client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("uptime-kuma-insecure", client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
 builder.Services.AddHostedService<RunSchedulerBackgroundService>();
+builder.Services.AddHostedService<UptimeKumaSyncBackgroundService>();
 builder.Services.AddHealthChecks()
     .AddCheck("live", static () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), ["live"])
     .AddCheck<DatabaseReadyHealthCheck>("ready", tags: ["ready"]);

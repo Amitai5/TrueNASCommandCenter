@@ -108,6 +108,15 @@ public enum WebUiRoute
     Remote
 }
 
+public enum UptimeKumaMonitorStatus
+{
+    Unknown,
+    Down,
+    Up,
+    Pending,
+    Maintenance
+}
+
 public enum NotificationProvider
 {
     Email,

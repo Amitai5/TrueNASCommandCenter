@@ -50,7 +50,7 @@ public sealed class ConfigurationBackupService(
     IScheduleService scheduleService,
     TimeProvider timeProvider) : IConfigurationBackupService
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const int MaximumBackupBytes = 2 * 1024 * 1024;
     private const int PasswordIterations = 600_000;
     private const string AdditionalData = "TrueNasAppManager:configuration-backup:v1";
@@ -111,10 +111,10 @@ public sealed class ConfigurationBackupService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var settings = await db.Settings.SingleAsync(item => item.Id == 1, cancellationToken);
-        ApplySettings(settings, payload.Settings);
+        ApplySettings(settings, payload.Settings, envelope.SchemaVersion);
         if (envelope.IncludesSecrets)
         {
-            ApplySecrets(settings, payload.Secrets ?? throw new InvalidOperationException("The encrypted backup does not contain its secret configuration."));
+            ApplySecrets(settings, payload.Secrets ?? throw new InvalidOperationException("The encrypted backup does not contain its secret configuration."), envelope.SchemaVersion);
         }
 
         if (string.IsNullOrWhiteSpace(settings.TrueNasUsername) || string.IsNullOrWhiteSpace(settings.TrueNasApiKeyEncrypted))
@@ -142,6 +142,10 @@ public sealed class ConfigurationBackupService(
             }
 
             ApplyAppConfiguration(app, backupApp);
+            if (backupApp.UptimeKumaMonitorIds is not null)
+            {
+                await ApplyUptimeKumaMonitorLinksAsync(db, app.Id, backupApp.UptimeKumaMonitorIds, cancellationToken);
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -154,10 +158,10 @@ public sealed class ConfigurationBackupService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1, cancellationToken);
-        var apps = await db.Apps.AsNoTracking().OrderBy(app => app.Id).ToListAsync(cancellationToken);
+        var apps = await db.Apps.AsNoTracking().Include(app => app.UptimeKumaMonitors).OrderBy(app => app.Id).ToListAsync(cancellationToken);
         var appConfigurations = apps.Select(CreateAppBackup).ToList();
         var secrets = includeSecrets
-            ? new BackupSecrets(ReadSecret(settings.TrueNasApiKeyEncrypted), ReadSecret(settings.WebhookAuthorizationEncrypted), ReadSecret(settings.WebhookHeadersEncrypted))
+            ? new BackupSecrets(ReadSecret(settings.TrueNasApiKeyEncrypted), ReadSecret(settings.WebhookAuthorizationEncrypted), ReadSecret(settings.WebhookHeadersEncrypted), ReadSecret(settings.UptimeKumaApiKeyEncrypted))
             : null;
         return new BackupPayload(CreateSettingsBackup(settings), appConfigurations, secrets);
     }
@@ -179,7 +183,7 @@ public sealed class ConfigurationBackupService(
             }
         }
 
-        return new BackupAppConfiguration(app.Id, app.Name, app.Policy, app.VersionScope, app.SnapshotHostPaths, app.NotifySuccessOverride, app.DowntimeAction, app.MaintenanceMode, localUrl, remoteUrl);
+        return new BackupAppConfiguration(app.Id, app.Name, app.Policy, app.VersionScope, app.SnapshotHostPaths, app.NotifySuccessOverride, app.DowntimeAction, app.MaintenanceMode, localUrl, remoteUrl, app.UptimeKumaMonitors.Select(monitor => monitor.MonitorId).OrderBy(id => id, StringComparer.Ordinal).ToList());
     }
 
     private static BackupSettings CreateSettingsBackup(SettingsRecord settings) => new(
@@ -206,7 +210,12 @@ public sealed class ConfigurationBackupService(
         settings.VerificationTimeoutSeconds,
         settings.ConnectionFailureCooldownMinutes,
         settings.HistoryRetentionDays,
-        settings.ManagerAppId);
+        settings.ManagerAppId,
+        settings.UptimeKumaEnabled,
+        settings.UptimeKumaBaseUrl,
+        settings.UptimeKumaBrowserUrl,
+        settings.UptimeKumaVerifyTls,
+        settings.UptimeKumaRefreshIntervalSeconds);
 
     private void ValidatePayload(BackupPayload payload, bool includesSecrets)
     {
@@ -243,6 +252,8 @@ public sealed class ConfigurationBackupService(
 
         _ = NormalizePortalHost(payload.Settings.PortalHostOverride);
         _ = NormalizeOptionalHttpUrl(payload.Settings.WebhookUrl, "Webhook URL");
+        _ = NormalizeOptionalHttpUrl(payload.Settings.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
+        _ = NormalizeOptionalHttpUrl(payload.Settings.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
         if (payload.Settings.WebhookEnabled && string.IsNullOrWhiteSpace(payload.Settings.WebhookUrl))
         {
             throw new InvalidOperationException("The backup enables the webhook without providing a URL.");
@@ -251,7 +262,8 @@ public sealed class ConfigurationBackupService(
         if (payload.Settings.WebhookTimeoutSeconds is < 1 or > 120 ||
             payload.Settings.VerificationTimeoutSeconds is < 30 or > 1800 ||
             payload.Settings.ConnectionFailureCooldownMinutes is < 1 or > 10080 ||
-            payload.Settings.HistoryRetentionDays is < 1)
+            payload.Settings.HistoryRetentionDays is < 1 ||
+            payload.Settings.UptimeKumaRefreshIntervalSeconds is < 30 or > 3600)
         {
             throw new InvalidOperationException("The backup contains one or more advanced settings outside the allowed range.");
         }
@@ -271,10 +283,23 @@ public sealed class ConfigurationBackupService(
 
             _ = NormalizeOptionalHttpUrl(app.LocalPortalUrl, $"Local Web UI URL for {app.AppId}");
             _ = NormalizeOptionalHttpUrl(app.RemotePortalUrl, $"Remote Web UI URL for {app.AppId}");
+            if (app.UptimeKumaMonitorIds?.Any(string.IsNullOrWhiteSpace) == true || app.UptimeKumaMonitorIds?.Any(id => id.Length > 128) == true || app.UptimeKumaMonitorIds?.Distinct(StringComparer.Ordinal).Count() != app.UptimeKumaMonitorIds?.Count)
+            {
+                throw new InvalidOperationException($"The backup contains invalid or duplicate Uptime Kuma monitor IDs for app '{app.AppId}'.");
+            }
+        }
+
+        var duplicateMonitor = payload.Apps
+            .SelectMany(app => app.UptimeKumaMonitorIds ?? [])
+            .GroupBy(monitorId => monitorId, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateMonitor is not null)
+        {
+            throw new InvalidOperationException($"The backup links Uptime Kuma monitor '{duplicateMonitor.Key}' to more than one app.");
         }
     }
 
-    private static void ApplySettings(SettingsRecord target, BackupSettings source)
+    private static void ApplySettings(SettingsRecord target, BackupSettings source, int schemaVersion)
     {
         target.OnboardingCompleted = source.OnboardingCompleted;
         target.TrueNasUsername = NullIfWhiteSpace(source.TrueNasUsername);
@@ -301,13 +326,25 @@ public sealed class ConfigurationBackupService(
         target.ConnectionFailureCooldownMinutes = source.ConnectionFailureCooldownMinutes;
         target.HistoryRetentionDays = source.HistoryRetentionDays;
         target.ManagerAppId = NullIfWhiteSpace(source.ManagerAppId);
+        if (schemaVersion >= 2)
+        {
+            target.UptimeKumaEnabled = source.UptimeKumaEnabled ?? false;
+            target.UptimeKumaBaseUrl = NormalizeOptionalHttpUrl(source.UptimeKumaBaseUrl, "Uptime Kuma connection URL");
+            target.UptimeKumaBrowserUrl = NormalizeOptionalHttpUrl(source.UptimeKumaBrowserUrl, "Uptime Kuma browser URL");
+            target.UptimeKumaVerifyTls = source.UptimeKumaVerifyTls ?? true;
+            target.UptimeKumaRefreshIntervalSeconds = source.UptimeKumaRefreshIntervalSeconds ?? 60;
+        }
     }
 
-    private void ApplySecrets(SettingsRecord target, BackupSecrets secrets)
+    private void ApplySecrets(SettingsRecord target, BackupSecrets secrets, int schemaVersion)
     {
         target.TrueNasApiKeyEncrypted = ProtectOptional(secrets.TrueNasApiKey);
         target.WebhookAuthorizationEncrypted = ProtectOptional(secrets.WebhookAuthorization);
         target.WebhookHeadersEncrypted = ProtectOptional(secrets.WebhookHeaders);
+        if (schemaVersion >= 2)
+        {
+            target.UptimeKumaApiKeyEncrypted = ProtectOptional(secrets.UptimeKumaApiKey);
+        }
     }
 
     private static void ApplyAppConfiguration(AppRecord target, BackupAppConfiguration source)
@@ -331,6 +368,35 @@ public sealed class ConfigurationBackupService(
             target.DowntimeNotificationActive = false;
             target.HealthIncidentId = null;
             target.RecoveryAttemptedUtc = null;
+        }
+    }
+
+    private async Task ApplyUptimeKumaMonitorLinksAsync(AppDbContext db, string appId, IReadOnlyCollection<string> monitorIds, CancellationToken cancellationToken)
+    {
+        var linked = await db.UptimeKumaMonitors.Where(monitor => monitor.AppId == appId).ToListAsync(cancellationToken);
+        foreach (var monitor in linked)
+        {
+            monitor.AppId = null;
+        }
+
+        foreach (var monitorId in monitorIds.Distinct(StringComparer.Ordinal))
+        {
+            var monitor = await db.UptimeKumaMonitors.SingleOrDefaultAsync(item => item.MonitorId == monitorId, cancellationToken);
+            if (monitor is null)
+            {
+                monitor = new UptimeKumaMonitorRecord
+                {
+                    MonitorId = monitorId,
+                    Name = monitorId,
+                    Type = "unknown",
+                    Status = UptimeKumaMonitorStatus.Unknown,
+                    IsPresent = false,
+                    LastSeenUtc = timeProvider.GetUtcNow().UtcDateTime
+                };
+                db.UptimeKumaMonitors.Add(monitor);
+            }
+
+            monitor.AppId = appId;
         }
     }
 
@@ -366,9 +432,9 @@ public sealed class ConfigurationBackupService(
             throw new InvalidOperationException("The selected file is not a valid TrueNAS App Manager backup.", exception);
         }
 
-        if (envelope.SchemaVersion != SchemaVersion)
+        if (envelope.SchemaVersion is < 1 or > SchemaVersion)
         {
-            throw new InvalidOperationException($"Backup schema {envelope.SchemaVersion} is not supported. This version accepts schema {SchemaVersion}.");
+            throw new InvalidOperationException($"Backup schema {envelope.SchemaVersion} is not supported. This version accepts schemas 1 through {SchemaVersion}.");
         }
 
         if (envelope.ExportedAtUtc == default || string.IsNullOrWhiteSpace(envelope.ApplicationVersion))
@@ -602,7 +668,12 @@ internal sealed record BackupSettings(
     int VerificationTimeoutSeconds,
     int ConnectionFailureCooldownMinutes,
     int? HistoryRetentionDays,
-    string? ManagerAppId);
+    string? ManagerAppId,
+    bool? UptimeKumaEnabled = null,
+    string? UptimeKumaBaseUrl = null,
+    string? UptimeKumaBrowserUrl = null,
+    bool? UptimeKumaVerifyTls = null,
+    int? UptimeKumaRefreshIntervalSeconds = null);
 
 internal sealed record BackupAppConfiguration(
     string AppId,
@@ -614,8 +685,9 @@ internal sealed record BackupAppConfiguration(
     DowntimeAction DowntimeAction,
     bool MaintenanceMode,
     string? LocalPortalUrl,
-    string? RemotePortalUrl);
+    string? RemotePortalUrl,
+    List<string>? UptimeKumaMonitorIds = null);
 
-internal sealed record BackupSecrets(string? TrueNasApiKey, string? WebhookAuthorization, string? WebhookHeaders);
+internal sealed record BackupSecrets(string? TrueNasApiKey, string? WebhookAuthorization, string? WebhookHeaders, string? UptimeKumaApiKey = null);
 
 internal sealed record BackupEncryption(string Kdf, int Iterations, string Salt, string Cipher, string Nonce, string Tag, string Ciphertext);

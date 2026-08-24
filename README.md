@@ -22,8 +22,9 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Manual rollback to versions reported by TrueNAS
 - Per-app health policies: Ignore, Notify Only, or one automatic restart attempt plus notification
 - Top-level and container health, maintenance mode, recovery notifications, and lifecycle audit history
+- Read-only Uptime Kuma integration with imported monitor state, response time, uptime windows, certificate status, and explicit app mapping
 - Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
-- Portable secret-free JSON backups and optional password-encrypted full configuration backups
+- Portable secret-free JSON configuration backups with validated merge restore
 - Optional TrueNAS-native email and generic webhook notifications
 - Optional public GitHub repository facts with 24-hour ETag caching and no token
 - Encrypted API, Authorization, and secret-header values
@@ -199,10 +200,18 @@ Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fiel
 
 The app-details page prioritizes operations. It shows the current route, ports, health, workloads, versions, and lifecycle controls around a large live-log workspace. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
 
+## Uptime Kuma reports
+
+Open **Settings → Uptime Kuma** to connect the manager to an existing Uptime Kuma server. Configure the server-to-server connection URL, an optional browser URL, and a Prometheus API key created under **Uptime Kuma → Settings → Security → API Keys**. The connection URL can be a LAN address such as `http://truenas.local:3001`; the browser URL can be a separately published address such as `https://status.example.com`.
+
+The manager reads only Uptime Kuma's `/metrics` endpoint. It imports current monitor status, response time, 1-day/30-day/365-day uptime ratios, 30-day average response time, and certificate validity/expiry when Kuma publishes those metrics. Prometheus API keys require Uptime Kuma 1.21 or later; detailed uptime-window metrics require Uptime Kuma 2.x and appear as unavailable on older releases. The manager does not create probes, change monitors, import incident history, or duplicate Kuma notifications. Use **Edit policy** on an app to map one or more imported monitors, then view the consolidated report under **Monitoring** and the selected app's details page.
+
+The API key is stored encrypted. Keep TLS verification enabled for HTTPS connections whenever the certificate is trusted. A failed refresh leaves the last successful report visible and marks it stale instead of replacing it with an artificial outage.
+
 Open **Settings → Backup & restore** for portable configuration backups:
 
-- **Safe JSON** excludes API keys and webhook secrets. Importing it retains any secrets already stored in the destination.
-- **Encrypted JSON** includes stored secrets and protects them with password-derived AES-256-GCM authenticated encryption.
+- **Safe JSON** includes Uptime Kuma connection settings and app-to-monitor mappings, but excludes API keys and webhook secrets. Importing it retains any secrets already stored in the destination.
+- Previously created encrypted JSON backups remain importable with their password, but new encrypted exports are no longer offered in the UI.
 - Imports validate the complete file before a transactional merge. Listed app configurations are restored by app ID, unlisted apps and existing history remain unchanged, and undiscovered app policies are held until the next inventory refresh.
 
 Portable backups intentionally exclude inventory, logs, health incidents, GitHub cache, notifications, and update history. Continue backing up the persistent `/data` volume for complete disaster recovery. If `APP_ENCRYPTION_KEY` is configured externally, back it up separately.

@@ -81,6 +81,7 @@
             <div><span>Version</span><strong>@(_app.HumanVersion ?? _app.InstalledVersion ?? "Unknown")</strong></div>
             <div><span>Published ports</span><strong>@PortSummary()</strong></div>
             <div><span>Current route</span><strong>@RouteLabel()</strong></div>
+            <div><span>Uptime Kuma</span><strong><span class="status-dot @KumaAggregateClass()"></span>@KumaAggregateText()</strong></div>
         </section>
 
         <div class="app-detail-layout">
@@ -291,6 +292,32 @@
                 </section>
 
                 <section class="panel">
+                    <div class="panel-header">
+                        <h2>Uptime Kuma</h2>
+                        @if (KumaBrowserUrl() is not null)
+                        {
+                            <a href="@KumaBrowserUrl()" target="_blank" rel="noopener noreferrer">Open Kuma ↗</a>
+                        }
+                    </div>
+                    @if (_app.UptimeKumaMonitors.Count == 0)
+                    {
+                        <p class="muted">No Kuma monitors are linked to this app.</p>
+                        <a class="button small" href="@PolicyPath()">Link monitors</a>
+                    }
+                    else
+                    {
+                        @foreach (var monitor in _app.UptimeKumaMonitors.OrderBy(monitor => monitor.Name))
+                        {
+                            <div class="kuma-monitor-row">
+                                <div><strong>@monitor.Name</strong><span class="app-meta">@FormatMilliseconds(monitor.ResponseTimeMilliseconds) now · @FormatMilliseconds(monitor.AverageResponseTimeMilliseconds30Days) 30-day avg · @FormatPercent(monitor.UptimeRatio30Days) uptime</span></div>
+                                <span class="badge @KumaStatusClass(monitor.Status)">@KumaStatusText(monitor.Status)</span>
+                            </div>
+                        }
+                        <a class="button small" href="/monitoring">View monitoring reports</a>
+                    }
+                </section>
+
+                <section class="panel">
                     <h2>Workloads</h2>
                     @foreach (var container in _app.Containers)
                     {
@@ -380,7 +407,7 @@
     private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _app = await db.Apps.AsNoTracking().AsSplitQuery().Include(app => app.Ports).Include(app => app.Portals).Include(app => app.Containers).SingleOrDefaultAsync(app => app.Id == AppId);
+        _app = await db.Apps.AsNoTracking().AsSplitQuery().Include(app => app.Ports).Include(app => app.Portals).Include(app => app.Containers).Include(app => app.UptimeKumaMonitors).SingleOrDefaultAsync(app => app.Id == AppId);
         _settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1);
         _timeZoneId = _settings.TimeZoneId;
         _attempts = await db.UpdateAttempts.AsNoTracking().Where(attempt => attempt.AppId == AppId).OrderByDescending(attempt => attempt.StartedUtc).Take(10).ToListAsync();
@@ -683,6 +710,36 @@
     };
     private string PortSummary() => _app is null || _app.Ports.Count == 0 ? "None reported" : string.Join(", ", _app.Ports.OrderBy(port => port.HostPort).Select(port => port.HostPort));
     private string RouteLabel() => _webUiLinks?.SelectedRoute == WebUiRoute.Remote ? "Remote" : "Local";
+    private string? KumaBrowserUrl() => _settings?.UptimeKumaBrowserUrl ?? _settings?.UptimeKumaBaseUrl;
+    private string KumaAggregateText()
+    {
+        if (_app?.UptimeKumaMonitors.Count is null or 0)
+        {
+            return "Not linked";
+        }
+
+        if (_app.UptimeKumaMonitors.Any(monitor => monitor.Status == UptimeKumaMonitorStatus.Down))
+        {
+            return "Down";
+        }
+
+        if (_app.UptimeKumaMonitors.Any(monitor => monitor.Status == UptimeKumaMonitorStatus.Pending))
+        {
+            return "Pending";
+        }
+
+        if (_app.UptimeKumaMonitors.All(monitor => monitor.Status == UptimeKumaMonitorStatus.Maintenance))
+        {
+            return "Maintenance";
+        }
+
+        return _app.UptimeKumaMonitors.Any(monitor => monitor.Status == UptimeKumaMonitorStatus.Up) ? "Up" : "Unknown";
+    }
+    private string KumaAggregateClass() => KumaAggregateText() switch { "Up" => "success", "Down" => "danger", "Pending" => "warning", "Maintenance" => "info", _ => string.Empty };
+    private static string KumaStatusText(UptimeKumaMonitorStatus status) => status switch { UptimeKumaMonitorStatus.Up => "Up", UptimeKumaMonitorStatus.Down => "Down", UptimeKumaMonitorStatus.Pending => "Pending", UptimeKumaMonitorStatus.Maintenance => "Maintenance", _ => "Unknown" };
+    private static string KumaStatusClass(UptimeKumaMonitorStatus status) => status switch { UptimeKumaMonitorStatus.Up => "success", UptimeKumaMonitorStatus.Down => "danger", UptimeKumaMonitorStatus.Pending => "warning", UptimeKumaMonitorStatus.Maintenance => "info", _ => string.Empty };
+    private static string FormatPercent(double? value) => value is null ? "No uptime data" : $"{value.Value:P2}";
+    private static string FormatMilliseconds(double? value) => value is null ? "No response time" : $"{value.Value:N0} ms";
     private string LogPanelClass() => $"panel log-panel{(_fallbackFullscreen ? " log-panel-fallback" : string.Empty)}";
     private string FullscreenButtonText() => _nativeFullscreen || _fallbackFullscreen ? "Exit fullscreen" : "Fullscreen";
     private static string WorkloadStatusText(AppContainerRecord container) => IsCompletedPermissionsWorkload(container) ? "Exited normally" : ToTitleCase(container.State);

@@ -220,14 +220,29 @@ Configure separate **Local Web UI URL** and **Remote Web UI URL** values under *
 
 ## 7. Back up and restore configuration
 
-Open **Settings → Backup & restore** and choose the appropriate portable export:
+Open **Settings → Backup & restore** to create a portable export:
 
-- **Download safe JSON** backs up global settings and per-app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI URLs without secrets.
-- **Download encrypted JSON** includes the saved TrueNAS API key and webhook secrets. Enter and confirm a password; the file is authenticated and encrypted with AES-256-GCM using a PBKDF2-SHA256-derived key.
+- **Download safe JSON** backs up global settings, Uptime Kuma connection settings and mappings, per-app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI URLs without secrets.
 
-To restore, select a JSON file up to 2 MB, enter its password if encrypted, select **Validate & preview**, review the number of app configurations, and confirm the import. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. A safe restore preserves secrets already stored on the destination; a full encrypted restore replaces the secrets contained in the backup.
+To restore, select a JSON file up to 2 MB, enter its password when importing a previously created encrypted backup, select **Validate & preview**, review the number of app configurations, and confirm the import. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. A safe restore preserves secrets already stored on the destination; a legacy encrypted restore replaces the secrets contained in the backup.
 
 Portable configuration JSON does not contain inventory, logs, health incidents, GitHub cache, notification deliveries, or update history. Back up the persistent `/data` volume for a complete database/history recovery, and separately protect `APP_ENCRYPTION_KEY` when you provide it externally.
+
+## 8. Connect Uptime Kuma
+
+This integration is optional and read-only. Uptime Kuma remains responsible for probes, checks, alerts, and incident history; TrueNAS App Manager imports its current report instead of recreating those features.
+
+1. In Uptime Kuma, open **Settings → Security → API Keys** and create a Prometheus API key.
+2. In TrueNAS App Manager, open **Settings → Uptime Kuma** and enable the integration.
+3. Enter the **Connection URL** reachable from the App Manager container, for example `http://truenas.local:3001`.
+4. Optionally enter a separate **Browser URL**, for example `https://status.example.com`. Open links use this address, while background synchronization continues to use the connection URL.
+5. Enter the Uptime Kuma API key, keep TLS verification enabled for a trusted HTTPS certificate, choose a refresh interval, and select **Test connection**.
+6. Select **Sync now**, then open an app's **Edit policy** page to map one or more imported monitors.
+7. Open **Monitoring** for the consolidated report or the app's details page for its mapped monitor status.
+
+The manager reads `/metrics` using HTTP Basic authentication with an empty username and the API key as the password. Prometheus API keys require Uptime Kuma 1.21 or later. Detailed uptime-window and average-response metrics require Uptime Kuma 2.x; older releases still provide current status, response, and certificate metrics, while unavailable values display as a dash. It never stores Kuma administrator credentials or writes to Kuma.
+
+If a sync fails, confirm the connection address is reachable from the container, the API key is active, and the certificate is valid for the configured hostname. The last successful report remains cached and is labeled stale until synchronization succeeds again.
 
 ## Troubleshooting
 

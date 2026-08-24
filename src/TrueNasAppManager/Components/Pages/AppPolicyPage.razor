@@ -119,6 +119,32 @@
                     </div>
                 </div>
 
+                <div class="field" style="margin-top:1.25rem">
+                    <div class="panel-header">
+                        <div><label>Uptime Kuma monitors</label><p class="field-help">Link one or more Kuma probes to this app. Kuma availability remains separate from the TrueNAS runtime state.</p></div>
+                        @if (_uptimeKumaMonitors.Any(IsSuggestedMonitor))
+                        {
+                            <button class="small" type="button" @onclick="SelectSuggestedMonitors">Select suggested</button>
+                        }
+                    </div>
+                    @if (_uptimeKumaMonitors.Count == 0)
+                    {
+                        <p class="muted">No Uptime Kuma monitors have been imported. <a href="/settings">Configure the integration</a>, then sync it.</p>
+                    }
+                    else
+                    {
+                        <div class="monitor-picker">
+                            @foreach (var monitor in _uptimeKumaMonitors)
+                            {
+                                <label class="monitor-picker-item">
+                                    <input type="checkbox" checked="@_selectedMonitorIds.Contains(monitor.MonitorId)" @onchange="eventArgs => ToggleMonitor(monitor.MonitorId, eventArgs.Value is true)" />
+                                    <span><strong>@monitor.Name</strong><small>@MonitorTarget(monitor) · @monitor.Status @if (IsSuggestedMonitor(monitor)) { <text>· Suggested</text> }</small></span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </div>
+
                 <div class="actions" style="justify-content:flex-end;margin-top:1.5rem">
                     <button @onclick="Cancel">Cancel</button>
                     <button class="primary" disabled="@_saving" @onclick="SaveAsync">Save policy</button>
@@ -170,6 +196,8 @@
     private bool _maintenanceMode;
     private string? _localPortalUrl;
     private string? _remotePortalUrl;
+    private List<UptimeKumaMonitorRecord> _uptimeKumaMonitors = [];
+    private HashSet<string> _selectedMonitorIds = new(StringComparer.Ordinal);
     private bool _saving;
     private bool _error;
     private string? _message;
@@ -178,8 +206,9 @@
     protected override async Task OnParametersSetAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _app = await db.Apps.AsNoTracking().SingleOrDefaultAsync(app => app.Id == AppId);
+        _app = await db.Apps.AsNoTracking().Include(app => app.Ports).SingleOrDefaultAsync(app => app.Id == AppId);
         _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
+        _uptimeKumaMonitors = await db.UptimeKumaMonitors.AsNoTracking().Where(monitor => monitor.IsPresent).OrderBy(monitor => monitor.Name).ToListAsync();
         if (_app is null)
         {
             return;
@@ -192,6 +221,7 @@
         _maintenanceMode = _app.MaintenanceMode;
         _localPortalUrl = _app.LocalPortalUrl;
         _remotePortalUrl = _app.RemotePortalUrl;
+        _selectedMonitorIds = _uptimeKumaMonitors.Where(monitor => monitor.AppId == AppId).Select(monitor => monitor.MonitorId).ToHashSet(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(_localPortalUrl) && string.IsNullOrWhiteSpace(_remotePortalUrl) && Uri.TryCreate(_app.ManualPortalUrl, UriKind.Absolute, out var legacyPortal))
         {
             if (AppLinkService.ClassifyRoute(legacyPortal) == WebUiRoute.Local)
@@ -234,6 +264,16 @@
             app.LocalPortalUrl = NormalizeWebUiUrl(_localPortalUrl, "Local Web UI URL");
             app.RemotePortalUrl = NormalizeWebUiUrl(_remotePortalUrl, "Remote Web UI URL");
             app.ManualPortalUrl = null;
+            var previouslyLinkedMonitors = await db.UptimeKumaMonitors.Where(monitor => monitor.AppId == AppId).ToListAsync();
+            foreach (var monitor in previouslyLinkedMonitors)
+            {
+                monitor.AppId = null;
+            }
+            var selectedMonitors = await db.UptimeKumaMonitors.Where(monitor => _selectedMonitorIds.Contains(monitor.MonitorId)).ToListAsync();
+            foreach (var monitor in selectedMonitors)
+            {
+                monitor.AppId = AppId;
+            }
             if (app.DowntimeAction == DowntimeAction.Ignore)
             {
                 app.DowntimeNotificationActive = false;
@@ -301,4 +341,43 @@
 
         return uri.AbsoluteUri;
     }
+
+    private void ToggleMonitor(string monitorId, bool selected)
+    {
+        if (selected)
+        {
+            _selectedMonitorIds.Add(monitorId);
+        }
+        else
+        {
+            _selectedMonitorIds.Remove(monitorId);
+        }
+    }
+
+    private void SelectSuggestedMonitors()
+    {
+        foreach (var monitor in _uptimeKumaMonitors.Where(IsSuggestedMonitor))
+        {
+            _selectedMonitorIds.Add(monitor.MonitorId);
+        }
+    }
+
+    private bool IsSuggestedMonitor(UptimeKumaMonitorRecord monitor)
+    {
+        if (_app is null)
+        {
+            return false;
+        }
+
+        var normalizedAppName = NormalizeIdentity(_app.Name);
+        if (!string.IsNullOrWhiteSpace(normalizedAppName) && NormalizeIdentity(monitor.Name).Contains(normalizedAppName, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return monitor.Port is not null && _app.Ports.Any(port => port.HostPort == monitor.Port);
+    }
+
+    private static string NormalizeIdentity(string value) => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    private static string MonitorTarget(UptimeKumaMonitorRecord monitor) => monitor.Url ?? (monitor.Hostname is not null ? $"{monitor.Hostname}{(monitor.Port is null ? string.Empty : $":{monitor.Port}")}" : monitor.Port?.ToString() ?? "Target unavailable");
 }

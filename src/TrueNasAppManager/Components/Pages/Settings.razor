@@ -7,6 +7,8 @@
 @inject IUpdateCoordinator Coordinator
 @inject IAppDiscoveryService AppDiscoveryService
 @inject IConfigurationBackupService BackupService
+@inject IUptimeKumaClient UptimeKumaClient
+@inject IUptimeKumaSyncService UptimeKumaSyncService
 @inject TrueNasEndpointOptions TrueNasEndpoint
 @inject IJSRuntime JS
 
@@ -35,6 +37,7 @@
 
     <div class="tabs" role="tablist">
         <button class="@TabClass("connection")" @onclick='() => _tab = "connection"'>Connection</button>
+        <button class="@TabClass("monitoring")" @onclick='() => _tab = "monitoring"'>Uptime Kuma</button>
         <button class="@TabClass("schedule")" @onclick='() => _tab = "schedule"'>Schedule</button>
         <button class="@TabClass("notifications")" @onclick='() => _tab = "notifications"'>Notifications</button>
         <button class="@TabClass("advanced")" @onclick='() => _tab = "advanced"'>Advanced / Safety</button>
@@ -85,6 +88,87 @@
                 <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>
             </div>
         </section>
+    }
+    else if (_tab == "monitoring")
+    {
+        <div class="split-layout">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Uptime Kuma integration</h2>
+                        <p class="field-help">Imports read-only Prometheus metrics. Uptime Kuma remains responsible for probes, alerts, and incident history.</p>
+                    </div>
+                    <input aria-label="Uptime Kuma integration enabled" type="checkbox" @bind="_model.UptimeKumaEnabled" />
+                </div>
+
+                <div class="field">
+                    <label for="kuma-base-url">Connection URL</label>
+                    <input id="kuma-base-url" type="url" placeholder="http://truenas.local:3001" @bind="_model.UptimeKumaBaseUrl" />
+                    <p class="field-help">Used by this container to request <code>/metrics</code>. Enter the complete reachable URL, not only a port. Do not use 127.0.0.1 for another container.</p>
+                </div>
+                <div class="field" style="margin-top:1rem">
+                    <label for="kuma-browser-url">Browser URL</label>
+                    <input id="kuma-browser-url" type="url" placeholder="https://status.example.com" @bind="_model.UptimeKumaBrowserUrl" />
+                    <p class="field-help">Optional address used by Open Uptime Kuma links. It may differ from the server-to-server connection URL.</p>
+                </div>
+                <div class="field" style="margin-top:1rem">
+                    <label for="kuma-api-key">Prometheus API key</label>
+                    <input id="kuma-api-key" type="password" autocomplete="new-password"
+                           placeholder="@(_model.HasSavedUptimeKumaApiKey ? "Saved — enter to replace" : "Optional when Kuma authentication is disabled")"
+                           @bind="_model.NewUptimeKumaApiKey" />
+                    <p class="field-help">Create this in Uptime Kuma under Settings → Security → API Keys. Stored encrypted and never displayed again.</p>
+                </div>
+
+                <div class="form-grid" style="margin-top:1rem">
+                    <div class="toggle-row">
+                        <input id="kuma-verify-tls" type="checkbox" @bind="_model.UptimeKumaVerifyTls" />
+                        <div><label for="kuma-verify-tls">Verify TLS certificate</label><p class="field-help">Keep enabled unless the connection URL intentionally uses an untrusted self-signed certificate.</p></div>
+                    </div>
+                    <div class="field">
+                        <label for="kuma-refresh">Refresh interval (seconds)</label>
+                        <input id="kuma-refresh" type="number" min="30" max="3600" @bind="_model.UptimeKumaRefreshIntervalSeconds" />
+                    </div>
+                </div>
+
+                @if (!_model.UptimeKumaVerifyTls)
+                {
+                    <div class="notice warning">Uptime Kuma server identity verification is disabled for the metrics connection.</div>
+                }
+
+                <div class="actions" style="margin-top:1rem">
+                    <button disabled="@_busy" @onclick="TestUptimeKumaAsync">Test connection</button>
+                    <button class="primary" disabled="@_busy" @onclick="SyncUptimeKumaAsync">Sync now</button>
+                    <a class="button" href="/monitoring">View monitoring</a>
+                </div>
+            </section>
+
+            <aside>
+                <section class="panel">
+                    <h2>Connection state</h2>
+                    <dl class="details-list">
+                        <dt>Enabled</dt><dd>@(_record?.UptimeKumaEnabled == true ? "Yes" : "No")</dd>
+                        <dt>Last attempt</dt><dd>@FormatDate(_record?.LastUptimeKumaSyncUtc)</dd>
+                        <dt>Last success</dt><dd>@FormatDate(_record?.LastUptimeKumaSuccessUtc)</dd>
+                    </dl>
+                    @if (!string.IsNullOrWhiteSpace(_record?.LastUptimeKumaError))
+                    {
+                        <div class="notice danger"><strong>Last sync failed</strong><p>@_record.LastUptimeKumaError</p></div>
+                    }
+                    else if (_record?.LastUptimeKumaSuccessUtc is not null)
+                    {
+                        <p><span class="status-dot success"></span>Metrics imported successfully</p>
+                    }
+                    else
+                    {
+                        <p class="muted">No metrics have been imported yet.</p>
+                    }
+                </section>
+                <section class="panel">
+                    <h2>Read-only boundary</h2>
+                    <p>The manager reads Kuma's supported Prometheus endpoint. It does not create probes, change monitors, send Kuma notifications, or store Kuma administrator credentials.</p>
+                </section>
+            </aside>
+        </div>
     }
     else if (_tab == "schedule")
     {
@@ -264,30 +348,13 @@
         <div class="backup-layout">
             <section class="panel">
                 <h2>Download configuration</h2>
-                <p>Portable JSON backups include global settings, app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI links.</p>
+                <p>Portable JSON backups include global settings, Uptime Kuma connection settings and app mappings, app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI links.</p>
                 <div class="backup-option">
                     <div>
                         <h3>Safe backup</h3>
                         <p class="field-help">Recommended for routine exports. API keys and webhook secrets are excluded.</p>
                     </div>
                     <button disabled="@_busy" @onclick="ExportSafeBackupAsync">Download safe JSON</button>
-                </div>
-                <div class="backup-option encrypted">
-                    <div>
-                        <h3>Encrypted full backup</h3>
-                        <p class="field-help">Includes the TrueNAS API key and webhook secrets, encrypted with your password.</p>
-                    </div>
-                    <div class="form-grid">
-                        <div class="field">
-                            <label for="backup-password">Backup password</label>
-                            <input id="backup-password" type="password" autocomplete="new-password" @bind="_backupPassword" />
-                        </div>
-                        <div class="field">
-                            <label for="backup-password-confirm">Confirm password</label>
-                            <input id="backup-password-confirm" type="password" autocomplete="new-password" @bind="_backupPasswordConfirmation" />
-                        </div>
-                    </div>
-                    <button disabled="@_busy" @onclick="ExportEncryptedBackupAsync">Download encrypted JSON</button>
                 </div>
             </section>
 
@@ -353,8 +420,6 @@
     private string? _message;
     private bool _error;
     private bool _busy;
-    private string _backupPassword = string.Empty;
-    private string _backupPasswordConfirmation = string.Empty;
     private string _importPassword = string.Empty;
     private string? _importContent;
     private string? _importFileName;
@@ -508,6 +573,60 @@
         }
     }
 
+    private async Task TestUptimeKumaAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await SettingsService.SaveAsync(_model);
+            var result = await UptimeKumaClient.TestConnectionAsync();
+            _message = result.Message;
+            _error = !result.Success;
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SyncUptimeKumaAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await SettingsService.SaveAsync(_model);
+            var result = await UptimeKumaSyncService.SynchronizeAsync(force: true);
+            _message = result.Message;
+            _error = !result.Success;
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+            _error = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private async Task ExportSafeBackupAsync()
     {
         await RunBackupActionAsync(async () =>
@@ -515,23 +634,6 @@
             var backup = await BackupService.ExportSafeAsync();
             await JS.InvokeVoidAsync("trueNasAppManager.downloadText", backup.FileName, backup.Json, "application/json");
             _message = "Safe configuration backup downloaded.";
-        });
-    }
-
-    private async Task ExportEncryptedBackupAsync()
-    {
-        await RunBackupActionAsync(async () =>
-        {
-            if (string.IsNullOrEmpty(_backupPassword) || _backupPassword != _backupPasswordConfirmation)
-            {
-                throw new InvalidOperationException("Enter matching passwords for the encrypted backup.");
-            }
-
-            var backup = await BackupService.ExportEncryptedAsync(_backupPassword);
-            await JS.InvokeVoidAsync("trueNasAppManager.downloadText", backup.FileName, backup.Json, "application/json");
-            _backupPassword = string.Empty;
-            _backupPasswordConfirmation = string.Empty;
-            _message = "Encrypted configuration backup downloaded.";
         });
     }
 

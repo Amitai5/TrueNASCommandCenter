@@ -95,6 +95,28 @@ public sealed record AppHealthEvaluationResult(int Checked, int IncidentsOpened,
 
 public sealed record AppWebUiLinks(string? LocalUrl, string? RemoteUrl, string? SelectedUrl, WebUiRoute SelectedRoute);
 
+public sealed record UptimeKumaMonitorMetric(
+    string MonitorId,
+    string Name,
+    string Type,
+    string? Url,
+    string? Hostname,
+    int? Port,
+    UptimeKumaMonitorStatus Status,
+    double? ResponseTimeMilliseconds,
+    double? UptimeRatio1Day,
+    double? UptimeRatio30Days,
+    double? UptimeRatio365Days,
+    double? AverageResponseTimeMilliseconds1Day,
+    double? AverageResponseTimeMilliseconds30Days,
+    double? AverageResponseTimeMilliseconds365Days,
+    bool? CertificateIsValid,
+    double? CertificateDaysRemaining);
+
+public sealed record UptimeKumaConnectionTestResult(bool Success, string Message, int MonitorCount = 0);
+
+public sealed record UptimeKumaSyncResult(bool Success, string Message, int MonitorCount = 0);
+
 public sealed record ConfigurationBackupFile(string FileName, string Json, bool IncludesSecrets);
 
 public sealed record ConfigurationBackupInspection(int SchemaVersion, DateTimeOffset ExportedAtUtc, string ApplicationVersion, bool IncludesSecrets, int? AppCount);

@@ -16,6 +16,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AppPortalRecord> AppPortals => Set<AppPortalRecord>();
     public DbSet<AppContainerRecord> AppContainers => Set<AppContainerRecord>();
     public DbSet<GitHubRepositoryCache> GitHubRepositories => Set<GitHubRepositoryCache>();
+    public DbSet<UptimeKumaMonitorRecord> UptimeKumaMonitors => Set<UptimeKumaMonitorRecord>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -58,6 +59,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasConversion<string>();
         modelBuilder.Entity<AppRecord>()
             .Property(app => app.HealthState)
+            .HasConversion<string>();
+        modelBuilder.Entity<UptimeKumaMonitorRecord>()
+            .Property(monitor => monitor.Status)
             .HasConversion<string>();
         modelBuilder.Entity<UpdateRun>()
             .Property(run => run.Trigger)
@@ -115,6 +119,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .WithMany(app => app.Containers)
             .HasForeignKey(container => container.AppId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<UptimeKumaMonitorRecord>()
+            .HasOne(monitor => monitor.App)
+            .WithMany(app => app.UptimeKumaMonitors)
+            .HasForeignKey(monitor => monitor.AppId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<NotificationRecord>()
             .HasIndex(notification => new
@@ -133,5 +142,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasIndex(portal => portal.AppId);
         modelBuilder.Entity<AppContainerRecord>()
             .HasIndex(container => new { container.AppId, container.ContainerId });
+        modelBuilder.Entity<UptimeKumaMonitorRecord>()
+            .HasIndex(monitor => monitor.AppId);
     }
 }

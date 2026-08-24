@@ -173,8 +173,12 @@ x-portals:
                 <p>Completed one-shot workloads such as <code>permissions</code> appear as <strong>Exited normally</strong> and do not degrade an otherwise running app.</p>
             </article>
             <article>
+                <h3>Uptime Kuma reports</h3>
+                <p>Connect a Prometheus API key under <strong>Settings → Uptime Kuma</strong>, sync the read-only report, and map imported monitors under <strong>Edit policy</strong>. Kuma continues to own probes, alerts, and incident history.</p>
+            </article>
+            <article>
                 <h3>Backup and restore</h3>
-                <p>Use <strong>Settings → Backup &amp; restore</strong>. Safe JSON excludes secrets; encrypted JSON includes them. Imports validate first and merge by app ID without deleting history or unlisted app settings.</p>
+                <p>Use <strong>Settings → Backup &amp; restore</strong>. Safe JSON includes Uptime Kuma settings and monitor mappings but excludes secrets. Imports validate first and merge by app ID without deleting history or unlisted app settings; previously created encrypted backups remain importable with their password.</p>
             </article>
         </div>
 

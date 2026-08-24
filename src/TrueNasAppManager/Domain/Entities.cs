@@ -86,6 +86,45 @@ public sealed class AppRecord
     public ICollection<AppPortRecord> Ports { get; set; } = [];
     public ICollection<AppPortalRecord> Portals { get; set; } = [];
     public ICollection<AppContainerRecord> Containers { get; set; } = [];
+    public ICollection<UptimeKumaMonitorRecord> UptimeKumaMonitors { get; set; } = [];
+}
+
+public sealed class UptimeKumaMonitorRecord
+{
+    [Key]
+    [MaxLength(128)]
+    public string MonitorId { get; set; } = string.Empty;
+
+    [MaxLength(256)]
+    public string? AppId { get; set; }
+
+    public AppRecord? App { get; set; }
+
+    [MaxLength(256)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(64)]
+    public string Type { get; set; } = string.Empty;
+
+    [MaxLength(2048)]
+    public string? Url { get; set; }
+
+    [MaxLength(512)]
+    public string? Hostname { get; set; }
+
+    public int? Port { get; set; }
+    public UptimeKumaMonitorStatus Status { get; set; } = UptimeKumaMonitorStatus.Unknown;
+    public double? ResponseTimeMilliseconds { get; set; }
+    public double? UptimeRatio1Day { get; set; }
+    public double? UptimeRatio30Days { get; set; }
+    public double? UptimeRatio365Days { get; set; }
+    public double? AverageResponseTimeMilliseconds1Day { get; set; }
+    public double? AverageResponseTimeMilliseconds30Days { get; set; }
+    public double? AverageResponseTimeMilliseconds365Days { get; set; }
+    public bool? CertificateIsValid { get; set; }
+    public double? CertificateDaysRemaining { get; set; }
+    public bool IsPresent { get; set; } = true;
+    public DateTime LastSeenUtc { get; set; }
 }
 
 public sealed class AppPortRecord
@@ -326,4 +365,21 @@ public sealed class SettingsRecord
 
     [MaxLength(256)]
     public string? ManagerAppId { get; set; }
+
+    public bool UptimeKumaEnabled { get; set; }
+
+    [MaxLength(2048)]
+    public string? UptimeKumaBaseUrl { get; set; }
+
+    [MaxLength(2048)]
+    public string? UptimeKumaBrowserUrl { get; set; }
+
+    public string? UptimeKumaApiKeyEncrypted { get; set; }
+    public bool UptimeKumaVerifyTls { get; set; } = true;
+    public int UptimeKumaRefreshIntervalSeconds { get; set; } = 60;
+    public DateTime? LastUptimeKumaSyncUtc { get; set; }
+    public DateTime? LastUptimeKumaSuccessUtc { get; set; }
+
+    [MaxLength(1024)]
+    public string? LastUptimeKumaError { get; set; }
 }

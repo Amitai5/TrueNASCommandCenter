@@ -114,6 +114,7 @@
                     <tr>
                         <th>Application</th>
                         <th>Health</th>
+                        <th>Kuma</th>
                         <th>Ports</th>
                         <th>Version / update</th>
                         <th>Policy</th>
@@ -130,6 +131,7 @@
                                 <span class="app-meta">@(app.IsCustom ? "Custom" : app.Train ?? "Catalog")</span>
                             </td>
                             <td><span class="badge @HealthClass(app.HealthState)">@HealthText(app.HealthState)</span></td>
+                            <td><span class="badge @KumaClass(app)">@KumaText(app)</span></td>
                             <td>
                                 @if (app.Ports.Count == 0)
                                 {
@@ -187,7 +189,7 @@
                     <div class="port-list">@if (app.Ports.Count == 0) { <span class="muted">No published ports</span> } else { @foreach (var port in app.Ports.OrderBy(port => port.HostPort)) { <code>@port.HostPort/@port.Protocol</code> } }</div>
                     <div class="row">
                         <span class="badge @PolicyClass(app.Policy)">@PolicyText(app.Policy)</span>
-                        <span>@AvailableText(app)</span>
+                        <span class="badge @KumaClass(app)">Kuma: @KumaText(app)</span>
                     </div>
                     <div class="actions">
                         <a class="button small" href="@PolicyPath(app.Id)">Edit policy</a>
@@ -233,7 +235,7 @@
     private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _apps = await db.Apps.AsNoTracking().AsSplitQuery().Include(app => app.Ports).Include(app => app.Portals).Where(app => app.IsInstalled).OrderBy(app => app.Name).ToListAsync();
+        _apps = await db.Apps.AsNoTracking().AsSplitQuery().Include(app => app.Ports).Include(app => app.Portals).Include(app => app.UptimeKumaMonitors).Where(app => app.IsInstalled).OrderBy(app => app.Name).ToListAsync();
         _settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1);
         _loading = false;
     }
@@ -251,6 +253,7 @@
             Contains(app.State, searchTerm) ||
             Contains(app.StatusLabel, searchTerm) ||
             Contains(HealthText(app.HealthState), searchTerm) ||
+            Contains(KumaText(app), searchTerm) ||
             Contains(PolicyText(app.Policy), searchTerm) ||
             Contains(app.HumanVersion, searchTerm) ||
             Contains(app.InstalledVersion, searchTerm) ||
@@ -467,6 +470,40 @@
         AppHealthState.Degraded => "warning",
         AppHealthState.Stopped => "danger",
         AppHealthState.Maintenance => "info",
+        _ => string.Empty
+    };
+
+    private static string KumaText(AppRecord app)
+    {
+        if (app.UptimeKumaMonitors.Count == 0)
+        {
+            return "Not linked";
+        }
+
+        if (app.UptimeKumaMonitors.Any(monitor => monitor.Status == UptimeKumaMonitorStatus.Down))
+        {
+            return "Down";
+        }
+
+        if (app.UptimeKumaMonitors.Any(monitor => monitor.Status == UptimeKumaMonitorStatus.Pending))
+        {
+            return "Pending";
+        }
+
+        if (app.UptimeKumaMonitors.All(monitor => monitor.Status == UptimeKumaMonitorStatus.Maintenance))
+        {
+            return "Maintenance";
+        }
+
+        return app.UptimeKumaMonitors.Any(monitor => monitor.Status == UptimeKumaMonitorStatus.Up) ? "Up" : "Unknown";
+    }
+
+    private static string KumaClass(AppRecord app) => KumaText(app) switch
+    {
+        "Up" => "success",
+        "Down" => "danger",
+        "Pending" => "warning",
+        "Maintenance" => "info",
         _ => string.Empty
     };
 

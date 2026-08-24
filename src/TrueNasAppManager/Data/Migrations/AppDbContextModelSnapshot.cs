@@ -125,6 +125,32 @@ namespace TrueNasAppManager.Data.Migrations
                     b.ToTable("AppPortals");
                 });
 
+            modelBuilder.Entity("TrueNasAppManager.Domain.UptimeKumaMonitorRecord", b =>
+                {
+                    b.Property<string>("MonitorId").HasMaxLength(128).HasColumnType("TEXT");
+                    b.Property<string>("AppId").HasMaxLength(256).HasColumnType("TEXT");
+                    b.Property<double?>("AverageResponseTimeMilliseconds1Day").HasColumnType("REAL");
+                    b.Property<double?>("AverageResponseTimeMilliseconds30Days").HasColumnType("REAL");
+                    b.Property<double?>("AverageResponseTimeMilliseconds365Days").HasColumnType("REAL");
+                    b.Property<double?>("CertificateDaysRemaining").HasColumnType("REAL");
+                    b.Property<bool?>("CertificateIsValid").HasColumnType("INTEGER");
+                    b.Property<string>("Hostname").HasMaxLength(512).HasColumnType("TEXT");
+                    b.Property<bool>("IsPresent").HasColumnType("INTEGER");
+                    b.Property<DateTime>("LastSeenUtc").HasColumnType("TEXT");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(256).HasColumnType("TEXT");
+                    b.Property<int?>("Port").HasColumnType("INTEGER");
+                    b.Property<double?>("ResponseTimeMilliseconds").HasColumnType("REAL");
+                    b.Property<string>("Status").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("Type").IsRequired().HasMaxLength(64).HasColumnType("TEXT");
+                    b.Property<double?>("UptimeRatio1Day").HasColumnType("REAL");
+                    b.Property<double?>("UptimeRatio30Days").HasColumnType("REAL");
+                    b.Property<double?>("UptimeRatio365Days").HasColumnType("REAL");
+                    b.Property<string>("Url").HasMaxLength(2048).HasColumnType("TEXT");
+                    b.HasKey("MonitorId");
+                    b.HasIndex("AppId");
+                    b.ToTable("UptimeKumaMonitors");
+                });
+
             modelBuilder.Entity("TrueNasAppManager.Domain.AppRecord", b =>
                 {
                     b.Property<string>("Id")
@@ -415,6 +441,16 @@ namespace TrueNasAppManager.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LastUptimeKumaError")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastUptimeKumaSuccessUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastUptimeKumaSyncUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("LastConnectionSuccessUtc")
                         .HasColumnType("TEXT");
 
@@ -493,6 +529,26 @@ namespace TrueNasAppManager.Data.Migrations
                     b.Property<string>("TrueNasUsername")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("UptimeKumaApiKeyEncrypted")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UptimeKumaBaseUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UptimeKumaBrowserUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("UptimeKumaEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UptimeKumaRefreshIntervalSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("UptimeKumaVerifyTls")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("VerificationTimeoutSeconds")
                         .HasColumnType("INTEGER");
@@ -597,6 +653,16 @@ namespace TrueNasAppManager.Data.Migrations
                     b.HasIndex("AppId", "StartedUtc");
 
                     b.ToTable("UpdateAttempts");
+                });
+
+            modelBuilder.Entity("TrueNasAppManager.Domain.UptimeKumaMonitorRecord", b =>
+                {
+                    b.HasOne("TrueNasAppManager.Domain.AppRecord", "App")
+                        .WithMany("UptimeKumaMonitors")
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("App");
                 });
 
             modelBuilder.Entity("TrueNasAppManager.Domain.UpdateRun", b =>
@@ -706,6 +772,8 @@ namespace TrueNasAppManager.Data.Migrations
                     b.Navigation("Portals");
 
                     b.Navigation("Ports");
+
+                    b.Navigation("UptimeKumaMonitors");
                 });
 
             modelBuilder.Entity("TrueNasAppManager.Domain.UpdateRun", b =>
