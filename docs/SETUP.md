@@ -214,7 +214,11 @@ Open an app from the **Apps** page to start, stop, or restart it through TrueNAS
 
 To monitor an app, open its **Settings** page and choose **Notify only** or **Restart once and notify** under **When this app is down**. Health checks include the top-level app state and reported containers. Each incident sends one downtime event; recovery sends a separate event. Automatic recovery is attempted at most once per incident. Stops initiated from this manager enter maintenance mode and do not alert. A completed `permissions` initialization workload is neutral and appears as **Exited normally** rather than degrading a running app.
 
-The app-details page shows published ports, safe Web UI and source links, versions, train, containers, images, networks, volumes, recent lifecycle/update history, and on-demand live logs. Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
+The app-details page uses an operations-first layout. Live logs occupy the main workspace, while published ports, local and remote Web UI links, and workloads stay in a compact adjacent column. Application metadata, Uptime Kuma reports, update and rollback information, safety state, and recent history use the full page width below that workspace instead of continuing down a narrow sidebar. On mobile, these sections stack into one column without horizontal scrolling.
+
+Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
+
+The sidebar order is **Apps**, **Monitoring**, **History**, and **Settings**. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
 
 Configure separate **Local Web UI URL** and **Remote Web UI URL** values under the app's **Settings** page when it is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Generated local links default to `http://truenas.local`; the global **Local TrueNAS Web UI host** setting can override that origin. Public manager domains use only the explicitly configured remote route, and the manager does not guess subdomains.
 

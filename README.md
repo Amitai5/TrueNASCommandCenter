@@ -29,7 +29,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Optional public GitHub repository facts with 24-hour ETag caching and no token
 - Encrypted API, Authorization, and secret-header values
 - Detailed run, attempt, skip, failure, rollback, and notification history
-- Responsive system-aware light/dark web UI with a persistent manual toggle
+- Responsive system-aware light/dark web UI with a persistent manual toggle, high-contrast panel boundaries, and mobile-safe layouts
 - SQLite persistence in a dedicated `/data` volume
 - Liveness and readiness endpoints
 
@@ -198,7 +198,11 @@ The **Continue** button on the connection step remains disabled until **Test con
 
 Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fields. When the manager is opened through `truenas.local`, localhost, or a private/link-local address, its Web UI buttons use the local route. When it is opened through a public domain such as `apps.example.com`, the buttons use the explicitly configured remote route. Remote addresses are never guessed. Generated local links default to `http://truenas.local` instead of an IP address; the global **Local TrueNAS Web UI host** setting can override that origin.
 
-The app-details page prioritizes operations. It shows the current route, ports, health, workloads, versions, and lifecycle controls around a large live-log workspace. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
+The app-details page prioritizes operations. A large live-log workspace sits beside a bounded access-and-workloads column, followed by full-width overview cards for application metadata, Uptime Kuma, updates and recovery, safety, and recent history. This shared page flow keeps secondary cards from extending beside empty content. On smaller screens, every section stacks into one column without horizontal overflow.
+
+The primary navigation is ordered **Apps**, **Monitoring**, **History**, and **Settings** so imported availability reports remain close to day-to-day app operations. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
+
+The details page shows the current route, ports, health, workloads, versions, lifecycle controls, source information, and live logs. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
 
 ## Uptime Kuma reports
 
