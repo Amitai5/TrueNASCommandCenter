@@ -35,8 +35,8 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 ## Documentation
 
-- **[First-Time Setup Guide](docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
-- **[Developer Guide](docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
+- **[First-Time Setup Guide](TrueNASAppManager/Docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
+- **[Developer Guide](TrueNASAppManager/Docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
 - **In-app setup help** — after installation, open `http://<truenas-address>:2600/help` or select **Help** in the web UI
 
 ## Requirements
@@ -181,7 +181,7 @@ docker run --detach \
   ghcr.io/amitai5/truenasappmanager:latest
 ```
 
-If the TrueNAS Web UI address changes from `10.0.0.21`, update `--add-host`, then open `http://localhost:2600` and follow the [First-Time Setup Guide](docs/SETUP.md).
+If the TrueNAS Web UI address changes from `10.0.0.21`, update `--add-host`, then open `http://localhost:2600` and follow the [First-Time Setup Guide](TrueNASAppManager/Docs/SETUP.md).
 
 ## First launch
 
@@ -192,7 +192,7 @@ The wizard uses the secure TrueNAS endpoint configured in the deployment YAML bu
 3. Optionally configure TrueNAS-native email or webhook notifications.
 4. Discover installed apps and assign an explicit policy to each one.
 
-The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
+The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](TrueNASAppManager/Docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
 
 ## App access, logs, and configuration backups
 
@@ -259,7 +259,7 @@ Host networking is intentionally enabled so this single-purpose manager can reac
 
 ## Updating
 
-Every production release has one semantic version stored in [`VERSION`](VERSION). The running version appears in the sidebar, on the Settings page, in startup logs, in the `X-Application-Version` response header, and at `/version`. The container carries the same `org.opencontainers.image.version` label.
+Every production release has one semantic version stored in [`VERSION`](TrueNASAppManager/VERSION). The running version appears in the sidebar, on the Settings page, in startup logs, in the `X-Application-Version` response header, and at `/version`. The container carries the same `org.opencontainers.image.version` label.
 
 The `latest` and `production` image tags track the current `production` branch. Immutable release tags such as `1.1.0`, minor-channel tags such as `1.1`, and commit tags such as `sha-<commit>` are published together. Increment `VERSION` before the next production release; publishing refuses to reuse a version that already belongs to another commit. Pin the image to an exact version when reproducibility matters, or keep `latest` with `pull_policy: always` for automatic image discovery.
 

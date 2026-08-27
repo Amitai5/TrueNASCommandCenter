@@ -1,6 +1,6 @@
 # First-Time Setup Guide
 
-[Back to the main README](../README.md) · [Developer guide](DEVELOPMENT.md)
+[Back to the main README](../../README.md) · [Developer guide](DEVELOPMENT.md)
 
 This guide walks through installing TrueNAS App Manager, creating a least-privilege TrueNAS service account, connecting the first-launch wizard, and resolving the most common setup problems. The TrueNAS navigation names below follow Community Edition / SCALE 25.10 and later.
 
@@ -14,7 +14,7 @@ You need:
 - The current TrueNAS Web UI IPv4 address and the hostname covered by its TLS certificate.
 - A trusted LAN or VPN. The manager does not include its own user login or RBAC.
 
-Install the container first using the [TrueNAS Custom App or Docker instructions](../README.md#installation). After installation, open:
+Install the container first using the [TrueNAS Custom App or Docker instructions](../../README.md#installation). After installation, open:
 
 ```text
 http://<truenas-address>:2600

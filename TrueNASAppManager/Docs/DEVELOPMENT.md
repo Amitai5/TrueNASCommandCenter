@@ -1,6 +1,6 @@
 # Developer Guide
 
-[Back to the main README](../README.md) · [First-time setup guide](SETUP.md)
+[Back to the main README](../../README.md) · [First-time setup guide](SETUP.md)
 
 This document covers local development, tests, container builds, project structure, publishing, and the TrueNAS middleware surface used by the application.
 
@@ -16,18 +16,18 @@ No running TrueNAS server, mail server, GitHub API, or webhook endpoint is requi
 
 | Path | Purpose |
 | --- | --- |
-| `src/TrueNasAppManager` | Blazor application, scheduler, persistence, notifications, and integrations |
-| `tests/TrueNasAppManager.Tests` | Hermetic MSTest unit and integration-style tests using fakes |
-| `Dockerfile` | Multi-stage production image |
+| `TrueNASAppManager/AppManagerBlazor` | Main Blazor application, scheduler, persistence, notifications, and integrations |
+| `TrueNASAppManager/Tests/TrueNASAppManager.Tests` | Hermetic MSTest unit and integration-style tests using fakes |
+| `TrueNASAppManager/Dockerfile` | Multi-stage production image |
 | `.github/workflows` | Pull-request validation and container publishing |
-| `docs` | Operator setup and developer documentation |
+| `TrueNASAppManager/Docs` | Operator setup and developer documentation |
 
 ## Restore, build, and test
 
 ```bash
-dotnet restore TrueNasAppManager.slnx
-dotnet build TrueNasAppManager.slnx --no-restore
-dotnet test TrueNasAppManager.slnx --no-build --no-restore
+dotnet restore TrueNASAppManager/TrueNASAppManager.slnx
+dotnet build TrueNASAppManager/TrueNASAppManager.slnx --no-restore
+dotnet test TrueNASAppManager/TrueNASAppManager.slnx --no-build --no-restore
 ```
 
 Tests use fake transports, HTTP handlers, TrueNAS mail requests, temporary SQLite databases, and deterministic `TimeProvider` values. They do not depend on the Internet, real TrueNAS middleware, the host file system outside temporary test directories, or wall-clock timing.
@@ -39,13 +39,13 @@ The application requires a writable data directory. In PowerShell:
 ```powershell
 $env:DATA_PATH = "$PWD/.data"
 $env:TRUENAS_WEBSOCKET_URL = "wss://truenas.example.test/api/current"
-dotnet run --project src/TrueNasAppManager/TrueNasAppManager.csproj --urls http://localhost:2600
+dotnet run --project TrueNASAppManager/AppManagerBlazor/TrueNASAppManager.csproj --urls http://localhost:2600
 ```
 
 In Bash:
 
 ```bash
-DATA_PATH="$PWD/.data" TRUENAS_WEBSOCKET_URL="wss://truenas.example.test/api/current" dotnet run --project src/TrueNasAppManager/TrueNasAppManager.csproj --urls http://localhost:2600
+DATA_PATH="$PWD/.data" TRUENAS_WEBSOCKET_URL="wss://truenas.example.test/api/current" dotnet run --project TrueNASAppManager/AppManagerBlazor/TrueNASAppManager.csproj --urls http://localhost:2600
 ```
 
 Open `http://localhost:2600` and use the first-launch wizard. Avoid using production API keys in development environments.
@@ -53,7 +53,7 @@ Open `http://localhost:2600` and use the first-launch wizard. Avoid using produc
 ## Build the container
 
 ```bash
-docker build --pull --tag truenas-app-manager:local .
+docker build --pull --file TrueNASAppManager/Dockerfile --tag truenas-app-manager:local TrueNASAppManager
 ```
 
 Run the local image with the same security restrictions used by the documented production deployment:

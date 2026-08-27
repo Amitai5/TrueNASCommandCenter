@@ -33,7 +33,7 @@ jobs:
       - name: Validate application version
         shell: bash
         run: |
-          version="$(tr -d '\r\n' < VERSION)"
+          version="$(tr -d '\r\n' < TrueNASAppManager/VERSION)"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "VERSION must contain one semantic version such as 1.2.3."
             exit 1
@@ -45,10 +45,10 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore TrueNasAppManager.slnx
+        run: dotnet restore TrueNASAppManager/TrueNASAppManager.slnx
 
       - name: Build
-        run: dotnet build TrueNasAppManager.slnx --configuration Release --no-restore
+        run: dotnet build TrueNASAppManager/TrueNASAppManager.slnx --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test TrueNasAppManager.slnx --configuration Release --no-build
+        run: dotnet test TrueNASAppManager/TrueNASAppManager.slnx --configuration Release --no-build

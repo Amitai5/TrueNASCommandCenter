@@ -6,12 +6,12 @@ FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_VERSION} AS build
 ARG APP_VERSION
 WORKDIR /source
 
-COPY TrueNasAppManager.slnx ./
-COPY src/TrueNasAppManager/TrueNasAppManager.csproj src/TrueNasAppManager/
-RUN dotnet restore src/TrueNasAppManager/TrueNasAppManager.csproj
+COPY TrueNASAppManager.slnx ./
+COPY AppManagerBlazor/TrueNASAppManager.csproj AppManagerBlazor/
+RUN dotnet restore AppManagerBlazor/TrueNASAppManager.csproj
 
-COPY src/TrueNasAppManager/ src/TrueNasAppManager/
-RUN dotnet publish src/TrueNasAppManager/TrueNasAppManager.csproj \
+COPY AppManagerBlazor/ AppManagerBlazor/
+RUN dotnet publish AppManagerBlazor/TrueNASAppManager.csproj \
     --configuration Release \
     --no-restore \
     --output /app \
@@ -20,7 +20,7 @@ RUN dotnet publish src/TrueNasAppManager/TrueNasAppManager.csproj \
     /p:InformationalVersion=${APP_VERSION}
 RUN test -s /app/wwwroot/_framework/blazor.web.js \
     || (echo "Blazor bootstrap asset is missing from the publish output." >&2; exit 1)
-RUN grep -Fq '"Route":"_framework/blazor.web.js"' /app/TrueNasAppManager.staticwebassets.endpoints.json \
+RUN grep -Fq '"Route":"_framework/blazor.web.js"' /app/TrueNASAppManager.staticwebassets.endpoints.json \
     || (echo "Blazor bootstrap endpoint is missing from the static web assets manifest." >&2; exit 1)
 
 FROM mcr.microsoft.com/dotnet/aspnet:${ASPNET_VERSION} AS runtime
@@ -44,4 +44,4 @@ ENV ASPNETCORE_HTTP_PORTS=2600 \
 EXPOSE 2600
 VOLUME ["/data"]
 
-ENTRYPOINT ["dotnet", "TrueNasAppManager.dll"]
+ENTRYPOINT ["dotnet", "TrueNASAppManager.dll"]
