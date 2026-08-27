@@ -1149,6 +1149,22 @@ tr:last-child td {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
+    align-items: stretch;
+    margin-bottom: 1rem;
+}
+
+.backup-layout > .panel + .panel,
+.backup-layout + .panel {
+    margin-top: 0;
+}
+
+.backup-panel {
+    min-width: 0;
+}
+
+.backup-password-field,
+.backup-actions {
+    margin-top: 1rem;
 }
 
 .backup-option {
@@ -1164,6 +1180,26 @@ tr:last-child td {
 
 .backup-option h3, .backup-option p {
     margin-bottom: 0;
+}
+
+.backup-option-recovery {
+    padding: 1rem;
+    border: 1px solid var(--button-hover-border);
+    border-radius: var(--radius);
+    background: var(--surface-alt);
+}
+
+.section-heading-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+.backup-password-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
 }
 
 .backup-summary {
@@ -2501,6 +2537,10 @@ html:not([data-theme]) .summary-grid {
     }
 
     .backup-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .backup-password-grid {
         grid-template-columns: 1fr;
     }
 }

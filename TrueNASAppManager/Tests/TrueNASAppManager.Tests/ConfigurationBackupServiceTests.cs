@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using TrueNasAppManager.Domain;
@@ -97,6 +98,91 @@ public sealed class ConfigurationBackupServiceTests
         Assert.AreEqual("original-key", protector.Unprotect(restored.TrueNasApiKeyEncrypted!));
         Assert.AreEqual("Bearer original", protector.Unprotect(restored.WebhookAuthorizationEncrypted!));
         Assert.AreEqual("kuma-original", protector.Unprotect(restored.UptimeKumaApiKeyEncrypted!));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task EncryptedBackup_FreshInstallationRestoresEveryPortableConfigurationField()
+    {
+        await using var sourceDatabase = new TestDatabase();
+        var sourceProtector = sourceDatabase.CreateProtector();
+        await sourceDatabase.InitializeAsync(settings => ConfigureSettings(settings, sourceProtector, "source-key"));
+        await SeedAppsAndHistoryAsync(sourceDatabase);
+        var sourceService = CreateService(sourceDatabase, sourceProtector);
+
+        var backup = await sourceService.ExportEncryptedAsync("correct horse battery staple");
+
+        Assert.IsTrue(backup.IncludesSecrets);
+        Assert.DoesNotContain("source-key", backup.Json);
+        Assert.DoesNotContain("kuma-original", backup.Json);
+        Assert.DoesNotContain("Bearer original", backup.Json);
+
+        await using var targetDatabase = new TestDatabase();
+        var targetProtector = targetDatabase.CreateProtector();
+        await targetDatabase.InitializeAsync();
+        var targetService = CreateService(targetDatabase, targetProtector);
+
+        var result = await targetService.ImportAsync(backup.Json, "correct horse battery staple");
+
+        Assert.AreEqual(1, result.AppsRestored);
+        Assert.IsTrue(result.SecretsRestored);
+        Assert.IsTrue(result.ConnectionReady);
+        await using var verify = await targetDatabase.CreateDbContextAsync();
+        var settings = await verify.Settings.SingleAsync();
+        Assert.IsTrue(settings.OnboardingCompleted);
+        Assert.AreEqual(4, settings.OnboardingStep);
+        Assert.AreEqual("autoupdate", settings.TrueNasUsername);
+        Assert.AreEqual("source-key", targetProtector.Unprotect(settings.TrueNasApiKeyEncrypted!));
+        Assert.IsFalse(settings.VerifyTls);
+        Assert.IsTrue(settings.SchedulerEnabled);
+        Assert.AreEqual("0 23 * * 6", settings.CronExpression);
+        Assert.AreEqual("America/Los_Angeles", settings.TimeZoneId);
+        Assert.IsTrue(settings.NotifyManualApproval);
+        Assert.IsTrue(settings.NotifyAutomaticFailure);
+        Assert.IsFalse(settings.NotifyAutomaticBlocked);
+        Assert.IsTrue(settings.NotifyRollback);
+        Assert.IsFalse(settings.NotifyAutomaticSuccess);
+        Assert.IsTrue(settings.NotifyScheduledCheckFailure);
+        Assert.IsFalse(settings.NotifyConnectionFailure);
+        Assert.IsTrue(settings.EmailEnabled);
+        var recipients = JsonSerializer.Deserialize<List<string>>(settings.EmailRecipientsJson!);
+        Assert.IsNotNull(recipients);
+        CollectionAssert.AreEqual(new[] { "admin@example.test", "ops@example.test" }, recipients);
+        Assert.AreEqual("http://truenas.local", settings.PortalHostOverride);
+        Assert.IsFalse(settings.GitHubEnrichmentEnabled);
+        Assert.IsTrue(settings.WebhookEnabled);
+        Assert.AreEqual("https://hooks.example.test/truenas", settings.WebhookUrl);
+        Assert.AreEqual("Bearer original", targetProtector.Unprotect(settings.WebhookAuthorizationEncrypted!));
+        Assert.AreEqual("X-Test: original", targetProtector.Unprotect(settings.WebhookHeadersEncrypted!));
+        Assert.AreEqual(37, settings.WebhookTimeoutSeconds);
+        Assert.AreEqual(420, settings.VerificationTimeoutSeconds);
+        Assert.AreEqual(720, settings.ConnectionFailureCooldownMinutes);
+        Assert.AreEqual(45, settings.HistoryRetentionDays);
+        Assert.AreEqual("truenas-app-manager", settings.ManagerAppId);
+        Assert.IsTrue(settings.UptimeKumaEnabled);
+        Assert.AreEqual("http://kuma.local:3001/", settings.UptimeKumaBaseUrl);
+        Assert.AreEqual("https://status.example.test/", settings.UptimeKumaBrowserUrl);
+        Assert.AreEqual("kuma-original", targetProtector.Unprotect(settings.UptimeKumaApiKeyEncrypted!));
+        Assert.IsFalse(settings.UptimeKumaVerifyTls);
+        Assert.AreEqual(90, settings.UptimeKumaRefreshIntervalSeconds);
+
+        var app = await verify.Apps.Include(item => item.UptimeKumaMonitors).SingleAsync();
+        Assert.AreEqual("plex", app.Id);
+        Assert.IsFalse(app.IsInstalled);
+        Assert.AreEqual(AppPolicy.AutoUpdate, app.Policy);
+        Assert.AreEqual(VersionScope.MinorAndPatch, app.VersionScope);
+        Assert.IsTrue(app.SnapshotHostPaths);
+        Assert.IsFalse(app.NotifySuccessOverride ?? true);
+        Assert.AreEqual(DowntimeAction.NotifyOnly, app.DowntimeAction);
+        Assert.IsTrue(app.NotifyOnDowntime);
+        Assert.IsTrue(app.MaintenanceMode);
+        Assert.IsTrue(app.IsFavorite);
+        Assert.AreEqual("Media", app.GroupName);
+        Assert.AreEqual("http://truenas.local/plex", app.LocalPortalUrl);
+        Assert.AreEqual("https://plex.example.test/", app.RemotePortalUrl);
+        Assert.HasCount(1, app.UptimeKumaMonitors);
+        Assert.AreEqual("7", app.UptimeKumaMonitors.Single().MonitorId);
+        Assert.AreEqual(0, await verify.UpdateRuns.CountAsync());
     }
 
     [TestMethod]
@@ -225,6 +311,35 @@ public sealed class ConfigurationBackupServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(oversized, password: null));
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task Import_SchemaThreeWithoutOnboardingStepRestoresCompletedWizardState()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        var service = CreateService(database, protector);
+        var backup = await service.ExportSafeAsync();
+        var document = JsonNode.Parse(backup.Json)!.AsObject();
+        document["schemaVersion"] = 3;
+        document["configuration"]!["settings"]!.AsObject().Remove("onboardingStep");
+
+        await using (var mutate = await database.CreateDbContextAsync())
+        {
+            var settings = await mutate.Settings.SingleAsync();
+            settings.OnboardingCompleted = false;
+            settings.OnboardingStep = 1;
+            await mutate.SaveChangesAsync();
+        }
+
+        await service.ImportAsync(document.ToJsonString(), password: null);
+
+        await using var verify = await database.CreateDbContextAsync();
+        var restored = await verify.Settings.SingleAsync();
+        Assert.IsTrue(restored.OnboardingCompleted);
+        Assert.AreEqual(4, restored.OnboardingStep);
+    }
+
     private static ConfigurationBackupService CreateService(TestDatabase database, ISecretProtector protector)
     {
         var timeProvider = new FixedTimeProvider(BackupTime);
@@ -234,24 +349,38 @@ public sealed class ConfigurationBackupServiceTests
     private static void ConfigureSettings(SettingsRecord settings, ISecretProtector protector, string apiKey)
     {
         settings.OnboardingCompleted = true;
+        settings.OnboardingStep = 4;
         settings.TrueNasUsername = "autoupdate";
         settings.TrueNasApiKeyEncrypted = protector.Protect(apiKey);
-        settings.VerifyTls = true;
+        settings.VerifyTls = false;
         settings.SchedulerEnabled = true;
         settings.CronExpression = "0 23 * * 6";
         settings.TimeZoneId = "America/Los_Angeles";
+        settings.NotifyManualApproval = true;
+        settings.NotifyAutomaticFailure = true;
+        settings.NotifyAutomaticBlocked = false;
+        settings.NotifyRollback = true;
+        settings.NotifyAutomaticSuccess = false;
+        settings.NotifyScheduledCheckFailure = true;
+        settings.NotifyConnectionFailure = false;
         settings.EmailEnabled = true;
-        settings.EmailRecipientsJson = "[\"admin@example.test\"]";
+        settings.EmailRecipientsJson = "[\"admin@example.test\",\"ops@example.test\"]";
         settings.WebhookEnabled = true;
         settings.WebhookUrl = "https://hooks.example.test/truenas";
         settings.WebhookAuthorizationEncrypted = protector.Protect("Bearer original");
         settings.WebhookHeadersEncrypted = protector.Protect("X-Test: original");
-        settings.PortalHostOverride = "https://truenas.local";
+        settings.WebhookTimeoutSeconds = 37;
+        settings.VerificationTimeoutSeconds = 420;
+        settings.ConnectionFailureCooldownMinutes = 720;
+        settings.HistoryRetentionDays = 45;
+        settings.ManagerAppId = "truenas-app-manager";
+        settings.PortalHostOverride = "http://truenas.local";
+        settings.GitHubEnrichmentEnabled = false;
         settings.UptimeKumaBaseUrl = "http://kuma.local:3001/";
         settings.UptimeKumaBrowserUrl = "https://status.example.test/";
         settings.UptimeKumaApiKeyEncrypted = protector.Protect("kuma-original");
-        settings.UptimeKumaVerifyTls = true;
-        settings.UptimeKumaRefreshIntervalSeconds = 60;
+        settings.UptimeKumaVerifyTls = false;
+        settings.UptimeKumaRefreshIntervalSeconds = 90;
     }
 
     private static async Task SeedAppsAndHistoryAsync(TestDatabase database)
@@ -272,8 +401,10 @@ public sealed class ConfigurationBackupServiceTests
         Policy = policy,
         VersionScope = VersionScope.MinorAndPatch,
         SnapshotHostPaths = true,
+        NotifySuccessOverride = false,
         DowntimeAction = DowntimeAction.NotifyOnly,
         NotifyOnDowntime = true,
+        MaintenanceMode = true,
         IsFavorite = true,
         GroupName = "Media",
         LocalPortalUrl = $"http://truenas.local/{id}",

@@ -50,7 +50,7 @@ public sealed class ConfigurationBackupService(
     IScheduleService scheduleService,
     TimeProvider timeProvider) : IConfigurationBackupService
 {
-    private const int SchemaVersion = 3;
+    private const int SchemaVersion = 4;
     private const int MaximumBackupBytes = 2 * 1024 * 1024;
     private const int PasswordIterations = 600_000;
     private const string AdditionalData = "TrueNasAppManager:configuration-backup:v1";
@@ -215,7 +215,8 @@ public sealed class ConfigurationBackupService(
         settings.UptimeKumaBaseUrl,
         settings.UptimeKumaBrowserUrl,
         settings.UptimeKumaVerifyTls,
-        settings.UptimeKumaRefreshIntervalSeconds);
+        settings.UptimeKumaRefreshIntervalSeconds,
+        settings.OnboardingStep);
 
     private void ValidatePayload(BackupPayload payload, bool includesSecrets)
     {
@@ -263,7 +264,8 @@ public sealed class ConfigurationBackupService(
             payload.Settings.VerificationTimeoutSeconds is < 30 or > 1800 ||
             payload.Settings.ConnectionFailureCooldownMinutes is < 1 or > 10080 ||
             payload.Settings.HistoryRetentionDays is < 1 ||
-            payload.Settings.UptimeKumaRefreshIntervalSeconds is < 30 or > 3600)
+            payload.Settings.UptimeKumaRefreshIntervalSeconds is < 30 or > 3600 ||
+            payload.Settings.OnboardingStep is < 1 or > 4)
         {
             throw new InvalidOperationException("The backup contains one or more advanced settings outside the allowed range.");
         }
@@ -303,6 +305,7 @@ public sealed class ConfigurationBackupService(
     private static void ApplySettings(SettingsRecord target, BackupSettings source, int schemaVersion)
     {
         target.OnboardingCompleted = source.OnboardingCompleted;
+        target.OnboardingStep = source.OnboardingStep ?? (source.OnboardingCompleted ? 4 : 1);
         target.TrueNasUsername = NullIfWhiteSpace(source.TrueNasUsername);
         target.VerifyTls = source.VerifyTls;
         target.AllowInsecureWebSocket = false;
@@ -690,7 +693,8 @@ internal sealed record BackupSettings(
     string? UptimeKumaBaseUrl = null,
     string? UptimeKumaBrowserUrl = null,
     bool? UptimeKumaVerifyTls = null,
-    int? UptimeKumaRefreshIntervalSeconds = null);
+    int? UptimeKumaRefreshIntervalSeconds = null,
+    int? OnboardingStep = null);
 
 internal sealed record BackupAppConfiguration(
     string AppId,

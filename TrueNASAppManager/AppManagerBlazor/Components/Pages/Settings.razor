@@ -349,19 +349,40 @@
     else
     {
         <div class="backup-layout">
-            <section class="panel">
+            <section class="panel backup-panel">
                 <h2>Download configuration</h2>
-                <p>Portable JSON backups include global settings, Uptime Kuma connection settings and app mappings, app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI links.</p>
+                <p>Portable JSON backups include every saved global setting and app configuration: connection details, schedules, notification preferences, Uptime Kuma settings and mappings, policies, favorites, groups, downtime behavior, maintenance settings, and Web UI links.</p>
+                <div class="backup-option backup-option-recovery">
+                    <div>
+                        <div class="section-heading-inline">
+                            <h3>Full recovery backup</h3>
+                            <span class="badge success">For reinstalling</span>
+                        </div>
+                        <p class="field-help">Includes the TrueNAS API key, Uptime Kuma API key, and webhook secrets. The JSON is password encrypted so a fresh installation can reconnect without the old <code>/data</code> volume.</p>
+                    </div>
+                    <div class="backup-password-grid">
+                        <div class="field">
+                            <label for="export-password">Backup password</label>
+                            <input id="export-password" type="password" autocomplete="new-password" @bind="_exportPassword" @bind:event="oninput" />
+                        </div>
+                        <div class="field">
+                            <label for="confirm-export-password">Confirm password</label>
+                            <input id="confirm-export-password" type="password" autocomplete="new-password" @bind="_confirmExportPassword" @bind:event="oninput" />
+                        </div>
+                    </div>
+                    <p class="field-help">Use at least 12 characters and store this password separately. It cannot be recovered from the backup.</p>
+                    <button class="primary" disabled="@_busy" @onclick="ExportFullRecoveryBackupAsync">Download full recovery JSON</button>
+                </div>
                 <div class="backup-option">
                     <div>
                         <h3>Safe backup</h3>
-                        <p class="field-help">Recommended for routine exports. API keys and webhook secrets are excluded.</p>
+                        <p class="field-help">Useful for sharing or copying non-secret settings. It excludes API keys and webhook secrets, so it cannot reconnect a fresh installation by itself.</p>
                     </div>
                     <button disabled="@_busy" @onclick="ExportSafeBackupAsync">Download safe JSON</button>
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel backup-panel">
                 <h2>Restore configuration</h2>
                 <p>Select a TrueNAS App Manager JSON backup up to 2 MB. Restored apps are merged by app ID; apps not present in the backup are unchanged.</p>
                 <div class="field">
@@ -377,19 +398,19 @@
                             <dt>Schema</dt><dd>@_importInspection.SchemaVersion</dd>
                             <dt>Exported</dt><dd>@DisplayTimeFormatter.Format(_importInspection.ExportedAtUtc.UtcDateTime, "UTC")</dd>
                             <dt>App version</dt><dd>@_importInspection.ApplicationVersion</dd>
-                            <dt>Secrets</dt><dd>@(_importInspection.IncludesSecrets ? "Password encrypted" : "Excluded")</dd>
+                            <dt>Recovery mode</dt><dd>@(_importInspection.IncludesSecrets ? "Full recovery · password protected" : "Safe · secrets excluded")</dd>
                         </dl>
                     </div>
 
                     @if (_importInspection.IncludesSecrets)
                     {
-                        <div class="field" style="margin-top:1rem">
+                        <div class="field backup-password-field">
                             <label for="import-password">Backup password</label>
                             <input id="import-password" type="password" autocomplete="current-password" @bind="_importPassword" />
                         </div>
                     }
 
-                    <div class="actions" style="margin-top:1rem">
+                    <div class="actions backup-actions">
                         <button disabled="@_busy" @onclick="PreviewImportAsync">Validate &amp; preview</button>
                         @if (_importPreview is not null)
                         {
@@ -408,9 +429,10 @@
             </section>
         </div>
 
-        <section class="panel">
-            <h2>What is not included</h2>
-            <p class="muted">Portable backups exclude discovered inventory, live state, logs, health incidents, GitHub cache, notifications, and update history. Continue backing up the persistent <code>/data</code> volume when you need a complete database and history restore.</p>
+        <section class="panel backup-exclusions">
+            <h2>Recovery scope</h2>
+            <p>A full recovery JSON contains all server-side configuration and credentials needed to rebuild the manager after reinstalling it. After import, TrueNAS inventory and Uptime Kuma reports are refreshed from their source systems.</p>
+            <p class="muted">Regenerable live data and operational history are not required for recovery and remain excluded: discovered inventory, resource samples, logs, health incidents, GitHub cache, notification deliveries, and update history. Continue backing up the persistent <code>/data</code> volume only when you also need that historical record.</p>
         </section>
     }
 
@@ -424,6 +446,8 @@
     private string? _message;
     private bool _error;
     private bool _busy;
+    private string _exportPassword = string.Empty;
+    private string _confirmExportPassword = string.Empty;
     private string _importPassword = string.Empty;
     private string? _importContent;
     private string? _importFileName;
@@ -641,10 +665,45 @@
     {
         await RunBackupActionAsync(async () =>
         {
+            await PersistSettingsBeforeBackupAsync();
             var backup = await BackupService.ExportSafeAsync();
             await JS.InvokeVoidAsync("trueNasAppManager.downloadText", backup.FileName, backup.Json, "application/json");
-            _message = "Safe configuration backup downloaded.";
+            _message = "Saved current settings and downloaded a safe configuration backup.";
         });
+    }
+
+    private async Task ExportFullRecoveryBackupAsync()
+    {
+        await RunBackupActionAsync(async () =>
+        {
+            if (_exportPassword.Length < 12)
+            {
+                throw new InvalidOperationException("Use at least 12 characters for the full recovery backup password.");
+            }
+
+            if (!string.Equals(_exportPassword, _confirmExportPassword, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The full recovery backup passwords do not match.");
+            }
+
+            await PersistSettingsBeforeBackupAsync();
+            var backup = await BackupService.ExportEncryptedAsync(_exportPassword);
+            await JS.InvokeVoidAsync("trueNasAppManager.downloadText", backup.FileName, backup.Json, "application/json");
+            _exportPassword = string.Empty;
+            _confirmExportPassword = string.Empty;
+            _message = "Saved current settings and downloaded a password-protected full recovery backup.";
+        });
+    }
+
+    private async Task PersistSettingsBeforeBackupAsync()
+    {
+        if (_model is null)
+        {
+            throw new InvalidOperationException("Settings are still loading. Try the backup again.");
+        }
+
+        await SettingsService.SaveAsync(_model);
+        await ReloadAsync();
     }
 
     private async Task SelectBackupAsync(InputFileChangeEventArgs eventArgs)
@@ -663,7 +722,7 @@
             _importContent = await reader.ReadToEndAsync();
             _importFileName = file.Name;
             _importInspection = BackupService.Inspect(_importContent);
-            _message = _importInspection.IncludesSecrets ? "Encrypted backup selected. Enter its password, then validate it." : "Safe backup selected. Validate it before importing.";
+            _message = _importInspection.IncludesSecrets ? "Full recovery backup selected. Enter its password, then validate it." : "Safe backup selected. Validate it before importing.";
             _error = false;
         }
         catch (Exception exception)
