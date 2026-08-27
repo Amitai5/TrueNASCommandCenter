@@ -257,7 +257,7 @@ Favorites and groups are local App Manager organization settings and require no 
 2. Open the app's **Settings** page and find **Organization**.
 3. Optionally enable **Favorite**, enter a group name such as `Media`, `Infrastructure`, or `Home automation`, and select **Save & return**.
 4. Use the Apps-page organization filter to show all apps, favorites, ungrouped apps, or one named group. Favorites sort ahead of other apps within the selected view.
-5. Use **Settings → Backup & restore → Download full recovery JSON** to preserve these values and their credentials for a future reinstall. Use the safe JSON only when secrets must be excluded.
+5. Use **Settings → Backup & restore → Download full recovery JSON** to preserve these values and their credentials for a future reinstall.
 
 Group names are limited to 64 characters. Restoring an older supported backup leaves the destination's existing favorites and group assignments unchanged; schema version 3 and later exports include both fields. Schema version 4 also preserves completed setup state for a seamless fresh-install restore.
 
@@ -276,9 +276,8 @@ Configure separate **Local Web UI URL** and **Remote Web UI URL** values under t
 Open **Settings → Backup & restore** to create a portable export:
 
 - **Download full recovery JSON** backs up every saved global setting and per-app configuration, including the TrueNAS and Uptime Kuma API keys, webhook authorization and secret headers, schedules, notifications, app-to-monitor mappings, policies, favorites and groups, downtime behavior, maintenance settings, and local/remote Web UI URLs. Enter and confirm a password of at least 12 characters; the JSON payload is encrypted and the password cannot be recovered.
-- **Download safe JSON** backs up the same non-secret configuration but excludes API keys and webhook secrets. It is suitable for sharing or migration to an installation that already has credentials, but it cannot reconnect a fresh installation by itself.
 
-To restore, install and open a fresh TrueNAS App Manager instance, select the JSON file up to 2 MB, enter the full-recovery password when requested, select **Validate & preview**, review the number of app configurations, and confirm the import. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. A full recovery restore re-encrypts imported secrets with the new installation's local key, resets the TrueNAS client, and refreshes inventory when the restored credentials are usable. A safe restore preserves secrets already stored on the destination.
+To restore, install and open a fresh TrueNAS App Manager instance, select a password-protected full recovery JSON file up to 2 MB, enter its password, select **Validate & preview**, review the number of app configurations, and confirm the import. Secret-free backup files are rejected. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. Restore re-encrypts imported secrets with the new installation's local key, resets the TrueNAS client, and refreshes inventory when the restored credentials are usable.
 
 TrueNAS inventory and Uptime Kuma reports are regenerated from their source systems after a full restore. Portable JSON does not contain logs, live resource samples, health incidents, GitHub cache, notification deliveries, or update history because none of those are required to recreate the manager configuration. Back up the persistent `/data` volume as well only when you need that operational history. Store the recovery password separately from the JSON.
 
@@ -368,7 +367,6 @@ Confirm that the TrueNAS Apps service is running, at least one app is installed,
 - Retain the read-only root filesystem, dropped capabilities, non-root user, and `no-new-privileges` restriction.
 - Do not mount `/var/run/docker.sock`.
 - Download a password-protected **full recovery JSON** from **Settings → Backup & restore** after configuration changes and store its password separately.
-- Use the safe JSON only for a secret-free configuration copy; it is not sufficient for a fresh reinstall.
 - Persist and back up `/data` only when retaining the complete database and operational history is also required.
 - If `APP_ENCRYPTION_KEY` is supplied externally, back it up separately. Losing it makes saved secrets unrecoverable.
 - Set `TRUENAS_APP_ID` to the manager's TrueNAS app ID if you want it to block attempts to update itself.

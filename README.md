@@ -29,7 +29,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Live per-app CPU, memory, network, and block-I/O metrics imported from TrueNAS
 - Favorites and custom app groups with dashboard filtering and portable backup support
 - Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
-- Password-protected full-recovery JSON plus secret-free configuration exports with validated merge restore
+- Password-protected full-recovery JSON with validated, transactional merge restore
 - Optional TrueNAS-native email and generic webhook notifications
 - Optional public GitHub repository facts with 24-hour ETag caching and no token
 - Encrypted API, Authorization, and secret-header values
@@ -210,7 +210,7 @@ Four optional or automatic views become available after the initial connection s
 1. **TrueNAS IP and Web UI actions** — set `TRUENAS_WEBSOCKET_URL` to the certificate-covered TrueNAS hostname and map that hostname to the current TrueNAS IP with `extra_hosts` in the complete YAML. The manager resolves the hostname automatically, shows the address in the server status strip and desktop sidebar, and enables **Copy IP** and **Open TrueNAS**. There is no second IP setting to maintain.
 2. **Storage-pool health** — edit the custom privilege assigned to the service-account group and add the optional `POOL_READ` role. Return to the Dashboard and select **Refresh pools**. Without `POOL_READ`, app management continues normally and only the pool cards remain unavailable.
 3. **Live app resources** — `APPS_READ`, already required for discovery, also permits the shared `app.stats` stream. No additional setting is needed. After a successful connection, CPU and memory appear on the Apps page after the first sample; open an app's details page for network and block-I/O values. Samples remain in memory and are never added to history or backups.
-4. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in safe configuration backups.
+4. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in the password-protected full recovery backup.
 
 See [Manage, monitor, and inspect apps](TrueNASAppManager/Docs/SETUP.md#6-manage-monitor-and-inspect-apps) for detailed TrueNAS navigation, validation steps, and troubleshooting.
 
@@ -237,8 +237,8 @@ The API key is stored encrypted. Keep TLS verification enabled for HTTPS connect
 Open **Settings → Backup & restore** for portable configuration backups:
 
 - **Full recovery JSON** is the disaster-recovery option. It contains every saved global setting and per-app configuration, including the TrueNAS API key, Uptime Kuma API key, webhook authorization and secret headers, schedules, notifications, monitor mappings, policies, favorites, groups, downtime behavior, maintenance state, and local/remote Web UI links. The payload is protected with a password-derived key and can rebuild a fresh installation without the previous `/data` volume.
-- **Safe JSON** contains the same non-secret configuration but excludes API keys and webhook secrets. Use it for sharing or copying settings to an installation that already has credentials; it cannot reconnect a fresh installation by itself.
-- Imports validate the complete file before a transactional merge. Listed app configurations are restored by app ID, unlisted apps and existing history remain unchanged, and undiscovered app policies are held until the next inventory refresh.
+- Restore accepts only password-protected full recovery JSON files. Secret-free exports are not accepted, and the password is required for both validation and import.
+- Imports validate and authenticate the complete file before a transactional merge. Listed app configurations are restored by app ID, unlisted apps and existing history remain unchanged, and undiscovered app policies are held until the next inventory refresh.
 
 After a full recovery import, the manager resets its TrueNAS client and refreshes inventory when the restored credentials are usable. TrueNAS inventory, Uptime Kuma reports, and other live data are regenerated from their source systems. Logs, resource samples, health incidents, GitHub cache, notification deliveries, and update history remain intentionally excluded; back up `/data` as well only when you need that historical record. Store the recovery password separately because it cannot be derived from the JSON.
 

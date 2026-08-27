@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
@@ -14,14 +16,14 @@ public sealed class ConfigurationBackupServiceTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task SafeBackup_RoundTripRestoresConfigurationAndRetainsSecretsAndHistory()
+    public async Task FullRecoveryBackup_RoundTripRestoresConfigurationSecretsAndHistory()
     {
         await using var database = new TestDatabase();
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         await SeedAppsAndHistoryAsync(database);
         var service = CreateService(database, protector);
-        var backup = await service.ExportSafeAsync();
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
         Assert.DoesNotContain("original-key", backup.Json);
         Assert.DoesNotContain("Bearer original", backup.Json);
 
@@ -41,17 +43,17 @@ public sealed class ConfigurationBackupServiceTests
             await mutate.SaveChangesAsync();
         }
 
-        var result = await service.ImportAsync(backup.Json, password: null);
+        var result = await service.ImportAsync(backup.Json, "correct horse battery staple");
 
         Assert.AreEqual(1, result.AppsRestored);
-        Assert.IsFalse(result.SecretsRestored);
+        Assert.IsTrue(result.SecretsRestored);
         await using var verify = await database.CreateDbContextAsync();
         var restoredSettings = await verify.Settings.SingleAsync();
         Assert.IsTrue(restoredSettings.SchedulerEnabled);
-        Assert.AreEqual("replacement-key", protector.Unprotect(restoredSettings.TrueNasApiKeyEncrypted!));
+        Assert.AreEqual("original-key", protector.Unprotect(restoredSettings.TrueNasApiKeyEncrypted!));
         Assert.IsTrue(restoredSettings.UptimeKumaEnabled);
         Assert.AreEqual("http://kuma.local:3001/", restoredSettings.UptimeKumaBaseUrl);
-        Assert.AreEqual("kuma-replacement", protector.Unprotect(restoredSettings.UptimeKumaApiKeyEncrypted!));
+        Assert.AreEqual("kuma-original", protector.Unprotect(restoredSettings.UptimeKumaApiKeyEncrypted!));
         var restoredPlex = await verify.Apps.SingleAsync(app => app.Id == "plex");
         Assert.AreEqual("Plex current", restoredPlex.Name);
         Assert.AreEqual(AppPolicy.AutoUpdate, restoredPlex.Policy);
@@ -64,14 +66,14 @@ public sealed class ConfigurationBackupServiceTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task EncryptedBackup_CorrectPasswordRestoresSecretsAndWrongPasswordDoesNotMutate()
+    public async Task FullRecoveryBackup_CorrectPasswordRestoresSecretsAndWrongPasswordDoesNotMutate()
     {
         await using var database = new TestDatabase();
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         await SeedAppsAndHistoryAsync(database);
         var service = CreateService(database, protector);
-        var backup = await service.ExportEncryptedAsync("correct horse battery staple");
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
         Assert.DoesNotContain("original-key", backup.Json);
         Assert.DoesNotContain("Bearer original", backup.Json);
 
@@ -102,7 +104,7 @@ public sealed class ConfigurationBackupServiceTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task EncryptedBackup_FreshInstallationRestoresEveryPortableConfigurationField()
+    public async Task FullRecoveryBackup_FreshInstallationRestoresEveryPortableConfigurationField()
     {
         await using var sourceDatabase = new TestDatabase();
         var sourceProtector = sourceDatabase.CreateProtector();
@@ -110,9 +112,10 @@ public sealed class ConfigurationBackupServiceTests
         await SeedAppsAndHistoryAsync(sourceDatabase);
         var sourceService = CreateService(sourceDatabase, sourceProtector);
 
-        var backup = await sourceService.ExportEncryptedAsync("correct horse battery staple");
+        var backup = await sourceService.ExportFullRecoveryAsync("correct horse battery staple");
 
         Assert.IsTrue(backup.IncludesSecrets);
+        StringAssert.Contains(backup.FileName, "full-recovery");
         Assert.DoesNotContain("source-key", backup.Json);
         Assert.DoesNotContain("kuma-original", backup.Json);
         Assert.DoesNotContain("Bearer original", backup.Json);
@@ -187,13 +190,13 @@ public sealed class ConfigurationBackupServiceTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task EncryptedBackup_TamperedCiphertextIsRejected()
+    public async Task FullRecoveryBackup_TamperedCiphertextIsRejected()
     {
         await using var database = new TestDatabase();
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         var service = CreateService(database, protector);
-        var backup = await service.ExportEncryptedAsync("correct horse battery staple");
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
         var document = JsonNode.Parse(backup.Json)!.AsObject();
         document["encryption"]!["ciphertext"] = Convert.ToBase64String(new byte[] { 1, 2, 3, 4 });
 
@@ -202,7 +205,87 @@ public sealed class ConfigurationBackupServiceTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task SafeBackup_ImportCreatesPlaceholderAndPreservesUnlistedApp()
+    public async Task ExportFullRecoveryAsync_PasswordShorterThanTwelveCharacters_IsRejected()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        var service = CreateService(database, protector);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ExportFullRecoveryAsync("short"));
+
+        StringAssert.Contains(exception.Message, "at least 12 characters");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task PreviewAsync_FullRecoveryWithoutPassword_IsRejected()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        var service = CreateService(database, protector);
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(backup.Json, string.Empty));
+
+        StringAssert.Contains(exception.Message, "full recovery backup password");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task ImportAsync_FullRecoveryWithoutPassword_IsRejectedWithoutMutation()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        var service = CreateService(database, protector);
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ImportAsync(backup.Json, string.Empty));
+
+        await using var verify = await database.CreateDbContextAsync();
+        var settings = await verify.Settings.SingleAsync();
+        Assert.AreEqual("original-key", protector.Unprotect(settings.TrueNasApiKeyEncrypted!));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task Inspect_SecretFreeBackup_IsRejected()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        var service = CreateService(database, protector);
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
+        var secretFreeBackup = ConvertToSecretFreeBackup(backup.Json, "correct horse battery staple");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Inspect(secretFreeBackup));
+
+        StringAssert.Contains(exception.Message, "Only a password-protected full recovery backup");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task ImportAsync_SecretFreeBackup_IsRejectedWithoutMutation()
+    {
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
+        var service = CreateService(database, protector);
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
+        var secretFreeBackup = ConvertToSecretFreeBackup(backup.Json, "correct horse battery staple");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ImportAsync(secretFreeBackup, "correct horse battery staple"));
+
+        await using var verify = await database.CreateDbContextAsync();
+        var settings = await verify.Settings.SingleAsync();
+        Assert.AreEqual("original-key", protector.Unprotect(settings.TrueNasApiKeyEncrypted!));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task FullRecoveryBackup_ImportCreatesPlaceholderAndPreservesUnlistedApp()
     {
         await using var sourceDatabase = new TestDatabase();
         var sourceProtector = sourceDatabase.CreateProtector();
@@ -213,7 +296,7 @@ public sealed class ConfigurationBackupServiceTests
             await source.SaveChangesAsync();
         }
         var sourceService = CreateService(sourceDatabase, sourceProtector);
-        var backup = await sourceService.ExportSafeAsync();
+        var backup = await sourceService.ExportFullRecoveryAsync("correct horse battery staple");
 
         await using var targetDatabase = new TestDatabase();
         var targetProtector = targetDatabase.CreateProtector();
@@ -225,7 +308,7 @@ public sealed class ConfigurationBackupServiceTests
         }
         var targetService = CreateService(targetDatabase, targetProtector);
 
-        var result = await targetService.ImportAsync(backup.Json, password: null);
+        var result = await targetService.ImportAsync(backup.Json, "correct horse battery staple");
 
         Assert.AreEqual(1, result.AppsRestored);
         await using var verify = await targetDatabase.CreateDbContextAsync();
@@ -247,12 +330,14 @@ public sealed class ConfigurationBackupServiceTests
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         await SeedAppsAndHistoryAsync(database);
         var service = CreateService(database, protector);
-        var backup = await service.ExportSafeAsync();
-        var document = JsonNode.Parse(backup.Json)!.AsObject();
-        document["configuration"]!["settings"]!["schedulerEnabled"] = false;
-        document["configuration"]!["apps"]![0]!["remotePortalUrl"] = "javascript:alert(1)";
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
+        var invalidBackup = MutateFullRecoveryPayload(backup.Json, "correct horse battery staple", payload =>
+        {
+            payload["settings"]!["schedulerEnabled"] = false;
+            payload["apps"]![0]!["remotePortalUrl"] = "javascript:alert(1)";
+        });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ImportAsync(document.ToJsonString(), password: null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ImportAsync(invalidBackup, "correct horse battery staple"));
 
         await using var verify = await database.CreateDbContextAsync();
         Assert.IsTrue((await verify.Settings.SingleAsync()).SchedulerEnabled);
@@ -268,15 +353,17 @@ public sealed class ConfigurationBackupServiceTests
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         await SeedAppsAndHistoryAsync(database);
         var service = CreateService(database, protector);
-        var backup = await service.ExportSafeAsync();
-        var document = JsonNode.Parse(backup.Json)!.AsObject();
-        var apps = document["configuration"]!["apps"]!.AsArray();
-        var duplicate = apps[0]!.DeepClone();
-        duplicate["appId"] = "duplicate-app";
-        duplicate["name"] = "Duplicate app";
-        apps.Add(duplicate);
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
+        var invalidBackup = MutateFullRecoveryPayload(backup.Json, "correct horse battery staple", payload =>
+        {
+            var apps = payload["apps"]!.AsArray();
+            var duplicate = apps[0]!.DeepClone();
+            duplicate["appId"] = "duplicate-app";
+            duplicate["name"] = "Duplicate app";
+            apps.Add(duplicate);
+        });
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(document.ToJsonString(), password: null));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(invalidBackup, "correct horse battery staple"));
 
         StringAssert.Contains(exception.Message, "more than one app");
     }
@@ -291,11 +378,11 @@ public sealed class ConfigurationBackupServiceTests
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         var service = CreateService(database, protector);
-        var backup = await service.ExportSafeAsync();
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
         var document = JsonNode.Parse(backup.Json)!.AsObject();
         document["schemaVersion"] = schemaVersion;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(document.ToJsonString(), password: null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(document.ToJsonString(), "correct horse battery staple"));
     }
 
     [TestMethod]
@@ -308,7 +395,7 @@ public sealed class ConfigurationBackupServiceTests
         var service = CreateService(database, protector);
         var oversized = new string('x', 2 * 1024 * 1024 + 1);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(oversized, password: null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(oversized, "correct horse battery staple"));
     }
 
     [TestMethod]
@@ -319,10 +406,10 @@ public sealed class ConfigurationBackupServiceTests
         var protector = database.CreateProtector();
         await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "original-key"));
         var service = CreateService(database, protector);
-        var backup = await service.ExportSafeAsync();
+        var backup = await service.ExportFullRecoveryAsync("correct horse battery staple");
         var document = JsonNode.Parse(backup.Json)!.AsObject();
         document["schemaVersion"] = 3;
-        document["configuration"]!["settings"]!.AsObject().Remove("onboardingStep");
+        var schemaThreeBackup = MutateFullRecoveryPayload(document.ToJsonString(), "correct horse battery staple", payload => payload["settings"]!.AsObject().Remove("onboardingStep"));
 
         await using (var mutate = await database.CreateDbContextAsync())
         {
@@ -332,12 +419,88 @@ public sealed class ConfigurationBackupServiceTests
             await mutate.SaveChangesAsync();
         }
 
-        await service.ImportAsync(document.ToJsonString(), password: null);
+        await service.ImportAsync(schemaThreeBackup, "correct horse battery staple");
 
         await using var verify = await database.CreateDbContextAsync();
         var restored = await verify.Settings.SingleAsync();
         Assert.IsTrue(restored.OnboardingCompleted);
         Assert.AreEqual(4, restored.OnboardingStep);
+    }
+
+    private static string ConvertToSecretFreeBackup(string json, string password)
+    {
+        var envelope = JsonNode.Parse(json)!.AsObject();
+        var payload = DecryptPayload(envelope, password);
+        payload["secrets"] = null;
+        envelope["includesSecrets"] = false;
+        envelope["configuration"] = payload;
+        envelope["encryption"] = null;
+        return envelope.ToJsonString();
+    }
+
+    private static string MutateFullRecoveryPayload(string json, string password, Action<JsonObject> mutation)
+    {
+        var envelope = JsonNode.Parse(json)!.AsObject();
+        var payload = DecryptPayload(envelope, password);
+        mutation(payload);
+        EncryptPayload(envelope, payload, password);
+        return envelope.ToJsonString();
+    }
+
+    private static JsonObject DecryptPayload(JsonObject envelope, string password)
+    {
+        const string additionalData = "TrueNasAppManager:configuration-backup:v1";
+        var encryption = envelope["encryption"]!.AsObject();
+        var salt = Convert.FromBase64String(encryption["salt"]!.GetValue<string>());
+        var nonce = Convert.FromBase64String(encryption["nonce"]!.GetValue<string>());
+        var tag = Convert.FromBase64String(encryption["tag"]!.GetValue<string>());
+        var ciphertext = Convert.FromBase64String(encryption["ciphertext"]!.GetValue<string>());
+        var key = new byte[32];
+        var plaintext = new byte[ciphertext.Length];
+        try
+        {
+            Rfc2898DeriveBytes.Pbkdf2(password, salt, key, 600_000, HashAlgorithmName.SHA256);
+            using var aes = new AesGcm(key, tag.Length);
+            aes.Decrypt(nonce, ciphertext, tag, plaintext, Encoding.UTF8.GetBytes(additionalData));
+            return JsonNode.Parse(plaintext)!.AsObject();
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
+    }
+
+    private static void EncryptPayload(JsonObject envelope, JsonObject payload, string password)
+    {
+        const string additionalData = "TrueNasAppManager:configuration-backup:v1";
+        var salt = Enumerable.Range(1, 16).Select(Convert.ToByte).ToArray();
+        var nonce = Enumerable.Range(101, 12).Select(Convert.ToByte).ToArray();
+        var plaintext = Encoding.UTF8.GetBytes(payload.ToJsonString());
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[16];
+        var key = new byte[32];
+        try
+        {
+            Rfc2898DeriveBytes.Pbkdf2(password, salt, key, 600_000, HashAlgorithmName.SHA256);
+            using var aes = new AesGcm(key, tag.Length);
+            aes.Encrypt(nonce, plaintext, ciphertext, tag, Encoding.UTF8.GetBytes(additionalData));
+            envelope["encryption"] = new JsonObject
+            {
+                ["kdf"] = "PBKDF2-SHA256",
+                ["iterations"] = 600_000,
+                ["salt"] = Convert.ToBase64String(salt),
+                ["cipher"] = "AES-256-GCM",
+                ["nonce"] = Convert.ToBase64String(nonce),
+                ["tag"] = Convert.ToBase64String(tag),
+                ["ciphertext"] = Convert.ToBase64String(ciphertext)
+            };
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
     }
 
     private static ConfigurationBackupService CreateService(TestDatabase database, ISecretProtector protector)

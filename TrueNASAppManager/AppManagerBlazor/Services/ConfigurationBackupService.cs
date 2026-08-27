@@ -12,35 +12,30 @@ namespace TrueNasAppManager.Services;
 
 public interface IConfigurationBackupService
 {
-    /// <summary>Exports portable configuration without stored secrets.</summary>
-    /// <param name="cancellationToken">A token that cancels the export.</param>
-    /// <returns>The downloadable safe JSON backup.</returns>
-    Task<ConfigurationBackupFile> ExportSafeAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Exports portable configuration and secrets protected by a password.</summary>
+    /// <summary>Exports all portable configuration and secrets protected by a password.</summary>
     /// <param name="password">The password used to derive the backup encryption key.</param>
     /// <param name="cancellationToken">A token that cancels the export.</param>
-    /// <returns>The downloadable encrypted JSON backup.</returns>
-    Task<ConfigurationBackupFile> ExportEncryptedAsync(string password, CancellationToken cancellationToken = default);
+    /// <returns>The downloadable full recovery JSON backup.</returns>
+    Task<ConfigurationBackupFile> ExportFullRecoveryAsync(string password, CancellationToken cancellationToken = default);
 
     /// <summary>Reads non-secret metadata from a backup without changing configuration.</summary>
     /// <param name="json">The backup JSON.</param>
     /// <returns>The backup metadata available without decryption.</returns>
     ConfigurationBackupInspection Inspect(string json);
 
-    /// <summary>Decrypts when necessary and validates a backup without changing configuration.</summary>
+    /// <summary>Decrypts and validates a full recovery backup without changing configuration.</summary>
     /// <param name="json">The backup JSON.</param>
-    /// <param name="password">The password for an encrypted backup, or null for a safe backup.</param>
+    /// <param name="password">The full recovery backup password.</param>
     /// <param name="cancellationToken">A token that cancels validation.</param>
     /// <returns>A validated import preview.</returns>
-    Task<ConfigurationBackupPreview> PreviewAsync(string json, string? password, CancellationToken cancellationToken = default);
+    Task<ConfigurationBackupPreview> PreviewAsync(string json, string password, CancellationToken cancellationToken = default);
 
-    /// <summary>Validates and merges a backup into the current configuration transactionally.</summary>
+    /// <summary>Validates and merges a password-protected full recovery backup transactionally.</summary>
     /// <param name="json">The backup JSON.</param>
-    /// <param name="password">The password for an encrypted backup, or null for a safe backup.</param>
+    /// <param name="password">The full recovery backup password.</param>
     /// <param name="cancellationToken">A token that cancels the import.</param>
     /// <returns>A summary of restored application settings and connection readiness.</returns>
-    Task<ConfigurationRestoreResult> ImportAsync(string json, string? password, CancellationToken cancellationToken = default);
+    Task<ConfigurationRestoreResult> ImportAsync(string json, string password, CancellationToken cancellationToken = default);
 }
 
 public sealed class ConfigurationBackupService(
@@ -56,27 +51,18 @@ public sealed class ConfigurationBackupService(
     private const string AdditionalData = "TrueNasAppManager:configuration-backup:v1";
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
-    /// <inheritdoc cref="IConfigurationBackupService.ExportSafeAsync"/>
-    public async Task<ConfigurationBackupFile> ExportSafeAsync(CancellationToken cancellationToken = default)
+    /// <inheritdoc cref="IConfigurationBackupService.ExportFullRecoveryAsync"/>
+    public async Task<ConfigurationBackupFile> ExportFullRecoveryAsync(string password, CancellationToken cancellationToken = default)
     {
+        ValidateNewPassword(password);
         var now = timeProvider.GetUtcNow();
-        var payload = await LoadPayloadAsync(includeSecrets: false, cancellationToken);
-        var envelope = CreateEnvelope(now, includesSecrets: false, payload, encryption: null);
-        return new ConfigurationBackupFile(CreateFileName(now, encrypted: false), JsonSerializer.Serialize(envelope, JsonOptions), false);
-    }
-
-    /// <inheritdoc cref="IConfigurationBackupService.ExportEncryptedAsync"/>
-    public async Task<ConfigurationBackupFile> ExportEncryptedAsync(string password, CancellationToken cancellationToken = default)
-    {
-        ValidatePassword(password);
-        var now = timeProvider.GetUtcNow();
-        var payload = await LoadPayloadAsync(includeSecrets: true, cancellationToken);
+        var payload = await LoadPayloadAsync(cancellationToken);
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
         try
         {
             var encryption = Encrypt(payloadBytes, password);
             var envelope = CreateEnvelope(now, includesSecrets: true, configuration: null, encryption);
-            return new ConfigurationBackupFile(CreateFileName(now, encrypted: true), JsonSerializer.Serialize(envelope, JsonOptions), true);
+            return new ConfigurationBackupFile(CreateFileName(now), JsonSerializer.Serialize(envelope, JsonOptions), true);
         }
         finally
         {
@@ -92,7 +78,7 @@ public sealed class ConfigurationBackupService(
     }
 
     /// <inheritdoc cref="IConfigurationBackupService.PreviewAsync"/>
-    public Task<ConfigurationBackupPreview> PreviewAsync(string json, string? password, CancellationToken cancellationToken = default)
+    public Task<ConfigurationBackupPreview> PreviewAsync(string json, string password, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var envelope = ParseEnvelope(json);
@@ -102,7 +88,7 @@ public sealed class ConfigurationBackupService(
     }
 
     /// <inheritdoc cref="IConfigurationBackupService.ImportAsync"/>
-    public async Task<ConfigurationRestoreResult> ImportAsync(string json, string? password, CancellationToken cancellationToken = default)
+    public async Task<ConfigurationRestoreResult> ImportAsync(string json, string password, CancellationToken cancellationToken = default)
     {
         var envelope = ParseEnvelope(json);
         var payload = ReadPayload(envelope, password);
@@ -112,10 +98,7 @@ public sealed class ConfigurationBackupService(
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var settings = await db.Settings.SingleAsync(item => item.Id == 1, cancellationToken);
         ApplySettings(settings, payload.Settings, envelope.SchemaVersion);
-        if (envelope.IncludesSecrets)
-        {
-            ApplySecrets(settings, payload.Secrets ?? throw new InvalidOperationException("The encrypted backup does not contain its secret configuration."), envelope.SchemaVersion);
-        }
+        ApplySecrets(settings, payload.Secrets ?? throw new InvalidOperationException("The full recovery backup does not contain its secret configuration."), envelope.SchemaVersion);
 
         if (string.IsNullOrWhiteSpace(settings.TrueNasUsername) || string.IsNullOrWhiteSpace(settings.TrueNasApiKeyEncrypted))
         {
@@ -151,18 +134,16 @@ public sealed class ConfigurationBackupService(
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var connectionReady = !string.IsNullOrWhiteSpace(settings.TrueNasUsername) && !string.IsNullOrWhiteSpace(settings.TrueNasApiKeyEncrypted);
-        return new ConfigurationRestoreResult(payload.Apps.Count, envelope.IncludesSecrets, connectionReady);
+        return new ConfigurationRestoreResult(payload.Apps.Count, true, connectionReady);
     }
 
-    private async Task<BackupPayload> LoadPayloadAsync(bool includeSecrets, CancellationToken cancellationToken)
+    private async Task<BackupPayload> LoadPayloadAsync(CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1, cancellationToken);
         var apps = await db.Apps.AsNoTracking().Include(app => app.UptimeKumaMonitors).OrderBy(app => app.Id).ToListAsync(cancellationToken);
         var appConfigurations = apps.Select(CreateAppBackup).ToList();
-        var secrets = includeSecrets
-            ? new BackupSecrets(ReadSecret(settings.TrueNasApiKeyEncrypted), ReadSecret(settings.WebhookAuthorizationEncrypted), ReadSecret(settings.WebhookHeadersEncrypted), ReadSecret(settings.UptimeKumaApiKeyEncrypted))
-            : null;
+        var secrets = new BackupSecrets(ReadSecret(settings.TrueNasApiKeyEncrypted), ReadSecret(settings.WebhookAuthorizationEncrypted), ReadSecret(settings.WebhookHeadersEncrypted), ReadSecret(settings.UptimeKumaApiKeyEncrypted));
         return new BackupPayload(CreateSettingsBackup(settings), appConfigurations, secrets);
     }
 
@@ -456,18 +437,18 @@ public sealed class ConfigurationBackupService(
             throw new InvalidOperationException("The backup payload does not match its secret mode.");
         }
 
+        if (!envelope.IncludesSecrets || envelope.Encryption is null)
+        {
+            throw new InvalidOperationException("Only a password-protected full recovery backup can be restored. Secret-free backups are not accepted.");
+        }
+
         return envelope;
     }
 
-    private static BackupPayload ReadPayload(BackupEnvelope envelope, string? password)
+    private static BackupPayload ReadPayload(BackupEnvelope envelope, string password)
     {
-        if (!envelope.IncludesSecrets)
-        {
-            return envelope.Configuration ?? throw new InvalidOperationException("The safe backup does not contain configuration.");
-        }
-
         ValidatePassword(password);
-        var plaintext = Decrypt(envelope.Encryption ?? throw new InvalidOperationException("The encrypted backup is incomplete."), password!);
+        var plaintext = Decrypt(envelope.Encryption ?? throw new InvalidOperationException("The full recovery backup is incomplete."), password);
         try
         {
             return JsonSerializer.Deserialize<BackupPayload>(plaintext, JsonOptions) ?? throw new InvalidOperationException("The encrypted backup payload is empty.");
@@ -554,7 +535,16 @@ public sealed class ConfigurationBackupService(
     {
         if (string.IsNullOrEmpty(password))
         {
-            throw new InvalidOperationException("A password is required for an encrypted backup.");
+            throw new InvalidOperationException("Enter the full recovery backup password.");
+        }
+    }
+
+    private static void ValidateNewPassword(string? password)
+    {
+        ValidatePassword(password);
+        if (password!.Length < 12)
+        {
+            throw new InvalidOperationException("Use at least 12 characters for the full recovery backup password.");
         }
     }
 
@@ -634,7 +624,7 @@ public sealed class ConfigurationBackupService(
         }
     }
 
-    private static string CreateFileName(DateTimeOffset now, bool encrypted) => $"truenas-app-manager-config-{now.UtcDateTime:yyyyMMddTHHmmssZ}{(encrypted ? "-encrypted" : string.Empty)}.json";
+    private static string CreateFileName(DateTimeOffset now) => $"truenas-app-manager-full-recovery-{now.UtcDateTime:yyyyMMddTHHmmssZ}.json";
 
     private static string GetApplicationVersion() => ApplicationVersion.Current;
 
