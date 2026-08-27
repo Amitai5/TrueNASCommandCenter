@@ -139,7 +139,7 @@
                             @foreach (var entry in _logs)
                             {
                                 <div class="log-line @(entry.Stream.Equals("stderr", StringComparison.OrdinalIgnoreCase) ? "stderr" : string.Empty)">
-                                    <time datetime="@entry.Timestamp.ToString("O")">@entry.Timestamp.ToString("HH:mm:ss.fff")</time>
+                                    <time datetime="@entry.Timestamp.ToString("O")">@entry.Timestamp.ToString("h:mm:ss.fff tt")</time>
                                     <span class="log-stream">@entry.Stream</span>
                                     <span class="log-message">@entry.Message</span>
                                 </div>

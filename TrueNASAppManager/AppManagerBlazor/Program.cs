@@ -50,6 +50,7 @@ builder.Services.AddSingleton<TrueNasJsonRpcClient>();
 builder.Services.AddSingleton<ITrueNasClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
 builder.Services.AddSingleton<ITrueNasSystemClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
 builder.Services.AddSingleton<IStoragePoolOverviewService, StoragePoolOverviewService>();
+builder.Services.AddScoped<DashboardOverviewService>();
 builder.Services.AddSingleton<AppResourceMonitorService>();
 builder.Services.AddSingleton<IAppResourceMonitor>(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddSingleton<RunLock>();

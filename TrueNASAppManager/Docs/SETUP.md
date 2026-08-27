@@ -45,7 +45,7 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Ap
 5. Under **Roles**, select:
    - `APPS_READ`
    - `APPS_WRITE`
-   - Optionally, `POOL_READ` to show storage-pool health and capacity on the Apps page
+   - Optionally, `POOL_READ` to show storage-pool health and capacity on the Dashboard
 6. Leave **Web Shell Access** disabled and save the privilege.
 
 `APPS_READ` allows discovery, health, ports, portals, containers, logs, and live application resource statistics. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. `POOL_READ` is not required for app management; without it, only the optional storage-pool cards remain unavailable. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or update actions through this account.
@@ -222,8 +222,8 @@ The address display is automatic and does not require another saved setting:
 1. Confirm `TRUENAS_WEBSOCKET_URL` uses the TrueNAS hostname covered by its TLS certificate, such as `wss://truenas.local/api/current`.
 2. Confirm the complete custom-app YAML maps that same hostname to the current TrueNAS IP under `extra_hosts`, such as `truenas.local:10.0.0.21`.
 3. Redeploy the custom app after changing either value.
-4. Open the Apps page and confirm the server status strip shows the expected hostname and IP. Desktop layouts also repeat the IP in the sidebar.
-5. Use **Copy IP** to place the numeric address on the clipboard or **Open TrueNAS** to open the Web UI derived from the configured secure endpoint.
+4. Open the Dashboard and confirm the server status strip shows the expected hostname and IP. Desktop layouts also repeat the IP in the sidebar.
+5. Use **Copy IP** to place the numeric address on the clipboard or **Open TrueNAS** to open the local Web UI over `http://`.
 
 If the address shows **IP unavailable**, correct the `extra_hosts` mapping and redeploy the complete YAML. Prefer a DHCP reservation or static address so the mapping remains valid.
 
@@ -234,7 +234,7 @@ Pool cards require the additional read-only `POOL_READ` role:
 1. In TrueNAS, open **Credentials → Groups → Privileges**.
 2. Edit the custom privilege assigned to the App Manager service account's group.
 3. Add `POOL_READ` beside the existing `APPS_READ` and `APPS_WRITE` roles, then save.
-4. Return to TrueNAS App Manager and select **Refresh pools** on the Apps page. If the API session was already open when the role changed, run **Settings → TrueNAS connection → Test connection** once before refreshing.
+4. Return to TrueNAS App Manager and select **Refresh pools** on the Dashboard. If the API session was already open when the role changed, run **Settings → TrueNAS connection → Test connection** once before refreshing.
 5. Confirm each pool card shows its TrueNAS health state, used/free capacity, and fragmentation value.
 
 `POOL_READ` is optional. A missing or denied role displays an explanatory unavailable state and never blocks app discovery, monitoring, or lifecycle operations.
@@ -267,7 +267,7 @@ The app-details page uses an operations-first layout. Live logs occupy the main 
 
 Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
 
-The sidebar order is **Apps**, **Monitoring**, **History**, and **Settings**. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
+The sidebar order is **Dashboard**, **Apps**, **Monitoring**, **History**, and **Settings**. The Dashboard contains server-wide status, current app and Kuma alerts, the latest update run, the next scheduled run, pool health, and data-freshness timestamps. The Apps page remains focused on app inventory and app-specific actions. All operator-facing timestamps use a 12-hour clock with AM/PM. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
 
 Configure separate **Local Web UI URL** and **Remote Web UI URL** values under the app's **Settings** page when it is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Generated local links default to `http://truenas.local`; the global **Local TrueNAS Web UI host** setting can override that origin. Public manager domains use only the explicitly configured remote route, and the manager does not guess subdomains.
 

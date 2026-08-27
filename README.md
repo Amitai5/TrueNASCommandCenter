@@ -25,6 +25,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Read-only Uptime Kuma integration with imported monitor state, response time, uptime windows, certificate status, and explicit app mapping
 - At-a-glance TrueNAS server identity with resolved IP, one-click copy, and direct TrueNAS Web UI access
 - Optional storage-pool health and capacity cards when the service account has `POOL_READ`
+- Operations dashboard with current app and Kuma outages, latest update-run status, schedule, server identity, storage health, and data freshness
 - Live per-app CPU, memory, network, and block-I/O metrics imported from TrueNAS
 - Favorites and custom app groups with dashboard filtering and portable backup support
 - Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
@@ -110,7 +111,7 @@ Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not 
 
 This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
 
-The Apps page resolves that configured hostname and displays its current IP in the server status strip. Desktop layouts repeat the address in the sidebar so it remains available while navigating the manager. The status strip can copy the IP or open the TrueNAS Web UI without storing a second server address.
+The Dashboard resolves that configured hostname and displays its current IP in the server status strip. Desktop layouts repeat the address in the sidebar so it remains available while navigating the manager. The status strip can copy the IP or open the local TrueNAS Web UI over `http://` without storing a second server address.
 
 Host networking is the reliable default because it lets the manager reach the TrueNAS Web UI address without Docker bridge or LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
 
@@ -200,12 +201,14 @@ The wizard uses the secure TrueNAS endpoint configured in the deployment YAML bu
 
 The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](TrueNASAppManager/Docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
 
-## Configure server overview and app organization
+## Dashboard and app organization
 
-The Apps dashboard adds four optional or automatic operational views after the initial connection succeeds:
+The Dashboard keeps server-wide operational information separate from the app inventory. It surfaces current app and Uptime Kuma outages, the latest check/update result, the next scheduled run, TrueNAS identity and IP, storage-pool status, and freshness timestamps. Operator-facing timestamps use a 12-hour clock with AM/PM.
+
+Four optional or automatic views become available after the initial connection succeeds:
 
 1. **TrueNAS IP and Web UI actions** — set `TRUENAS_WEBSOCKET_URL` to the certificate-covered TrueNAS hostname and map that hostname to the current TrueNAS IP with `extra_hosts` in the complete YAML. The manager resolves the hostname automatically, shows the address in the server status strip and desktop sidebar, and enables **Copy IP** and **Open TrueNAS**. There is no second IP setting to maintain.
-2. **Storage-pool health** — edit the custom privilege assigned to the service-account group and add the optional `POOL_READ` role. Return to the Apps page and select **Refresh pools**. Without `POOL_READ`, app management continues normally and only the pool cards remain unavailable.
+2. **Storage-pool health** — edit the custom privilege assigned to the service-account group and add the optional `POOL_READ` role. Return to the Dashboard and select **Refresh pools**. Without `POOL_READ`, app management continues normally and only the pool cards remain unavailable.
 3. **Live app resources** — `APPS_READ`, already required for discovery, also permits the shared `app.stats` stream. No additional setting is needed. After a successful connection, CPU and memory appear on the Apps page after the first sample; open an app's details page for network and block-I/O values. Samples remain in memory and are never added to history or backups.
 4. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in safe configuration backups.
 
@@ -217,11 +220,11 @@ Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fiel
 
 The app-details page prioritizes operations. A large live-log workspace sits beside a bounded access-and-workloads column, followed by full-width overview cards for application metadata, Uptime Kuma, updates and recovery, safety, and recent history. This shared page flow keeps secondary cards from extending beside empty content. On smaller screens, every section stacks into one column without horizontal overflow.
 
-The primary navigation is ordered **Apps**, **Monitoring**, **History**, and **Settings** so imported availability reports remain close to day-to-day app operations. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
+The primary navigation is ordered **Dashboard**, **Apps**, **Monitoring**, **History**, and **Settings**. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
 
 The Apps page can star frequently used apps, assign a custom group under each app's **Settings**, and filter by favorites, group, or ungrouped apps. It also shows current CPU and memory at a glance. The details page adds live CPU, memory, network, and block-I/O metrics alongside the current route, ports, health, workloads, versions, lifecycle controls, source information, and live logs. Resource values come from TrueNAS's shared statistics stream and are not persisted.
 
-The optional storage-pool section shows pool status, used/free capacity, and fragmentation. App management continues normally when the API account lacks `POOL_READ`; the panel explains how to enable that extra read-only view. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
+The Dashboard's optional storage-pool section shows pool status, used/free capacity, and fragmentation. App management continues normally when the API account lacks `POOL_READ`; the panel explains how to enable that extra read-only view. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
 
 ## Uptime Kuma reports
 

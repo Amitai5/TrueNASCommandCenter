@@ -222,7 +222,7 @@
                         <ol>
                             @foreach (var run in _schedulePreview.NextRuns)
                             {
-                                <li>@run.ToString("yyyy-MM-dd HH:mm:ss zzz")</li>
+                                <li>@run.ToString("yyyy-MM-dd h:mm:ss tt zzz")</li>
                             }
                         </ol>
                     }
@@ -375,7 +375,7 @@
                         <dl class="details-list">
                             <dt>File</dt><dd>@_importFileName</dd>
                             <dt>Schema</dt><dd>@_importInspection.SchemaVersion</dd>
-                            <dt>Exported</dt><dd>@_importInspection.ExportedAtUtc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
+                            <dt>Exported</dt><dd>@DisplayTimeFormatter.Format(_importInspection.ExportedAtUtc.UtcDateTime, "UTC")</dd>
                             <dt>App version</dt><dd>@_importInspection.ApplicationVersion</dd>
                             <dt>Secrets</dt><dd>@(_importInspection.IncludesSecrets ? "Password encrypted" : "Excluded")</dd>
                         </dl>

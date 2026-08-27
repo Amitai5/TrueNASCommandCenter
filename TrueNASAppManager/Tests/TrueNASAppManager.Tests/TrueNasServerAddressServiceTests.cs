@@ -21,7 +21,7 @@ public sealed class TrueNasServerAddressServiceTests
         Assert.AreEqual("10.0.0.21", result.IpAddress);
         Assert.IsTrue(result.IsResolved);
         Assert.IsFalse(result.HasDistinctHostName);
-        Assert.AreEqual("https://10.0.0.21/", result.WebUiUrl);
+        Assert.AreEqual("http://10.0.0.21/", result.WebUiUrl);
         Assert.AreEqual(0, resolver.CallCount);
     }
 
@@ -36,7 +36,7 @@ public sealed class TrueNasServerAddressServiceTests
         Assert.AreEqual("truenas.local", result.HostName);
         Assert.AreEqual("10.0.0.21", result.IpAddress);
         Assert.IsTrue(result.HasDistinctHostName);
-        Assert.AreEqual("https://truenas.local/", result.WebUiUrl);
+        Assert.AreEqual("http://truenas.local/", result.WebUiUrl);
         Assert.AreEqual(1, resolver.CallCount);
     }
 
@@ -53,7 +53,7 @@ public sealed class TrueNasServerAddressServiceTests
         Assert.IsFalse(result.IsResolved);
         Assert.IsTrue(result.HasDistinctHostName);
         Assert.AreEqual("IP unavailable", result.DisplayAddress);
-        Assert.AreEqual("https://truenas.local/", result.WebUiUrl);
+        Assert.AreEqual("http://truenas.local/", result.WebUiUrl);
     }
 
     /// <summary>Verifies that a custom middleware port is retained by the derived TrueNAS Web UI URL.</summary>
@@ -65,7 +65,7 @@ public sealed class TrueNasServerAddressServiceTests
 
         var result = await service.GetAsync();
 
-        Assert.AreEqual("https://truenas.local:8443/", result.WebUiUrl);
+        Assert.AreEqual("http://truenas.local:8443/", result.WebUiUrl);
     }
 
     private static TrueNasServerAddressService CreateService(string endpoint, IHostAddressResolver resolver) =>

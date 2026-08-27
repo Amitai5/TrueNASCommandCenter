@@ -8,6 +8,9 @@
         </a>
         <nav>
             <NavLink href="/" Match="NavLinkMatch.All">
+                <NavIcon Name="dashboard" /> Dashboard
+            </NavLink>
+            <NavLink href="/apps">
                 <NavIcon Name="apps" /> Apps
             </NavLink>
             <NavLink href="/monitoring">
@@ -46,7 +49,8 @@
     </main>
 
     <nav class="mobile-nav" aria-label="Primary navigation">
-        <NavLink href="/" Match="NavLinkMatch.All"><NavIcon Name="apps" />Apps</NavLink>
+        <NavLink href="/" Match="NavLinkMatch.All"><NavIcon Name="dashboard" />Home</NavLink>
+        <NavLink href="/apps"><NavIcon Name="apps" />Apps</NavLink>
         <NavLink href="/monitoring"><NavIcon Name="monitoring" />Monitor</NavLink>
         <NavLink href="/history"><NavIcon Name="history" />History</NavLink>
         <NavLink href="/settings"><NavIcon Name="settings" />Settings</NavLink>

@@ -1,14 +1,10 @@
-﻿@page "/"
+@* The dashboard owns the root route. *@
 @page "/apps"
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject IUpdateCoordinator Coordinator
 @inject IAppManagementService AppManagementService
 @inject IAppLinkService AppLinkService
-@inject ITrueNasServerAddressService ServerAddressService
-@inject IStoragePoolOverviewService PoolOverviewService
 @inject IAppResourceMonitor ResourceMonitor
-@inject IScheduleService ScheduleService
-@inject SettingsService SettingsService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @implements IDisposable
@@ -47,7 +43,7 @@
         <div class="notice @(_messageIsError ? "danger" : "success")" role="status">@_message</div>
     }
 
-    <section class="summary-grid" aria-label="App summary">
+    <section class="summary-grid app-summary-grid" aria-label="App summary">
         <div class="summary-item">
             <strong>@_apps.Count</strong>
             <span>Applications</span>
@@ -60,107 +56,6 @@
             <strong>@_apps.Count(app => app.HealthState is AppHealthState.Stopped or AppHealthState.Degraded)</strong>
             <span>Need attention</span>
         </div>
-        <div class="summary-item">
-            <strong>@FormatNextRun()</strong>
-            <span>Next run</span>
-        </div>
-    </section>
-
-    <section class="panel server-status-bar" aria-label="TrueNAS server status">
-        <div class="server-status-identity">
-            <span class="status-dot @(ConnectionText() == "Connected" ? "success" : "danger")" aria-hidden="true"></span>
-            <span>
-                <span class="server-status-label">TrueNAS server</span>
-                <strong class="server-status-address">@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong>
-                @if (_serverAddress?.HasDistinctHostName == true)
-                {
-                    <span class="server-status-host">@_serverAddress.HostName</span>
-                }
-            </span>
-        </div>
-        <div class="server-status-secondary">
-            <div class="server-status-metadata">
-                <span>Connection <strong>@ConnectionText()</strong></span>
-                <span>Inventory <strong>@FormatDate(_settings?.LastInventoryRefreshUtc)</strong></span>
-                <span>Update check <strong>@FormatDate(_settings?.LastCompletedCheckUtc)</strong></span>
-            </div>
-            <div class="server-status-actions">
-                @if (!string.IsNullOrWhiteSpace(_serverActionMessage))
-                {
-                    <span class="muted" role="status">@_serverActionMessage</span>
-                }
-                <button class="small" disabled="@(_serverAddress?.IsResolved != true)" @onclick="CopyServerIpAsync">Copy IP</button>
-                @if (_serverAddress is not null)
-                {
-                    <a class="button small" href="@_serverAddress.WebUiUrl" target="_blank" rel="noopener noreferrer">Open TrueNAS ↗</a>
-                }
-            </div>
-        </div>
-    </section>
-
-    <section class="panel pool-overview" aria-labelledby="pool-overview-heading">
-        <div class="panel-heading-row">
-            <div>
-                <h2 id="pool-overview-heading">Storage pools</h2>
-                <p class="muted">Capacity and health reported by TrueNAS.</p>
-            </div>
-            <button class="small" disabled="@_poolLoading" @onclick="LoadPoolOverviewAsync">Refresh pools</button>
-        </div>
-        @if (_poolLoading)
-        {
-            <div class="inline-loading"><span class="spinner"></span> Loading pool health…</div>
-        }
-        else if (_poolOverview?.RequiresPoolRead == true)
-        {
-            <div class="optional-feature-state">
-                <strong>Pool health is optional.</strong>
-                <span>Add the <code>POOL_READ</code> role to the TrueNAS API privilege to show storage capacity here.</span>
-                <a href="/help">Setup help</a>
-            </div>
-        }
-        else if (!string.IsNullOrWhiteSpace(_poolOverview?.Error))
-        {
-            <div class="optional-feature-state warning">
-                <strong>Pool health is unavailable.</strong>
-                <span>@_poolOverview.Error</span>
-            </div>
-        }
-        else if (_poolOverview?.Pools.Count > 0)
-        {
-            <div class="pool-health-grid">
-                @foreach (var pool in _poolOverview.Pools)
-                {
-                    <article class="pool-health-card">
-                        <div class="row">
-                            <strong>@pool.Name</strong>
-                            <span class="badge @PoolClass(pool)">@pool.Status</span>
-                        </div>
-                        <div class="pool-capacity-row">
-                            <span><strong>@FormatBytes(pool.AllocatedBytes)</strong> used</span>
-                            <span>@FormatBytes(pool.FreeBytes) free</span>
-                        </div>
-                        <div class="pool-capacity-track" role="progressbar" aria-label="@pool.Name storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(pool.UsedPercentage ?? 0)">
-                            <span style="@PoolProgressStyle(pool)"></span>
-                        </div>
-                        <div class="pool-card-meta">
-                            <span>@((pool.UsedPercentage ?? 0).ToString("0.#"))% of @FormatBytes(pool.SizeBytes)</span>
-                            @if (!string.IsNullOrWhiteSpace(pool.Fragmentation))
-                            {
-                                <span>@pool.Fragmentation fragmented</span>
-                            }
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(pool.StatusDetail))
-                        {
-                            <p class="pool-warning">@pool.StatusDetail</p>
-                        }
-                    </article>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="optional-feature-state"><span>No storage pools were returned by TrueNAS.</span></div>
-        }
     </section>
 
     @if (_loading)
@@ -367,14 +262,10 @@
     private const string GroupFilterPrefix = "group:";
     private List<AppRecord> _apps = [];
     private SettingsRecord? _settings;
-    private TrueNasServerAddress? _serverAddress;
-    private StoragePoolOverview? _poolOverview;
     private bool _loading = true;
-    private bool _poolLoading = true;
     private bool _busy;
     private bool _messageIsError;
     private string? _message;
-    private string? _serverActionMessage;
     private string? _favoriteBusyId;
     private string _searchTerm = string.Empty;
     private string _organizationFilter = "all";
@@ -382,11 +273,7 @@
     protected override async Task OnInitializedAsync()
     {
         ResourceMonitor.Updated += OnResourcesUpdated;
-        var serverAddressTask = ServerAddressService.GetAsync();
-        var poolOverviewTask = LoadPoolOverviewAsync();
         await LoadAsync();
-        _serverAddress = await serverAddressTask;
-        await poolOverviewTask;
         if (_settings is not null && !_settings.OnboardingCompleted)
         {
             Navigation.NavigateTo("/onboarding");
@@ -476,31 +363,6 @@
         }
     }
 
-    private async Task CopyServerIpAsync()
-    {
-        if (_serverAddress?.IsResolved != true)
-        {
-            return;
-        }
-
-        try
-        {
-            var copied = await JS.InvokeAsync<bool>("trueNasAppManager.copyText", _serverAddress.IpAddress);
-            _serverActionMessage = copied ? "IP copied" : "Copy failed";
-        }
-        catch
-        {
-            _serverActionMessage = "Copy failed";
-        }
-    }
-
-    private async Task LoadPoolOverviewAsync()
-    {
-        _poolLoading = true;
-        _poolOverview = await PoolOverviewService.GetAsync();
-        _poolLoading = false;
-    }
-
     private AppResourceUsage? ResourceUsage(string appId) => ResourceMonitor.Current.TryGetValue(appId, out var usage) ? usage : null;
 
     private void OnResourcesUpdated() => _ = InvokeAsync(StateHasChanged);
@@ -523,7 +385,6 @@
         finally
         {
             await LoadAsync();
-            await LoadPoolOverviewAsync();
             _busy = false;
         }
     }
@@ -595,65 +456,6 @@
             _busy = false;
         }
     }
-
-    private string FormatNextRun()
-    {
-        if (_settings is null ||
-            !_settings.SchedulerEnabled ||
-            string.IsNullOrWhiteSpace(_settings.CronExpression) ||
-            string.IsNullOrWhiteSpace(_settings.TimeZoneId))
-        {
-            return "Not set";
-        }
-
-        try
-        {
-            var next = ScheduleService.GetNextRun(
-                _settings.CronExpression,
-                _settings.TimeZoneId,
-                DateTimeOffset.UtcNow);
-            if (next is null)
-            {
-                return "Not set";
-            }
-
-            var zone = TimeZoneInfo.FindSystemTimeZoneById(_settings.TimeZoneId);
-            return TimeZoneInfo.ConvertTime(next.Value, zone).ToString("ddd HH:mm");
-        }
-        catch
-        {
-            return "Invalid";
-        }
-    }
-
-    private string FormatDate(DateTime? value)
-    {
-        if (value is null)
-        {
-            return "Never";
-        }
-
-        if (!string.IsNullOrWhiteSpace(_settings?.TimeZoneId))
-        {
-            try
-            {
-                var zone = TimeZoneInfo.FindSystemTimeZoneById(_settings.TimeZoneId);
-                return TimeZoneInfo.ConvertTimeFromUtc(
-                    DateTime.SpecifyKind(value.Value, DateTimeKind.Utc),
-                    zone).ToString("MMM d, yyyy HH:mm");
-            }
-            catch
-            {
-            }
-        }
-
-        return DateTime.SpecifyKind(value.Value, DateTimeKind.Utc).ToString("MMM d, yyyy HH:mm 'UTC'");
-    }
-
-    private string ConnectionText() =>
-        _settings?.LastConnectionSuccessUtc is not null && _settings.LastConnectionErrorCode is null
-            ? "Connected"
-            : "Not connected";
 
     private static string AvailableText(AppRecord app) =>
         app.CatalogUpdateAvailable
@@ -760,10 +562,6 @@
         AppLifecycleAction.Restart => "restarted",
         _ => "managed"
     };
-
-    private static string PoolClass(StoragePoolHealth pool) => pool.IsHealthy && !pool.HasWarning ? "success" : pool.HasWarning ? "warning" : "danger";
-
-    private static string PoolProgressStyle(StoragePoolHealth pool) => $"width: {(pool.UsedPercentage ?? 0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
 
     private static string FormatBytes(long? bytes)
     {

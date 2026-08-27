@@ -1,7 +1,13 @@
 namespace TrueNasAppManager.Services;
 
+/// <summary>Formats persisted UTC timestamps consistently for operator-facing pages.</summary>
 public static class DisplayTimeFormatter
 {
+    /// <summary>Formats a UTC timestamp in the selected timezone using a 12-hour clock.</summary>
+    /// <param name="utc">The persisted UTC timestamp.</param>
+    /// <param name="timeZoneId">The optional IANA timezone identifier.</param>
+    /// <param name="fallback">The text returned when the timestamp is absent.</param>
+    /// <returns>The localized timestamp or the provided fallback.</returns>
     public static string Format(DateTime? utc, string? timeZoneId, string fallback = "Never")
     {
         if (utc is null)
@@ -15,7 +21,7 @@ public static class DisplayTimeFormatter
             try
             {
                 var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-                return $"{TimeZoneInfo.ConvertTimeFromUtc(value, zone):MMM d, yyyy HH:mm} {zone.Id}";
+                return $"{TimeZoneInfo.ConvertTimeFromUtc(value, zone):MMM d, yyyy h:mm tt} {zone.Id}";
             }
             catch (TimeZoneNotFoundException)
             {
@@ -25,6 +31,6 @@ public static class DisplayTimeFormatter
             }
         }
 
-        return $"{value:MMM d, yyyy HH:mm} UTC";
+        return $"{value:MMM d, yyyy h:mm tt} UTC";
     }
 }

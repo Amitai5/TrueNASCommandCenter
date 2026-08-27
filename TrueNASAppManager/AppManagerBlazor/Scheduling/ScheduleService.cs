@@ -85,5 +85,5 @@ public sealed class ScheduleService(TimeProvider timeProvider) : IScheduleServic
         IReadOnlyList<DateTimeOffset> runs) =>
         runs.Count == 0
             ? $"{expression} in {timeZoneId}"
-            : $"Next: {string.Join(", ", runs.Select(run => run.ToString("ddd, MMM d HH:mm zzz")))}";
+            : $"Next: {string.Join(", ", runs.Select(run => run.ToString("ddd, MMM d h:mm tt zzz")))}";
 }

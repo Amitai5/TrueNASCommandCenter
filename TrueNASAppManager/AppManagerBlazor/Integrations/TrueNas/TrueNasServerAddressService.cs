@@ -74,7 +74,7 @@ public sealed class TrueNasServerAddressService(TrueNasEndpointOptions endpoint,
 
     private static string CreateWebUiUrl(Uri endpoint)
     {
-        var builder = new UriBuilder(Uri.UriSchemeHttps, endpoint.DnsSafeHost)
+        var builder = new UriBuilder(Uri.UriSchemeHttp, endpoint.DnsSafeHost)
         {
             Path = "/",
             Port = endpoint.IsDefaultPort ? -1 : endpoint.Port
