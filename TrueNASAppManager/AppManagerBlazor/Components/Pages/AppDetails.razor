@@ -4,6 +4,7 @@
 @inject IUpdateCoordinator Coordinator
 @inject IAppManagementService AppManagementService
 @inject IAppLinkService AppLinkService
+@inject IAppResourceMonitor ResourceMonitor
 @inject IGitHubMetadataService GitHubMetadataService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -78,6 +79,7 @@
             <div><span>Published ports</span><strong>@PortSummary()</strong></div>
             <div><span>Current route</span><strong>@RouteLabel()</strong></div>
             <div><span>Uptime Kuma</span><strong><span class="status-dot @KumaAggregateClass()"></span>@KumaAggregateText()</strong></div>
+            <div><span>Organization</span><strong>@OrganizationText()</strong></div>
         </section>
 
         <div class="app-operations-layout">
@@ -187,6 +189,31 @@
                             }
                         </div>
                     </div>
+                </section>
+
+                <section class="panel app-resource-panel">
+                    <div class="panel-header">
+                        <h2>Live resources</h2>
+                        @if (ResourceMonitor.LastUpdatedUtc is not null)
+                        {
+                            <span class="muted">Updated @FormatDate(ResourceMonitor.LastUpdatedUtc.Value.UtcDateTime)</span>
+                        }
+                    </div>
+                    @if (CurrentResourceUsage() is { } usage)
+                    {
+                        <div class="resource-metric-grid">
+                            <div><span>CPU</span><strong>@usage.CpuUsagePercent%</strong></div>
+                            <div><span>Memory</span><strong>@FormatBytes(usage.MemoryBytes)</strong></div>
+                            <div><span>Network in</span><strong>@FormatRate(usage.NetworkReceiveBytesPerSecond)</strong></div>
+                            <div><span>Network out</span><strong>@FormatRate(usage.NetworkTransmitBytesPerSecond)</strong></div>
+                            <div><span>Block read</span><strong>@FormatBytes(usage.BlockReadBytes)</strong></div>
+                            <div><span>Block write</span><strong>@FormatBytes(usage.BlockWriteBytes)</strong></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="muted">@(ResourceMonitor.LastError ?? "Waiting for the first TrueNAS resource sample…")</p>
+                    }
                 </section>
 
                 <section class="panel">
@@ -406,6 +433,11 @@
     private bool _busy;
     private bool _error;
     private string? _timeZoneId;
+
+    protected override void OnInitialized()
+    {
+        ResourceMonitor.Updated += OnResourcesUpdated;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -681,6 +713,7 @@
     /// <summary>Stops active logs and releases browser callbacks when the page is disposed.</summary>
     public async ValueTask DisposeAsync()
     {
+        ResourceMonitor.Updated -= OnResourcesUpdated;
         await StopLogsAsync();
         if (_dotNetReference is not null)
         {
@@ -697,6 +730,8 @@
     }
 
     private string AppSettingsPath() => $"/apps/{Uri.EscapeDataString(AppId)}/settings";
+    private AppResourceUsage? CurrentResourceUsage() => ResourceMonitor.Current.TryGetValue(AppId, out var usage) ? usage : null;
+    private void OnResourcesUpdated() => _ = InvokeAsync(StateHasChanged);
     private string HistoryPath() => $"/history?app={Uri.EscapeDataString(AppId)}";
     private string PolicyText() => _app?.Policy switch
     {
@@ -732,6 +767,17 @@
     };
     private string PortSummary() => _app is null || _app.Ports.Count == 0 ? "None reported" : string.Join(", ", _app.Ports.OrderBy(port => port.HostPort).Select(port => port.HostPort));
     private string RouteLabel() => _webUiLinks?.SelectedRoute == WebUiRoute.Remote ? "Remote" : "Local";
+    private string OrganizationText()
+    {
+        if (_app is null)
+        {
+            return "Unassigned";
+        }
+
+        var values = new[] { _app.IsFavorite ? "★ Favorite" : null, _app.GroupName }.Where(value => !string.IsNullOrWhiteSpace(value));
+        var organization = string.Join(" · ", values);
+        return string.IsNullOrWhiteSpace(organization) ? "Unassigned" : organization;
+    }
     private string? KumaBrowserUrl() => _settings?.UptimeKumaBrowserUrl ?? _settings?.UptimeKumaBaseUrl;
     private string KumaAggregateText()
     {
@@ -779,6 +825,21 @@
         return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
     }
     private string FormatDate(DateTime? value) => DisplayTimeFormatter.Format(value, _timeZoneId);
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+        var value = Math.Max(0, (double)bytes);
+        var unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:0.#} {units[unitIndex]}";
+    }
+
+    private static string FormatRate(long bytesPerSecond) => $"{FormatBytes(bytesPerSecond)}/s";
     private static string PastTense(AppLifecycleAction action) => action switch
     {
         AppLifecycleAction.Start => "started",

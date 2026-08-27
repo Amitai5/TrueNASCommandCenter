@@ -95,6 +95,43 @@ public sealed record AppHealthEvaluationResult(int Checked, int IncidentsOpened,
 
 public sealed record AppWebUiLinks(string? LocalUrl, string? RemoteUrl, string? SelectedUrl, WebUiRoute SelectedRoute);
 
+/// <summary>Represents one live TrueNAS resource sample for an installed application.</summary>
+public sealed record AppResourceUsage(
+    string AppId,
+    int CpuUsagePercent,
+    long MemoryBytes,
+    long NetworkReceiveBytesPerSecond,
+    long NetworkTransmitBytesPerSecond,
+    long BlockReadBytes,
+    long BlockWriteBytes,
+    DateTimeOffset ObservedAtUtc);
+
+/// <summary>Represents display-safe health and capacity information for one TrueNAS storage pool.</summary>
+public sealed record StoragePoolHealth(
+    string Name,
+    string Status,
+    bool IsHealthy,
+    bool HasWarning,
+    string? StatusDetail,
+    long? SizeBytes,
+    long? AllocatedBytes,
+    long? FreeBytes,
+    string? Fragmentation)
+{
+    public double? UsedPercentage => SizeBytes is > 0 && AllocatedBytes is not null
+        ? Math.Clamp((double)AllocatedBytes.Value / SizeBytes.Value * 100, 0, 100)
+        : null;
+}
+
+/// <summary>Represents the optional storage-pool dashboard state.</summary>
+public sealed record StoragePoolOverview(
+    IReadOnlyList<StoragePoolHealth> Pools,
+    bool RequiresPoolRead = false,
+    string? Error = null)
+{
+    public bool IsAvailable => !RequiresPoolRead && string.IsNullOrWhiteSpace(Error);
+}
+
 public sealed record UptimeKumaMonitorMetric(
     string MonitorId,
     string Name,

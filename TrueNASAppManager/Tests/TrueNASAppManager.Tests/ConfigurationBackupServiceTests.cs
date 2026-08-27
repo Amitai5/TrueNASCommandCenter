@@ -33,6 +33,8 @@ public sealed class ConfigurationBackupServiceTests
             var plex = await mutate.Apps.SingleAsync(app => app.Id == "plex");
             plex.Name = "Plex current";
             plex.Policy = AppPolicy.Ignore;
+            plex.IsFavorite = false;
+            plex.GroupName = null;
             (await mutate.UptimeKumaMonitors.SingleAsync()).AppId = null;
             mutate.Apps.Add(CreateConfiguredApp("unlisted", AppPolicy.NotifyOnly));
             await mutate.SaveChangesAsync();
@@ -52,6 +54,8 @@ public sealed class ConfigurationBackupServiceTests
         var restoredPlex = await verify.Apps.SingleAsync(app => app.Id == "plex");
         Assert.AreEqual("Plex current", restoredPlex.Name);
         Assert.AreEqual(AppPolicy.AutoUpdate, restoredPlex.Policy);
+        Assert.IsTrue(restoredPlex.IsFavorite);
+        Assert.AreEqual("Media", restoredPlex.GroupName);
         Assert.AreEqual("plex", (await verify.UptimeKumaMonitors.SingleAsync()).AppId);
         Assert.AreEqual(AppPolicy.NotifyOnly, (await verify.Apps.SingleAsync(app => app.Id == "unlisted")).Policy);
         Assert.AreEqual(1, await verify.UpdateRuns.CountAsync());
@@ -143,6 +147,8 @@ public sealed class ConfigurationBackupServiceTests
         Assert.IsFalse(placeholder.IsInstalled);
         Assert.AreEqual(AppPolicy.AutoUpdate, placeholder.Policy);
         Assert.AreEqual("https://missing.example.test/", placeholder.RemotePortalUrl);
+        Assert.IsTrue(placeholder.IsFavorite);
+        Assert.AreEqual("Media", placeholder.GroupName);
         Assert.AreEqual(AppPolicy.NotifyOnly, (await verify.Apps.SingleAsync(app => app.Id == "unlisted")).Policy);
     }
 
@@ -268,6 +274,8 @@ public sealed class ConfigurationBackupServiceTests
         SnapshotHostPaths = true,
         DowntimeAction = DowntimeAction.NotifyOnly,
         NotifyOnDowntime = true,
+        IsFavorite = true,
+        GroupName = "Media",
         LocalPortalUrl = $"http://truenas.local/{id}",
         RemotePortalUrl = $"https://{id}.example.test/"
     };

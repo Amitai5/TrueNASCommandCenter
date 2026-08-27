@@ -9,7 +9,7 @@
 
 TrueNAS App Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, manages their lifecycle, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email or webhook notifications.
 
-TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, start, stop, restart, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
+TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, live resource and pool status, start, stop, restart, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
 
 ## Features
 
@@ -23,6 +23,10 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Per-app health policies: Ignore, Notify Only, or one automatic restart attempt plus notification
 - Top-level and container health, maintenance mode, recovery notifications, and lifecycle audit history
 - Read-only Uptime Kuma integration with imported monitor state, response time, uptime windows, certificate status, and explicit app mapping
+- At-a-glance TrueNAS server identity with resolved IP, one-click copy, and direct TrueNAS Web UI access
+- Optional storage-pool health and capacity cards when the service account has `POOL_READ`
+- Live per-app CPU, memory, network, and block-I/O metrics imported from TrueNAS
+- Favorites and custom app groups with dashboard filtering and portable backup support
 - Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
 - Portable secret-free JSON configuration backups with validated merge restore
 - Optional TrueNAS-native email and generic webhook notifications
@@ -43,7 +47,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - TrueNAS Community Edition / SCALE 25.10 or later
 - A configured TrueNAS Apps storage pool
-- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`
+- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; optionally add `POOL_READ` for the storage-pool dashboard
 - A trusted LAN/VPN, or an authenticated reverse proxy in front of the web UI
 
 The application does not include its own user accounts or RBAC. Do not expose it directly to an untrusted network.
@@ -105,6 +109,8 @@ x-portals:
 Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not receive a **Web UI** button in TrueNAS, so navigate to the address directly.
 
 This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
+
+The Apps page resolves that configured hostname and displays its current IP in the server status strip. Desktop layouts repeat the address in the sidebar so it remains available while navigating the manager. The status strip can copy the IP or open the TrueNAS Web UI without storing a second server address.
 
 Host networking is the reliable default because it lets the manager reach the TrueNAS Web UI address without Docker bridge or LAN hairpin failures. Host mode does not use Docker port publishing; the ASP.NET listener binds directly to the host network.
 
@@ -194,6 +200,17 @@ The wizard uses the secure TrueNAS endpoint configured in the deployment YAML bu
 
 The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](TrueNASAppManager/Docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
 
+## Configure server overview and app organization
+
+The Apps dashboard adds four optional or automatic operational views after the initial connection succeeds:
+
+1. **TrueNAS IP and Web UI actions** — set `TRUENAS_WEBSOCKET_URL` to the certificate-covered TrueNAS hostname and map that hostname to the current TrueNAS IP with `extra_hosts` in the complete YAML. The manager resolves the hostname automatically, shows the address in the server status strip and desktop sidebar, and enables **Copy IP** and **Open TrueNAS**. There is no second IP setting to maintain.
+2. **Storage-pool health** — edit the custom privilege assigned to the service-account group and add the optional `POOL_READ` role. Return to the Apps page and select **Refresh pools**. Without `POOL_READ`, app management continues normally and only the pool cards remain unavailable.
+3. **Live app resources** — `APPS_READ`, already required for discovery, also permits the shared `app.stats` stream. No additional setting is needed. After a successful connection, CPU and memory appear on the Apps page after the first sample; open an app's details page for network and block-I/O values. Samples remain in memory and are never added to history or backups.
+4. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in safe configuration backups.
+
+See [Manage, monitor, and inspect apps](TrueNASAppManager/Docs/SETUP.md#6-manage-monitor-and-inspect-apps) for detailed TrueNAS navigation, validation steps, and troubleshooting.
+
 ## App access, logs, and configuration backups
 
 Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fields. When the manager is opened through `truenas.local`, localhost, or a private/link-local address, its Web UI buttons use the local route. When it is opened through a public domain such as `apps.example.com`, the buttons use the explicitly configured remote route. Remote addresses are never guessed. Generated local links default to `http://truenas.local` instead of an IP address; the global **Local TrueNAS Web UI host** setting can override that origin.
@@ -202,7 +219,9 @@ The app-details page prioritizes operations. A large live-log workspace sits bes
 
 The primary navigation is ordered **Apps**, **Monitoring**, **History**, and **Settings** so imported availability reports remain close to day-to-day app operations. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
 
-The details page shows the current route, ports, health, workloads, versions, lifecycle controls, source information, and live logs. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
+The Apps page can star frequently used apps, assign a custom group under each app's **Settings**, and filter by favorites, group, or ungrouped apps. It also shows current CPU and memory at a glance. The details page adds live CPU, memory, network, and block-I/O metrics alongside the current route, ports, health, workloads, versions, lifecycle controls, source information, and live logs. Resource values come from TrueNAS's shared statistics stream and are not persisted.
+
+The optional storage-pool section shows pool status, used/free capacity, and fragmentation. App management continues normally when the API account lacks `POOL_READ`; the panel explains how to enable that extra read-only view. Logs contain at most the latest 500 loaded lines, stay in browser memory, and can be selected manually, copied as ISO-8601 text, or opened fullscreen. A successfully completed `permissions` helper workload is shown as **Exited normally** and does not degrade an otherwise running app.
 
 ## Uptime Kuma reports
 
@@ -214,7 +233,7 @@ The API key is stored encrypted. Keep TLS verification enabled for HTTPS connect
 
 Open **Settings → Backup & restore** for portable configuration backups:
 
-- **Safe JSON** includes Uptime Kuma connection settings and app-to-monitor mappings, but excludes API keys and webhook secrets. Importing it retains any secrets already stored in the destination.
+- **Safe JSON** includes Uptime Kuma connection settings, app-to-monitor mappings, favorites, and custom groups, but excludes API keys and webhook secrets. Importing it retains any secrets already stored in the destination.
 - Previously created encrypted JSON backups remain importable with their password, but new encrypted exports are no longer offered in the UI.
 - Imports validate the complete file before a transactional merge. Listed app configurations are restored by app ID, unlisted apps and existing history remain unchanged, and undiscovered app policies are held until the next inventory refresh.
 

@@ -95,7 +95,7 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 
 - The web application uses interactive server-side Blazor on ASP.NET Core .NET 10.
 - SQLite state is stored under `DATA_PATH`.
-- TrueNAS remains the lifecycle authority; inventory, workload health, logs, lifecycle actions, mail, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
+- TrueNAS remains the lifecycle authority; inventory, workload health, live app statistics, storage-pool status, logs, lifecycle actions, mail, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
 - Complete inventory refresh and missing-app reconciliation always run before update evaluation.
 - Per-app health incidents persist a single recovery-attempt marker so scheduled retries cannot loop.
 - GitHub enrichment accepts only canonical public `github.com` sources, uses ETags and a 24-hour SQLite cache, and never gates TrueNAS operations.
@@ -119,6 +119,8 @@ Discovery and status:
 - `app.upgrade_summary`
 - `app.rollback_versions`
 - `app.container_log_follow` through `core.subscribe`
+- `app.stats` through `core.subscribe`
+- `pool.query` when the optional `POOL_READ` role is available
 
 Execution and jobs:
 

@@ -43,8 +43,15 @@ builder.Services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddSingleton<DatabaseInitializer>();
 builder.Services.AddSingleton<SettingsService>();
+builder.Services.AddSingleton<IHostAddressResolver, SystemHostAddressResolver>();
+builder.Services.AddSingleton<ITrueNasServerAddressService, TrueNasServerAddressService>();
 builder.Services.AddSingleton<IWebSocketTransportFactory, ClientWebSocketTransportFactory>();
-builder.Services.AddSingleton<ITrueNasClient, TrueNasJsonRpcClient>();
+builder.Services.AddSingleton<TrueNasJsonRpcClient>();
+builder.Services.AddSingleton<ITrueNasClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
+builder.Services.AddSingleton<ITrueNasSystemClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
+builder.Services.AddSingleton<IStoragePoolOverviewService, StoragePoolOverviewService>();
+builder.Services.AddSingleton<AppResourceMonitorService>();
+builder.Services.AddSingleton<IAppResourceMonitor>(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddSingleton<RunLock>();
 builder.Services.AddSingleton<IVersionClassifier, VersionClassifier>();
 builder.Services.AddSingleton<IUpdatePolicyEvaluator, UpdatePolicyEvaluator>();
@@ -79,6 +86,7 @@ builder.Services.AddHttpClient("uptime-kuma-insecure", client => client.Timeout 
     });
 builder.Services.AddHostedService<RunSchedulerBackgroundService>();
 builder.Services.AddHostedService<UptimeKumaSyncBackgroundService>();
+builder.Services.AddHostedService(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddHealthChecks()
     .AddCheck("live", static () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), ["live"])
     .AddCheck<DatabaseReadyHealthCheck>("ready", tags: ["ready"]);

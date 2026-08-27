@@ -174,6 +174,10 @@ namespace TrueNasAppManager.Data.Migrations
                     b.Property<bool>("DowntimeNotificationActive")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("HealthIncidentId")
                         .HasColumnType("TEXT");
 
@@ -205,6 +209,9 @@ namespace TrueNasAppManager.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsCustom")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsFavorite")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsInstalled")

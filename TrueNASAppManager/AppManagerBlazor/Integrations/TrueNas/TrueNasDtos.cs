@@ -52,6 +52,79 @@ public sealed record TrueNasContainerLogRequest(string AppId, string ContainerId
 
 public sealed record TrueNasLogEntry(DateTimeOffset Timestamp, string ContainerId, string Message, string Stream = "stdout");
 
+/// <summary>Represents one application resource sample from the TrueNAS app statistics event.</summary>
+public sealed record TrueNasAppStatsDto
+{
+    [JsonPropertyName("app_name")]
+    public string AppName { get; init; } = string.Empty;
+
+    [JsonPropertyName("cpu_usage")]
+    public int CpuUsage { get; init; }
+
+    [JsonPropertyName("memory")]
+    public long Memory { get; init; }
+
+    [JsonPropertyName("networks")]
+    public IReadOnlyList<TrueNasAppNetworkStatsDto> Networks { get; init; } = [];
+
+    [JsonPropertyName("blkio")]
+    public TrueNasAppBlockIoStatsDto BlockIo { get; init; } = new();
+}
+
+/// <summary>Represents per-interface application network throughput reported by TrueNAS.</summary>
+public sealed record TrueNasAppNetworkStatsDto
+{
+    [JsonPropertyName("interface_name")]
+    public string InterfaceName { get; init; } = string.Empty;
+
+    [JsonPropertyName("rx_bytes")]
+    public long ReceiveBytes { get; init; }
+
+    [JsonPropertyName("tx_bytes")]
+    public long TransmitBytes { get; init; }
+}
+
+/// <summary>Represents application block-I/O counters reported by TrueNAS.</summary>
+public sealed record TrueNasAppBlockIoStatsDto
+{
+    [JsonPropertyName("read")]
+    public long ReadBytes { get; init; }
+
+    [JsonPropertyName("write")]
+    public long WriteBytes { get; init; }
+}
+
+/// <summary>Represents the subset of TrueNAS storage-pool fields used by the dashboard.</summary>
+public sealed record TrueNasPoolDto
+{
+    [JsonPropertyName("name")]
+    public string Name { get; init; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string Status { get; init; } = "UNKNOWN";
+
+    [JsonPropertyName("healthy")]
+    public bool Healthy { get; init; }
+
+    [JsonPropertyName("warning")]
+    public bool Warning { get; init; }
+
+    [JsonPropertyName("status_detail")]
+    public string? StatusDetail { get; init; }
+
+    [JsonPropertyName("size")]
+    public long? Size { get; init; }
+
+    [JsonPropertyName("allocated")]
+    public long? Allocated { get; init; }
+
+    [JsonPropertyName("free")]
+    public long? Free { get; init; }
+
+    [JsonPropertyName("fragmentation")]
+    public string? Fragmentation { get; init; }
+}
+
 public sealed record TrueNasMailMessage(string Subject, string Text, IReadOnlyList<string> Recipients);
 
 public sealed record TrueNasUpgradeSummaryDto

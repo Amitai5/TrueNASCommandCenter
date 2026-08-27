@@ -319,6 +319,22 @@ label {
     font-size: 0.7rem;
 }
 
+.server-address-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.25rem;
+    color: var(--muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+}
+
+.server-address-summary strong {
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+}
+
 .sidebar-utilities {
     display: grid;
     gap: 0.5rem;
@@ -452,6 +468,63 @@ h3 {
 .summary-item span {
     color: var(--secondary);
     font-size: 0.8rem;
+}
+
+.server-status-bar {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+}
+
+.server-status-identity {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+    min-width: 0;
+}
+
+.server-status-identity > span:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    align-items: baseline;
+}
+
+.server-status-label {
+    color: var(--secondary);
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.server-status-address {
+    color: var(--heading);
+    font-family: var(--mono);
+    font-size: 0.95rem;
+}
+
+.server-status-host {
+    color: var(--secondary);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+}
+
+.server-status-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    justify-content: flex-end;
+    color: var(--secondary);
+    font-size: 0.76rem;
+}
+
+.server-status-metadata strong {
+    color: var(--text);
+    font-weight: 650;
 }
 
 .app-search-bar {
@@ -780,7 +853,7 @@ tr:last-child td {
 
 .app-detail-summary {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     margin-bottom: 1rem;
     overflow: hidden;
     border: 1px solid var(--border);
@@ -1576,8 +1649,13 @@ th {
 
 .desktop-app-table td:last-child .actions {
     gap: 0.45rem;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-end;
+}
+
+.desktop-app-table th,
+.desktop-app-table td {
+    padding-inline: 0.55rem;
 }
 
 .desktop-app-table td:last-child .button,
@@ -1937,6 +2015,229 @@ html:not([data-theme]) .summary-grid {
     border-color: var(--border);
 }
 
+.server-status-secondary {
+    display: grid;
+    gap: 0.65rem;
+    justify-items: end;
+    min-width: 0;
+}
+
+.server-status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.pool-overview {
+    margin-bottom: 1rem;
+}
+
+.panel-heading-row {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 0.9rem;
+}
+
+.panel-heading-row h2,
+.panel-heading-row p {
+    margin: 0;
+}
+
+.panel-heading-row p {
+    margin-top: 0.2rem;
+}
+
+.inline-loading,
+.optional-feature-state {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+    min-height: 2.5rem;
+    color: var(--secondary);
+}
+
+.optional-feature-state strong {
+    color: var(--heading);
+}
+
+.pool-health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.75rem;
+}
+
+.pool-health-card {
+    min-width: 0;
+    padding: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--surface-alt);
+}
+
+.pool-health-card .row,
+.pool-capacity-row,
+.pool-card-meta {
+    display: flex;
+    gap: 0.7rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pool-capacity-row {
+    margin-top: 0.8rem;
+    color: var(--secondary);
+    font-size: 0.78rem;
+}
+
+.pool-capacity-row strong {
+    color: var(--heading);
+}
+
+.pool-capacity-track {
+    height: 8px;
+    margin: 0.55rem 0;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--border);
+}
+
+.pool-capacity-track > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--primary);
+}
+
+.pool-card-meta {
+    color: var(--secondary);
+    font-size: 0.72rem;
+}
+
+.pool-warning {
+    margin-top: 0.65rem;
+    color: var(--warning-text);
+    font-size: 0.76rem;
+}
+
+.app-search-bar {
+    grid-template-columns: minmax(240px, 1fr) minmax(150px, 210px) auto auto;
+}
+
+.app-organization-filter select {
+    width: 100%;
+}
+
+.app-identity-cell {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    min-width: 0;
+}
+
+.app-identity-cell > span {
+    min-width: 0;
+}
+
+.favorite-toggle {
+    flex: 0 0 auto;
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    padding: 0.1rem;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1.15rem;
+    line-height: 1;
+}
+
+.favorite-toggle[aria-pressed="true"] {
+    color: #d97706;
+}
+
+.favorite-toggle:hover {
+    border-color: var(--border);
+    background: var(--button-hover-background);
+}
+
+.app-group-badge {
+    display: inline-flex;
+    max-width: 100%;
+    margin-top: 0.3rem;
+    padding: 0.12rem 0.42rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-alt);
+    color: var(--secondary);
+    font-size: 0.68rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.resource-compact {
+    display: grid;
+    gap: 0.18rem;
+    color: var(--secondary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.resource-compact strong {
+    color: var(--text);
+}
+
+.mobile-resource-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin: 0.7rem 0;
+    padding: 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--surface-alt);
+    color: var(--secondary);
+    font-size: 0.75rem;
+}
+
+.mobile-resource-summary strong {
+    color: var(--heading);
+}
+
+.resource-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.resource-metric-grid > div {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
+    padding: 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--surface-alt);
+}
+
+.resource-metric-grid span {
+    color: var(--secondary);
+    font-size: 0.7rem;
+}
+
+.resource-metric-grid strong {
+    overflow: hidden;
+    color: var(--heading);
+    font-size: 0.88rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (max-width: 900px) {
     .app-shell {
         grid-template-columns: 1fr;
@@ -2029,25 +2330,48 @@ html:not([data-theme]) .summary-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .server-status-bar {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .server-status-metadata {
+        display: grid;
+        grid-template-columns: 1fr;
+        justify-content: stretch;
+    }
+
+    .server-status-secondary {
+        justify-items: stretch;
+    }
+
+    .server-status-actions {
+        justify-content: flex-start;
+    }
+
+    .panel-heading-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .panel-heading-row > button {
+        width: 100%;
+    }
+
     .app-detail-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .app-detail-summary > div:nth-child(2) {
-        border-right: 0;
-    }
-
-    .app-detail-summary > div:nth-child(-n+2) {
+    .app-detail-summary > div {
         border-bottom: 1px solid var(--border);
     }
 
-    .app-detail-summary > div:nth-child(4) {
+    .app-detail-summary > div:nth-child(even) {
         border-right: 0;
     }
 
-    .app-detail-summary > div:last-child {
-        grid-column: 1 / -1;
-        border-top: 1px solid var(--border);
+    .app-detail-summary > div:nth-last-child(-n+2) {
+        border-bottom: 0;
     }
 
     .app-operations-rail,

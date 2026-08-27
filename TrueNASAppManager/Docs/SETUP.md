@@ -45,9 +45,10 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Ap
 5. Under **Roles**, select:
    - `APPS_READ`
    - `APPS_WRITE`
+   - Optionally, `POOL_READ` to show storage-pool health and capacity on the Apps page
 6. Leave **Web Shell Access** disabled and save the privilege.
 
-`APPS_READ` allows discovery, health, ports, portals, containers, and logs. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or update actions through this account.
+`APPS_READ` allows discovery, health, ports, portals, containers, logs, and live application resource statistics. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. `POOL_READ` is not required for app management; without it, only the optional storage-pool cards remain unavailable. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or update actions through this account.
 
 ### Create the API key
 
@@ -110,6 +111,8 @@ x-portals:
 ```
 
 The YAML uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the `extra_hosts` value in the complete YAML. If the TrueNAS certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`. Prefer a DHCP reservation or static address so the mapping does not become stale.
+
+After startup, the Apps status strip displays the IP resolved from `TRUENAS_WEBSOCKET_URL`; desktop layouts also show it in the sidebar. An **IP unavailable** value means the container could not resolve the configured hostname and the `extra_hosts` mapping should be checked.
 
 | Field | Recommended value |
 | --- | --- |
@@ -212,6 +215,52 @@ This fail-closed default prevents newly discovered applications from updating wi
 
 Open an app from the **Apps** page to start, stop, or restart it through TrueNAS. The app list also provides a quick **Start** action for stopped or crashed apps and a **Restart** action for running apps. Lifecycle actions wait for the TrueNAS job to finish before refreshing the displayed state.
 
+### Configure the TrueNAS address actions
+
+The address display is automatic and does not require another saved setting:
+
+1. Confirm `TRUENAS_WEBSOCKET_URL` uses the TrueNAS hostname covered by its TLS certificate, such as `wss://truenas.local/api/current`.
+2. Confirm the complete custom-app YAML maps that same hostname to the current TrueNAS IP under `extra_hosts`, such as `truenas.local:10.0.0.21`.
+3. Redeploy the custom app after changing either value.
+4. Open the Apps page and confirm the server status strip shows the expected hostname and IP. Desktop layouts also repeat the IP in the sidebar.
+5. Use **Copy IP** to place the numeric address on the clipboard or **Open TrueNAS** to open the Web UI derived from the configured secure endpoint.
+
+If the address shows **IP unavailable**, correct the `extra_hosts` mapping and redeploy the complete YAML. Prefer a DHCP reservation or static address so the mapping remains valid.
+
+### Enable storage-pool health
+
+Pool cards require the additional read-only `POOL_READ` role:
+
+1. In TrueNAS, open **Credentials → Groups → Privileges**.
+2. Edit the custom privilege assigned to the App Manager service account's group.
+3. Add `POOL_READ` beside the existing `APPS_READ` and `APPS_WRITE` roles, then save.
+4. Return to TrueNAS App Manager and select **Refresh pools** on the Apps page. If the API session was already open when the role changed, run **Settings → TrueNAS connection → Test connection** once before refreshing.
+5. Confirm each pool card shows its TrueNAS health state, used/free capacity, and fragmentation value.
+
+`POOL_READ` is optional. A missing or denied role displays an explanatory unavailable state and never blocks app discovery, monitoring, or lifecycle operations.
+
+### Enable live resource statistics
+
+Live CPU, memory, network, and block-I/O data uses the required `APPS_READ` role and needs no separate switch:
+
+1. Confirm the service-account privilege includes `APPS_READ` and the connection test succeeds.
+2. Open the Apps page and wait for the first TrueNAS statistics sample. CPU and memory appear in the resource column when TrueNAS reports them.
+3. Open **Details** for an app to see its current CPU, memory, network receive/transmit, and block read/write values.
+
+One shared server-side subscription supplies all app cards. Samples are kept only in memory, reset when the manager restarts, and are intentionally excluded from history and configuration backups. Apps for which TrueNAS has not yet published a sample display a waiting or unavailable value rather than a fabricated zero.
+
+### Configure favorites and groups
+
+Favorites and groups are local App Manager organization settings and require no additional TrueNAS role:
+
+1. Select the star beside any app to add or remove it from favorites.
+2. Open the app's **Settings** page and find **Organization**.
+3. Optionally enable **Favorite**, enter a group name such as `Media`, `Infrastructure`, or `Home automation`, and select **Save & return**.
+4. Use the Apps-page organization filter to show all apps, favorites, ungrouped apps, or one named group. Favorites sort ahead of other apps within the selected view.
+5. Use **Settings → Backup & restore → Download safe JSON** to preserve these values with the rest of the portable app configuration.
+
+Group names are limited to 64 characters. Restoring an older supported backup leaves the destination's existing favorites and group assignments unchanged; schema version 3 exports include both fields.
+
 To monitor an app, open its **Settings** page and choose **Notify only** or **Restart once and notify** under **When this app is down**. Health checks include the top-level app state and reported containers. Each incident sends one downtime event; recovery sends a separate event. Automatic recovery is attempted at most once per incident. Stops initiated from this manager enter maintenance mode and do not alert. A completed `permissions` initialization workload is neutral and appears as **Exited normally** rather than degrading a running app.
 
 The app-details page uses an operations-first layout. Live logs occupy the main workspace, while published ports, local and remote Web UI links, and workloads stay in a compact adjacent column. Application metadata, Uptime Kuma reports, update and rollback information, safety state, and recent history use the full page width below that workspace instead of continuing down a narrow sidebar. On mobile, these sections stack into one column without horizontal scrolling.
@@ -226,7 +275,7 @@ Configure separate **Local Web UI URL** and **Remote Web UI URL** values under t
 
 Open **Settings → Backup & restore** to create a portable export:
 
-- **Download safe JSON** backs up global settings, Uptime Kuma connection settings and mappings, per-app policies, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI URLs without secrets.
+- **Download safe JSON** backs up global settings, Uptime Kuma connection settings and mappings, per-app policies, favorites and groups, downtime behavior, maintenance settings, notification overrides, and local/remote Web UI URLs without secrets.
 
 To restore, select a JSON file up to 2 MB, enter its password when importing a previously created encrypted backup, select **Validate & preview**, review the number of app configurations, and confirm the import. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. A safe restore preserves secrets already stored on the destination; a legacy encrypted restore replaces the secrets contained in the backup.
 
@@ -294,6 +343,8 @@ For scheduled or manual update-check failures, open **History** and copy the dia
 ### Missing app permissions
 
 Confirm that the service account's group is attached to a custom privilege containing both `APPS_READ` and `APPS_WRITE`. Do not modify TrueNAS built-in privileges.
+
+If app discovery and actions work but only the storage-pool panel is unavailable, add the optional `POOL_READ` role to the same custom privilege. The pool panel does not require or broaden app write access.
 
 ### TrueNAS is unreachable or the connection times out
 

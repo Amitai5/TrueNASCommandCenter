@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@inject ITrueNasServerAddressService ServerAddressService
 <div class="app-shell">
     <aside class="sidebar" aria-label="Primary navigation">
         <a class="brand" href="/">
@@ -20,6 +21,10 @@
             </NavLink>
         </nav>
         <div class="sidebar-footer">
+            <div class="server-address-summary" title="Configured TrueNAS host: @(_serverAddress?.HostName ?? "Resolving")">
+                <span>TrueNAS IP</span>
+                <strong>@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong>
+            </div>
             <div class="running-version" title="Running TrueNAS App Manager version">
                 <span>Running version</span>
                 <strong>@ApplicationVersion.Display</strong>
@@ -52,6 +57,15 @@
         </button>
     </nav>
 </div>
+
+@code {
+    private TrueNasServerAddress? _serverAddress;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _serverAddress = await ServerAddressService.GetAsync();
+    }
+}
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>

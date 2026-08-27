@@ -50,7 +50,7 @@ public sealed class ConfigurationBackupService(
     IScheduleService scheduleService,
     TimeProvider timeProvider) : IConfigurationBackupService
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     private const int MaximumBackupBytes = 2 * 1024 * 1024;
     private const int PasswordIterations = 600_000;
     private const string AdditionalData = "TrueNasAppManager:configuration-backup:v1";
@@ -183,7 +183,7 @@ public sealed class ConfigurationBackupService(
             }
         }
 
-        return new BackupAppConfiguration(app.Id, app.Name, app.Policy, app.VersionScope, app.SnapshotHostPaths, app.NotifySuccessOverride, app.DowntimeAction, app.MaintenanceMode, localUrl, remoteUrl, app.UptimeKumaMonitors.Select(monitor => monitor.MonitorId).OrderBy(id => id, StringComparer.Ordinal).ToList());
+        return new BackupAppConfiguration(app.Id, app.Name, app.Policy, app.VersionScope, app.SnapshotHostPaths, app.NotifySuccessOverride, app.DowntimeAction, app.MaintenanceMode, localUrl, remoteUrl, app.UptimeKumaMonitors.Select(monitor => monitor.MonitorId).OrderBy(id => id, StringComparer.Ordinal).ToList(), app.IsFavorite, app.GroupName);
     }
 
     private static BackupSettings CreateSettingsBackup(SettingsRecord settings) => new(
@@ -283,6 +283,7 @@ public sealed class ConfigurationBackupService(
 
             _ = NormalizeOptionalHttpUrl(app.LocalPortalUrl, $"Local Web UI URL for {app.AppId}");
             _ = NormalizeOptionalHttpUrl(app.RemotePortalUrl, $"Remote Web UI URL for {app.AppId}");
+            _ = NormalizeGroupName(app.GroupName, app.AppId);
             if (app.UptimeKumaMonitorIds?.Any(string.IsNullOrWhiteSpace) == true || app.UptimeKumaMonitorIds?.Any(id => id.Length > 128) == true || app.UptimeKumaMonitorIds?.Distinct(StringComparer.Ordinal).Count() != app.UptimeKumaMonitorIds?.Count)
             {
                 throw new InvalidOperationException($"The backup contains invalid or duplicate Uptime Kuma monitor IDs for app '{app.AppId}'.");
@@ -363,6 +364,11 @@ public sealed class ConfigurationBackupService(
         target.LocalPortalUrl = NormalizeOptionalHttpUrl(source.LocalPortalUrl, $"Local Web UI URL for {source.AppId}");
         target.RemotePortalUrl = NormalizeOptionalHttpUrl(source.RemotePortalUrl, $"Remote Web UI URL for {source.AppId}");
         target.ManualPortalUrl = null;
+        if (source.IsFavorite is not null)
+        {
+            target.IsFavorite = source.IsFavorite.Value;
+            target.GroupName = NormalizeGroupName(source.GroupName, source.AppId);
+        }
         if (source.DowntimeAction == DowntimeAction.Ignore)
         {
             target.DowntimeNotificationActive = false;
@@ -597,6 +603,17 @@ public sealed class ConfigurationBackupService(
 
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static string? NormalizeGroupName(string? value, string appId)
+    {
+        var normalized = NullIfWhiteSpace(value);
+        if (normalized?.Length > 64)
+        {
+            throw new InvalidOperationException($"The group name for app '{appId}' cannot exceed 64 characters.");
+        }
+
+        return normalized;
+    }
+
     private static List<string> DeserializeStringList(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -686,7 +703,9 @@ internal sealed record BackupAppConfiguration(
     bool MaintenanceMode,
     string? LocalPortalUrl,
     string? RemotePortalUrl,
-    List<string>? UptimeKumaMonitorIds = null);
+    List<string>? UptimeKumaMonitorIds = null,
+    bool? IsFavorite = null,
+    string? GroupName = null);
 
 internal sealed record BackupSecrets(string? TrueNasApiKey, string? WebhookAuthorization, string? WebhookHeaders, string? UptimeKumaApiKey = null);
 

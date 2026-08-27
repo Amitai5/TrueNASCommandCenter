@@ -4,10 +4,14 @@
 @inject IUpdateCoordinator Coordinator
 @inject IAppManagementService AppManagementService
 @inject IAppLinkService AppLinkService
+@inject ITrueNasServerAddressService ServerAddressService
+@inject IStoragePoolOverviewService PoolOverviewService
+@inject IAppResourceMonitor ResourceMonitor
 @inject IScheduleService ScheduleService
 @inject SettingsService SettingsService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>Apps · TrueNAS App Manager</PageTitle>
 
@@ -62,11 +66,102 @@
         </div>
     </section>
 
-    <p class="muted">
-        Last inventory refresh: @FormatDate(_settings?.LastInventoryRefreshUtc)
-        · Last update check: @FormatDate(_settings?.LastCompletedCheckUtc)
-        · Connection: @ConnectionText()
-    </p>
+    <section class="panel server-status-bar" aria-label="TrueNAS server status">
+        <div class="server-status-identity">
+            <span class="status-dot @(ConnectionText() == "Connected" ? "success" : "danger")" aria-hidden="true"></span>
+            <span>
+                <span class="server-status-label">TrueNAS server</span>
+                <strong class="server-status-address">@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong>
+                @if (_serverAddress?.HasDistinctHostName == true)
+                {
+                    <span class="server-status-host">@_serverAddress.HostName</span>
+                }
+            </span>
+        </div>
+        <div class="server-status-secondary">
+            <div class="server-status-metadata">
+                <span>Connection <strong>@ConnectionText()</strong></span>
+                <span>Inventory <strong>@FormatDate(_settings?.LastInventoryRefreshUtc)</strong></span>
+                <span>Update check <strong>@FormatDate(_settings?.LastCompletedCheckUtc)</strong></span>
+            </div>
+            <div class="server-status-actions">
+                @if (!string.IsNullOrWhiteSpace(_serverActionMessage))
+                {
+                    <span class="muted" role="status">@_serverActionMessage</span>
+                }
+                <button class="small" disabled="@(_serverAddress?.IsResolved != true)" @onclick="CopyServerIpAsync">Copy IP</button>
+                @if (_serverAddress is not null)
+                {
+                    <a class="button small" href="@_serverAddress.WebUiUrl" target="_blank" rel="noopener noreferrer">Open TrueNAS ↗</a>
+                }
+            </div>
+        </div>
+    </section>
+
+    <section class="panel pool-overview" aria-labelledby="pool-overview-heading">
+        <div class="panel-heading-row">
+            <div>
+                <h2 id="pool-overview-heading">Storage pools</h2>
+                <p class="muted">Capacity and health reported by TrueNAS.</p>
+            </div>
+            <button class="small" disabled="@_poolLoading" @onclick="LoadPoolOverviewAsync">Refresh pools</button>
+        </div>
+        @if (_poolLoading)
+        {
+            <div class="inline-loading"><span class="spinner"></span> Loading pool health…</div>
+        }
+        else if (_poolOverview?.RequiresPoolRead == true)
+        {
+            <div class="optional-feature-state">
+                <strong>Pool health is optional.</strong>
+                <span>Add the <code>POOL_READ</code> role to the TrueNAS API privilege to show storage capacity here.</span>
+                <a href="/help">Setup help</a>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_poolOverview?.Error))
+        {
+            <div class="optional-feature-state warning">
+                <strong>Pool health is unavailable.</strong>
+                <span>@_poolOverview.Error</span>
+            </div>
+        }
+        else if (_poolOverview?.Pools.Count > 0)
+        {
+            <div class="pool-health-grid">
+                @foreach (var pool in _poolOverview.Pools)
+                {
+                    <article class="pool-health-card">
+                        <div class="row">
+                            <strong>@pool.Name</strong>
+                            <span class="badge @PoolClass(pool)">@pool.Status</span>
+                        </div>
+                        <div class="pool-capacity-row">
+                            <span><strong>@FormatBytes(pool.AllocatedBytes)</strong> used</span>
+                            <span>@FormatBytes(pool.FreeBytes) free</span>
+                        </div>
+                        <div class="pool-capacity-track" role="progressbar" aria-label="@pool.Name storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(pool.UsedPercentage ?? 0)">
+                            <span style="@PoolProgressStyle(pool)"></span>
+                        </div>
+                        <div class="pool-card-meta">
+                            <span>@((pool.UsedPercentage ?? 0).ToString("0.#"))% of @FormatBytes(pool.SizeBytes)</span>
+                            @if (!string.IsNullOrWhiteSpace(pool.Fragmentation))
+                            {
+                                <span>@pool.Fragmentation fragmented</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(pool.StatusDetail))
+                        {
+                            <p class="pool-warning">@pool.StatusDetail</p>
+                        }
+                    </article>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="optional-feature-state"><span>No storage pools were returned by TrueNAS.</span></div>
+        }
+    </section>
 
     @if (_loading)
     {
@@ -89,12 +184,24 @@
         <div class="app-search-bar panel-toolbar">
             <div class="field">
                 <label class="visually-hidden" for="app-search">Search applications</label>
-                <input id="app-search" type="search" placeholder="Search apps by name, status, version, or port" autocomplete="off" @bind="_searchTerm" @bind:event="oninput" />
+                <input id="app-search" type="search" placeholder="Search apps by name, group, status, version, or port" autocomplete="off" @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="field app-organization-filter">
+                <label class="visually-hidden" for="app-organization">Filter applications by group</label>
+                <select id="app-organization" @bind="_organizationFilter">
+                    <option value="all">All apps</option>
+                    <option value="favorites">Favorites</option>
+                    <option value="ungrouped">Ungrouped</option>
+                    @foreach (var groupName in GroupOptions())
+                    {
+                        <option value="@GroupFilterValue(groupName)">@groupName</option>
+                    }
+                </select>
             </div>
             <span class="muted" aria-live="polite">Showing @filteredApps.Count of @_apps.Count</span>
-            @if (!string.IsNullOrWhiteSpace(_searchTerm))
+            @if (!string.IsNullOrWhiteSpace(_searchTerm) || _organizationFilter != "all")
             {
-                <button class="small" @onclick="ClearSearch">Clear</button>
+                <button class="small" @onclick="ClearFilters">Clear</button>
             }
         </div>
 
@@ -102,8 +209,8 @@
         {
             <div class="panel empty-state">
                 <h2>No matching apps</h2>
-                <p class="muted">Try a different app name, status, version, or port.</p>
-                <button @onclick="ClearSearch">Clear search</button>
+                <p class="muted">Try a different app name, group, status, version, or port.</p>
+                <button @onclick="ClearFilters">Clear filters</button>
             </div>
         }
         else
@@ -115,6 +222,7 @@
                         <th>Application</th>
                         <th>Health</th>
                         <th>Ports</th>
+                        <th>Resources</th>
                         <th>Version / update</th>
                         <th>Policy</th>
                         <th><span class="visually-hidden">Actions</span></th>
@@ -124,10 +232,20 @@
                     @foreach (var app in filteredApps)
                     {
                         var webUi = AppLinkService.ResolveWebUiLinks(app, _settings?.PortalHostOverride, new Uri(Navigation.Uri)).SelectedUrl;
+                        var resourceUsage = ResourceUsage(app.Id);
                         <tr>
                             <td>
-                                <a class="app-name" href="@AppPath(app.Id)">@app.Name</a>
-                                <span class="app-meta">@(app.IsCustom ? "Custom" : app.Train ?? "Catalog")</span>
+                                <div class="app-identity-cell">
+                                    <button class="favorite-toggle" aria-label="@(app.IsFavorite ? $"Remove {app.Name} from favorites" : $"Add {app.Name} to favorites")" aria-pressed="@(app.IsFavorite ? "true" : "false")" title="@(app.IsFavorite ? "Remove from favorites" : "Add to favorites")" disabled="@(_favoriteBusyId == app.Id)" @onclick="() => ToggleFavoriteAsync(app)">@(app.IsFavorite ? "★" : "☆")</button>
+                                    <span>
+                                        <a class="app-name" href="@AppPath(app.Id)">@app.Name</a>
+                                        <span class="app-meta">@(app.IsCustom ? "Custom" : app.Train ?? "Catalog")</span>
+                                        @if (!string.IsNullOrWhiteSpace(app.GroupName))
+                                        {
+                                            <span class="app-group-badge">@app.GroupName</span>
+                                        }
+                                    </span>
+                                </div>
                             </td>
                             <td class="health-monitoring-cell">
                                 <span class="badge @HealthClass(app.HealthState)">@HealthText(app.HealthState)</span>
@@ -141,6 +259,19 @@
                                 else
                                 {
                                     <div class="port-list">@foreach (var port in app.Ports.OrderBy(port => port.HostPort)) { <code>@port.HostPort/@port.Protocol</code> }</div>
+                                }
+                            </td>
+                            <td>
+                                @if (resourceUsage is null)
+                                {
+                                    <span class="muted">—</span>
+                                }
+                                else
+                                {
+                                    <div class="resource-compact" title="Network: ↓ @FormatRate(resourceUsage.NetworkReceiveBytesPerSecond) · ↑ @FormatRate(resourceUsage.NetworkTransmitBytesPerSecond)">
+                                        <span><strong>@resourceUsage.CpuUsagePercent%</strong> CPU</span>
+                                        <span><strong>@FormatBytes(resourceUsage.MemoryBytes)</strong> RAM</span>
+                                    </div>
                                 }
                             </td>
                             <td><strong>@(app.HumanVersion ?? app.InstalledVersion ?? "—")</strong><span class="app-meta">@AvailableText(app)</span></td>
@@ -179,15 +310,32 @@
             @foreach (var app in filteredApps)
             {
                 var webUi = AppLinkService.ResolveWebUiLinks(app, _settings?.PortalHostOverride, new Uri(Navigation.Uri)).SelectedUrl;
+                var resourceUsage = ResourceUsage(app.Id);
                 <article class="mobile-app-card">
                     <div class="row">
-                        <div>
-                            <a class="app-name" href="@AppPath(app.Id)">@app.Name</a>
-                            <span class="app-meta">@(app.HumanVersion ?? app.InstalledVersion ?? "Version unknown") · @(app.IsCustom ? "Custom" : app.Train ?? "Catalog")</span>
+                        <div class="app-identity-cell">
+                            <button class="favorite-toggle" aria-label="@(app.IsFavorite ? $"Remove {app.Name} from favorites" : $"Add {app.Name} to favorites")" aria-pressed="@(app.IsFavorite ? "true" : "false")" disabled="@(_favoriteBusyId == app.Id)" @onclick="() => ToggleFavoriteAsync(app)">@(app.IsFavorite ? "★" : "☆")</button>
+                            <span>
+                                <a class="app-name" href="@AppPath(app.Id)">@app.Name</a>
+                                <span class="app-meta">@(app.HumanVersion ?? app.InstalledVersion ?? "Version unknown") · @(app.IsCustom ? "Custom" : app.Train ?? "Catalog")</span>
+                                @if (!string.IsNullOrWhiteSpace(app.GroupName))
+                                {
+                                    <span class="app-group-badge">@app.GroupName</span>
+                                }
+                            </span>
                         </div>
                         <span class="badge @HealthClass(app.HealthState)">@HealthText(app.HealthState)</span>
                     </div>
                     <div class="port-list">@if (app.Ports.Count == 0) { <span class="muted">No published ports</span> } else { @foreach (var port in app.Ports.OrderBy(port => port.HostPort)) { <code>@port.HostPort/@port.Protocol</code> } }</div>
+                    @if (resourceUsage is not null)
+                    {
+                        <div class="mobile-resource-summary">
+                            <span><strong>@resourceUsage.CpuUsagePercent%</strong> CPU</span>
+                            <span><strong>@FormatBytes(resourceUsage.MemoryBytes)</strong> RAM</span>
+                            <span>↓ @FormatRate(resourceUsage.NetworkReceiveBytesPerSecond)</span>
+                            <span>↑ @FormatRate(resourceUsage.NetworkTransmitBytesPerSecond)</span>
+                        </div>
+                    }
                     <div class="row">
                         <span class="badge @PolicyClass(app.Policy)">@PolicyText(app.Policy)</span>
                         <span class="badge @KumaClass(app)">Kuma: @KumaText(app)</span>
@@ -216,17 +364,29 @@
 </div>
 
 @code {
+    private const string GroupFilterPrefix = "group:";
     private List<AppRecord> _apps = [];
     private SettingsRecord? _settings;
+    private TrueNasServerAddress? _serverAddress;
+    private StoragePoolOverview? _poolOverview;
     private bool _loading = true;
+    private bool _poolLoading = true;
     private bool _busy;
     private bool _messageIsError;
     private string? _message;
+    private string? _serverActionMessage;
+    private string? _favoriteBusyId;
     private string _searchTerm = string.Empty;
+    private string _organizationFilter = "all";
 
     protected override async Task OnInitializedAsync()
     {
+        ResourceMonitor.Updated += OnResourcesUpdated;
+        var serverAddressTask = ServerAddressService.GetAsync();
+        var poolOverviewTask = LoadPoolOverviewAsync();
         await LoadAsync();
+        _serverAddress = await serverAddressTask;
+        await poolOverviewTask;
         if (_settings is not null && !_settings.OnboardingCompleted)
         {
             Navigation.NavigateTo("/onboarding");
@@ -243,29 +403,107 @@
 
     private List<AppRecord> FilterApps()
     {
-        if (string.IsNullOrWhiteSpace(_searchTerm))
+        IEnumerable<AppRecord> apps = _apps;
+        apps = _organizationFilter switch
         {
-            return _apps;
+            "favorites" => apps.Where(app => app.IsFavorite),
+            "ungrouped" => apps.Where(app => string.IsNullOrWhiteSpace(app.GroupName)),
+            _ when _organizationFilter.StartsWith(GroupFilterPrefix, StringComparison.Ordinal) => apps.Where(app => string.Equals(app.GroupName, _organizationFilter[GroupFilterPrefix.Length..], StringComparison.OrdinalIgnoreCase)),
+            _ => apps
+        };
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var searchTerm = _searchTerm.Trim();
+            apps = apps.Where(app =>
+                Contains(app.Name, searchTerm) ||
+                Contains(app.GroupName, searchTerm) ||
+                Contains(app.State, searchTerm) ||
+                Contains(app.StatusLabel, searchTerm) ||
+                Contains(HealthText(app.HealthState), searchTerm) ||
+                Contains(KumaText(app), searchTerm) ||
+                Contains(PolicyText(app.Policy), searchTerm) ||
+                Contains(app.HumanVersion, searchTerm) ||
+                Contains(app.InstalledVersion, searchTerm) ||
+                Contains(app.LatestHumanVersion, searchTerm) ||
+                Contains(app.LatestVersion, searchTerm) ||
+                Contains(app.Train, searchTerm) ||
+                app.Ports.Any(port => Contains($"{port.HostPort}/{port.Protocol}", searchTerm)));
         }
 
-        var searchTerm = _searchTerm.Trim();
-        return _apps.Where(app =>
-            Contains(app.Name, searchTerm) ||
-            Contains(app.State, searchTerm) ||
-            Contains(app.StatusLabel, searchTerm) ||
-            Contains(HealthText(app.HealthState), searchTerm) ||
-            Contains(KumaText(app), searchTerm) ||
-            Contains(PolicyText(app.Policy), searchTerm) ||
-            Contains(app.HumanVersion, searchTerm) ||
-            Contains(app.InstalledVersion, searchTerm) ||
-            Contains(app.LatestHumanVersion, searchTerm) ||
-            Contains(app.LatestVersion, searchTerm) ||
-            Contains(app.Train, searchTerm) ||
-            app.Ports.Any(port => Contains($"{port.HostPort}/{port.Protocol}", searchTerm)))
+        return apps
+            .OrderByDescending(app => app.IsFavorite)
+            .ThenBy(app => string.IsNullOrWhiteSpace(app.GroupName))
+            .ThenBy(app => app.GroupName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(app => app.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
-    private void ClearSearch() => _searchTerm = string.Empty;
+    private void ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _organizationFilter = "all";
+    }
+
+    private IEnumerable<string> GroupOptions() => _apps
+        .Select(app => app.GroupName)
+        .OfType<string>()
+        .Where(groupName => !string.IsNullOrWhiteSpace(groupName))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(groupName => groupName, StringComparer.OrdinalIgnoreCase);
+
+    private static string GroupFilterValue(string groupName) => $"{GroupFilterPrefix}{groupName}";
+
+    private async Task ToggleFavoriteAsync(AppRecord app)
+    {
+        _favoriteBusyId = app.Id;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var persistedApp = await db.Apps.SingleAsync(candidate => candidate.Id == app.Id);
+            persistedApp.IsFavorite = !persistedApp.IsFavorite;
+            await db.SaveChangesAsync();
+            app.IsFavorite = persistedApp.IsFavorite;
+        }
+        catch
+        {
+            _message = $"The favorite setting for {app.Name} could not be saved.";
+            _messageIsError = true;
+        }
+        finally
+        {
+            _favoriteBusyId = null;
+        }
+    }
+
+    private async Task CopyServerIpAsync()
+    {
+        if (_serverAddress?.IsResolved != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var copied = await JS.InvokeAsync<bool>("trueNasAppManager.copyText", _serverAddress.IpAddress);
+            _serverActionMessage = copied ? "IP copied" : "Copy failed";
+        }
+        catch
+        {
+            _serverActionMessage = "Copy failed";
+        }
+    }
+
+    private async Task LoadPoolOverviewAsync()
+    {
+        _poolLoading = true;
+        _poolOverview = await PoolOverviewService.GetAsync();
+        _poolLoading = false;
+    }
+
+    private AppResourceUsage? ResourceUsage(string appId) => ResourceMonitor.Current.TryGetValue(appId, out var usage) ? usage : null;
+
+    private void OnResourcesUpdated() => _ = InvokeAsync(StateHasChanged);
 
     private async Task RefreshAppsAsync()
     {
@@ -285,6 +523,7 @@
         finally
         {
             await LoadAsync();
+            await LoadPoolOverviewAsync();
             _busy = false;
         }
     }
@@ -521,4 +760,35 @@
         AppLifecycleAction.Restart => "restarted",
         _ => "managed"
     };
+
+    private static string PoolClass(StoragePoolHealth pool) => pool.IsHealthy && !pool.HasWarning ? "success" : pool.HasWarning ? "warning" : "danger";
+
+    private static string PoolProgressStyle(StoragePoolHealth pool) => $"width: {(pool.UsedPercentage ?? 0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+
+    private static string FormatBytes(long? bytes)
+    {
+        if (bytes is null)
+        {
+            return "—";
+        }
+
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+        var value = Math.Max(0, (double)bytes.Value);
+        var unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:0.#} {units[unitIndex]}";
+    }
+
+    private static string FormatRate(long bytesPerSecond) => $"{FormatBytes(bytesPerSecond)}/s";
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        ResourceMonitor.Updated -= OnResourcesUpdated;
+    }
 }

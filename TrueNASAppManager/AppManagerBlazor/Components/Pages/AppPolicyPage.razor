@@ -43,9 +43,33 @@
                     </span>
                 </div>
 
-                <section class="app-settings-section" aria-labelledby="update-settings-heading">
+                <section class="app-settings-section" aria-labelledby="organization-settings-heading">
                     <div class="app-settings-section-header">
                         <span class="settings-section-number" aria-hidden="true">1</span>
+                        <div><h2 id="organization-settings-heading">Organization</h2><p class="field-help">Keep important apps first and group related services together on the Apps page.</p></div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="toggle-row">
+                            <input id="favorite" type="checkbox" @bind="_isFavorite" />
+                            <div><label for="favorite">Favorite this app</label><p class="field-help">Favorites sort first and can be selected with the Apps page filter.</p></div>
+                        </div>
+                        <div class="field">
+                            <label for="group-name">App group</label>
+                            <input id="group-name" list="app-group-options" maxlength="64" placeholder="Media, Network, Productivity…" @bind="_groupName" />
+                            <datalist id="app-group-options">
+                                @foreach (var groupName in _groupOptions)
+                                {
+                                    <option value="@groupName"></option>
+                                }
+                            </datalist>
+                            <p class="field-help">Choose an existing group or enter a new one. Leave blank for Ungrouped.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="app-settings-section" aria-labelledby="update-settings-heading">
+                    <div class="app-settings-section-header">
+                        <span class="settings-section-number" aria-hidden="true">2</span>
                         <div><h2 id="update-settings-heading">Updates</h2><p class="field-help">Choose how updates are handled and which safeguards run first.</p></div>
                     </div>
                     <div class="form-grid">
@@ -107,7 +131,7 @@
 
                 <section class="app-settings-section" aria-labelledby="availability-settings-heading">
                     <div class="app-settings-section-header">
-                        <span class="settings-section-number" aria-hidden="true">2</span>
+                        <span class="settings-section-number" aria-hidden="true">3</span>
                         <div><h2 id="availability-settings-heading">Availability &amp; safety</h2><p class="field-help">Control downtime handling and planned maintenance behavior.</p></div>
                     </div>
                     <div class="field">
@@ -125,7 +149,7 @@
 
                 <section class="app-settings-section" aria-labelledby="access-settings-heading">
                     <div class="app-settings-section-header">
-                        <span class="settings-section-number" aria-hidden="true">3</span>
+                        <span class="settings-section-number" aria-hidden="true">4</span>
                         <div><h2 id="access-settings-heading">Web UI access</h2><p class="field-help">Choose where this app opens from local and remote manager routes.</p></div>
                     </div>
                     <div class="form-grid">
@@ -144,7 +168,7 @@
 
                 <section class="app-settings-section" aria-labelledby="monitoring-settings-heading">
                     <div class="app-settings-section-header">
-                        <span class="settings-section-number" aria-hidden="true">4</span>
+                        <span class="settings-section-number" aria-hidden="true">5</span>
                         <div><h2 id="monitoring-settings-heading">Monitoring</h2><p class="field-help">Associate Uptime Kuma reports with this application.</p></div>
                     </div>
                     <div class="field">
@@ -191,6 +215,8 @@
                         <dt>Installed</dt><dd>@(_app.HumanVersion ?? _app.InstalledVersion ?? "Unknown")</dd>
                         <dt>Available</dt><dd>@AvailableText()</dd>
                         <dt>State</dt><dd>@_app.State</dd>
+                        <dt>Group</dt><dd>@(_app.GroupName ?? "Ungrouped")</dd>
+                        <dt>Favorite</dt><dd>@(_app.IsFavorite ? "Yes" : "No")</dd>
                         <dt>Last check</dt><dd>@FormatDate(_app.LastCheckUtc)</dd>
                         <dt>Last manager update</dt><dd>@FormatDate(_app.LastSuccessfulUpdateUtc)</dd>
                     </dl>
@@ -226,6 +252,9 @@
     private string _notifyChoice = "inherit";
     private DowntimeAction _downtimeAction;
     private bool _maintenanceMode;
+    private bool _isFavorite;
+    private string? _groupName;
+    private List<string> _groupOptions = [];
     private string? _localPortalUrl;
     private string? _remotePortalUrl;
     private List<UptimeKumaMonitorRecord> _uptimeKumaMonitors = [];
@@ -241,6 +270,12 @@
         _app = await db.Apps.AsNoTracking().Include(app => app.Ports).SingleOrDefaultAsync(app => app.Id == AppId);
         _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
         _uptimeKumaMonitors = await db.UptimeKumaMonitors.AsNoTracking().Where(monitor => monitor.IsPresent).OrderBy(monitor => monitor.Name).ToListAsync();
+        _groupOptions = await db.Apps.AsNoTracking()
+            .Where(app => app.GroupName != null && app.GroupName != string.Empty)
+            .Select(app => app.GroupName!)
+            .Distinct()
+            .OrderBy(groupName => groupName)
+            .ToListAsync();
         if (_app is null)
         {
             return;
@@ -251,6 +286,8 @@
         _snapshotHostPaths = _app.SnapshotHostPaths;
         _downtimeAction = _app.DowntimeAction;
         _maintenanceMode = _app.MaintenanceMode;
+        _isFavorite = _app.IsFavorite;
+        _groupName = _app.GroupName;
         _localPortalUrl = _app.LocalPortalUrl;
         _remotePortalUrl = _app.RemotePortalUrl;
         _selectedMonitorIds = _uptimeKumaMonitors.Where(monitor => monitor.AppId == AppId).Select(monitor => monitor.MonitorId).ToHashSet(StringComparer.Ordinal);
@@ -293,6 +330,8 @@
             app.DowntimeAction = _downtimeAction;
             app.NotifyOnDowntime = _downtimeAction != DowntimeAction.Ignore;
             app.MaintenanceMode = _maintenanceMode;
+            app.IsFavorite = _isFavorite;
+            app.GroupName = NormalizeGroupName(_groupName);
             app.LocalPortalUrl = NormalizeWebUiUrl(_localPortalUrl, "Local Web UI URL");
             app.RemotePortalUrl = NormalizeWebUiUrl(_remotePortalUrl, "Remote Web UI URL");
             app.ManualPortalUrl = null;
@@ -370,6 +409,22 @@
         }
 
         return uri.AbsoluteUri;
+    }
+
+    private static string? NormalizeGroupName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 64)
+        {
+            throw new InvalidOperationException("App group names cannot exceed 64 characters.");
+        }
+
+        return normalized;
     }
 
     private void ToggleMonitor(string monitorId, bool selected)

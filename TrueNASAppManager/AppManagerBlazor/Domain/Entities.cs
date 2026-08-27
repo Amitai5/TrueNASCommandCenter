@@ -45,6 +45,11 @@ public sealed class AppRecord
     public DowntimeAction DowntimeAction { get; set; }
     public AppHealthState HealthState { get; set; } = AppHealthState.Unknown;
     public bool MaintenanceMode { get; set; }
+    public bool IsFavorite { get; set; }
+
+    [MaxLength(64)]
+    public string? GroupName { get; set; }
+
     public Guid? HealthIncidentId { get; set; }
     public DateTime? LastHealthCheckUtc { get; set; }
     public DateTime? RecoveryAttemptedUtc { get; set; }

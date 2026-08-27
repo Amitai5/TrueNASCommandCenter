@@ -20,7 +20,7 @@ public sealed class TrueNasJsonRpcClient(
     SettingsService settingsService,
     IDbContextFactory<AppDbContext> dbFactory,
     TimeProvider timeProvider,
-    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, IAsyncDisposable
+    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasSystemClient, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -99,6 +99,10 @@ public sealed class TrueNasJsonRpcClient(
             "app.query",
             [Array.Empty<object>(), new { extra = new { retrieve_config = false, include_app_schema = false } }],
             cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasPoolDto>> QueryPoolsAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasPoolDto>>("pool.query", [Array.Empty<object>(), new { }], cancellationToken);
 
     public Task<TrueNasAppDto> GetAppAsync(string appId, CancellationToken cancellationToken = default) =>
         CallAsync<TrueNasAppDto>(
@@ -260,6 +264,66 @@ public sealed class TrueNasJsonRpcClient(
                 catch (Exception exception)
                 {
                     logger.LogDebug(exception, "Unable to unsubscribe the TrueNAS log stream {Subscription}", subscriptionToken);
+                }
+            }
+
+            channel.Writer.TryComplete();
+        }
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<IReadOnlyList<TrueNasAppStatsDto>> WatchAppStatsAsync(int intervalSeconds = 5, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (intervalSeconds < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(intervalSeconds), intervalSeconds, "The TrueNAS app statistics interval must be at least two seconds.");
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var eventName = $"app.stats:{JsonSerializer.Serialize(new { interval = intervalSeconds }, JsonOptions)}";
+        var channel = Channel.CreateBounded<JsonElement>(new BoundedChannelOptions(4)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+            SingleWriter = true
+        });
+        if (!subscriptions.TryAdd(eventName, channel))
+        {
+            throw new InvalidOperationException("An application statistics stream is already active.");
+        }
+
+        string? subscriptionToken = null;
+        try
+        {
+            var result = await SendRequestAsync<JsonElement>("core.subscribe", [eventName], cancellationToken);
+            subscriptionToken = result.ValueKind == JsonValueKind.String ? result.GetString() : result.ToString();
+            if (!string.IsNullOrWhiteSpace(subscriptionToken))
+            {
+                subscriptions[subscriptionToken] = channel;
+            }
+
+            await foreach (var payload in channel.Reader.ReadAllAsync(cancellationToken))
+            {
+                var statistics = payload.Deserialize<IReadOnlyList<TrueNasAppStatsDto>>(JsonOptions);
+                if (statistics is not null)
+                {
+                    yield return statistics;
+                }
+            }
+        }
+        finally
+        {
+            subscriptions.TryRemove(eventName, out _);
+            if (!string.IsNullOrWhiteSpace(subscriptionToken))
+            {
+                subscriptions.TryRemove(subscriptionToken, out _);
+                try
+                {
+                    _ = await SendRequestAsync<JsonElement>("core.unsubscribe", [subscriptionToken], CancellationToken.None);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogDebug(exception, "Unable to unsubscribe the TrueNAS app statistics stream {Subscription}", subscriptionToken);
                 }
             }
 

@@ -432,6 +432,100 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.AreEqual("subscription-1", unsubscribed);
     }
 
+    /// <summary>Verifies that storage-pool health and capacity deserialize from the expected RPC method.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task QueryPools_ReturnsPoolHealthAndCapacity()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("pool.query", request.GetProperty("method").GetString());
+            transport.Respond(request.GetProperty("id").GetInt64(), new[]
+            {
+                new { name = "tank", status = "ONLINE", healthy = true, warning = false, size = 1_000L, allocated = 400L, free = 600L, fragmentation = "4%" }
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var pools = await client.QueryPoolsAsync();
+        Assert.HasCount(1, pools);
+        var pool = pools[0];
+
+        Assert.AreEqual("tank", pool.Name);
+        Assert.IsTrue(pool.Healthy);
+        Assert.AreEqual(400L, pool.Allocated);
+        Assert.AreEqual("4%", pool.Fragmentation);
+    }
+
+    /// <summary>Verifies that app statistics events route to the stream and release their subscription.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task WatchAppStats_RoutesResourceEventsAndUnsubscribes()
+    {
+        string? eventName = null;
+        string? unsubscribed = null;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "core.subscribe":
+                    eventName = request.GetProperty("params")[0].GetString();
+                    transport.Respond(id, "stats-subscription");
+                    transport.Push(new
+                    {
+                        jsonrpc = "2.0",
+                        method = "collection_update",
+                        @params = new
+                        {
+                            collection = eventName,
+                            fields = new[]
+                            {
+                                new
+                                {
+                                    app_name = "immich",
+                                    cpu_usage = 17,
+                                    memory = 268_435_456L,
+                                    networks = new[] { new { interface_name = "eth0", rx_bytes = 1024L, tx_bytes = 2048L } },
+                                    blkio = new { read = 4096L, write = 8192L }
+                                }
+                            }
+                        }
+                    });
+                    break;
+                case "core.unsubscribe":
+                    unsubscribed = request.GetProperty("params")[0].GetString();
+                    transport.Respond(id, true);
+                    break;
+            }
+
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+        TrueNasAppStatsDto? received = null;
+
+        await foreach (var batch in client.WatchAppStatsAsync())
+        {
+            Assert.HasCount(1, batch);
+            received = batch[0];
+            break;
+        }
+
+        Assert.IsNotNull(received);
+        StringAssert.StartsWith(eventName ?? string.Empty, "app.stats:");
+        StringAssert.Contains(eventName ?? string.Empty, "\"interval\":5");
+        Assert.AreEqual("immich", received.AppName);
+        Assert.AreEqual(17, received.CpuUsage);
+        Assert.AreEqual(268_435_456L, received.Memory);
+        Assert.HasCount(1, received.Networks);
+        Assert.AreEqual(1024L, received.Networks[0].ReceiveBytes);
+        Assert.AreEqual(8192L, received.BlockIo.WriteBytes);
+        Assert.AreEqual("stats-subscription", unsubscribed);
+    }
+
     private static FakeWebSocketTransport TransportReturning(string appId)
     {
         var transport = new FakeWebSocketTransport();
