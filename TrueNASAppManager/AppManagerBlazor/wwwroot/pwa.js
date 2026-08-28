@@ -57,7 +57,8 @@
         }
 
         try {
-            const response = await window.fetch(manifestLink.href, { cache: "no-store", credentials: "same-origin" });
+            const credentials = manifestLink.crossOrigin === "use-credentials" ? "include" : "omit";
+            const response = await window.fetch(manifestLink.href, { cache: "no-store", credentials });
             if (!response.ok) {
                 return false;
             }

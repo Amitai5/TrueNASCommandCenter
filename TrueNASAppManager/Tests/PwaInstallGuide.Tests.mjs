@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const installGuide = require("../AppManagerBlazor/wwwroot/pwa-install-guide.js");
+
+test("the web app manifest includes credentials for authenticated reverse proxies", async () => {
+    const appMarkup = await readFile(new URL("../AppManagerBlazor/Components/App.razor", import.meta.url), "utf8");
+
+    assert.match(appMarkup, /<link\s+rel="manifest"[^>]*crossorigin="use-credentials"[^>]*>/i);
+});
 
 test("classifyPlatform recognizes Samsung Internet on a Galaxy S24", () => {
     const userAgent = "Mozilla/5.0 (Linux; Android 16; SM-S921U) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 Chrome/130.0.0.0 Mobile Safari/537.36";
