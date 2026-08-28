@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title id="title">TrueNAS App Manager</title>
-  <rect width="512" height="512" rx="112" fill="#151a24" />
-  <rect x="36" y="36" width="440" height="440" rx="96" fill="#252a45" stroke="#6366f1" stroke-width="18" />
-  <path d="M123 158h266v58H286v157h-60V216H123z" fill="#f8fafc" />
-  <path d="M318 256h71v117h-58v-63h-13z" fill="#a5b4fc" />
-</svg>

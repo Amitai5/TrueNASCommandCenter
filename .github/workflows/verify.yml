@@ -33,7 +33,7 @@ jobs:
       - name: Validate application version
         shell: bash
         run: |
-          version="$(tr -d '\r\n' < TrueNASAppManager/VERSION)"
+          version="$(tr -d '\r\n' < TrueNASCommandCenter/VERSION)"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "VERSION must contain one semantic version such as 1.2.3."
             exit 1
@@ -41,10 +41,10 @@ jobs:
 
       - name: Validate PWA install behavior
         run: |
-          node --check TrueNASAppManager/AppManagerBlazor/wwwroot/pwa-install-guide.js
-          node --check TrueNASAppManager/AppManagerBlazor/wwwroot/pwa.js
-          node --check TrueNASAppManager/AppManagerBlazor/wwwroot/service-worker.js
-          node --test TrueNASAppManager/Tests/PwaInstallGuide.Tests.mjs
+          node --check TrueNASCommandCenter/CommandCenterBlazor/wwwroot/pwa-install-guide.js
+          node --check TrueNASCommandCenter/CommandCenterBlazor/wwwroot/pwa.js
+          node --check TrueNASCommandCenter/CommandCenterBlazor/wwwroot/service-worker.js
+          node --test TrueNASCommandCenter/Tests/PwaInstallGuide.Tests.mjs
 
       - name: Set up .NET
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
@@ -52,10 +52,10 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore TrueNASAppManager/TrueNASAppManager.slnx
+        run: dotnet restore TrueNASCommandCenter/TrueNASCommandCenter.slnx
 
       - name: Build
-        run: dotnet build TrueNASAppManager/TrueNASAppManager.slnx --configuration Release --no-restore
+        run: dotnet build TrueNASCommandCenter/TrueNASCommandCenter.slnx --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test TrueNASAppManager/TrueNASAppManager.slnx --configuration Release --no-build
+        run: dotnet test TrueNASCommandCenter/TrueNASCommandCenter.slnx --configuration Release --no-build

@@ -1,0 +1,181 @@
+@inherits LayoutComponentBase
+@inject ITrueNasServerAddressService ServerAddressService
+<div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+        <a class="brand" href="/">
+            <span class="brand-mark">TC</span>
+            <span>TrueNAS<br /><strong>Command Center</strong></span>
+        </a>
+        <nav>
+            <NavLink href="/" Match="NavLinkMatch.All">
+                <NavIcon Name="dashboard" /> Dashboard
+            </NavLink>
+            <NavLink href="/apps">
+                <NavIcon Name="apps" /> Apps
+            </NavLink>
+            <NavLink href="/system">
+                <NavIcon Name="system" /> System
+            </NavLink>
+            <NavLink href="/monitoring">
+                <NavIcon Name="monitoring" /> Monitoring
+            </NavLink>
+            <NavLink href="/history">
+                <NavIcon Name="history" /> History
+            </NavLink>
+            <NavLink href="/settings">
+                <NavIcon Name="settings" /> Settings
+            </NavLink>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="server-address-summary" title="Configured TrueNAS host: @(_serverAddress?.HostName ?? "Resolving")">
+                <span>TrueNAS IP</span>
+                <strong>@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong>
+            </div>
+            <div class="running-version" title="Running TrueNAS Command Center version">
+                <span>Running version</span>
+                <strong>@ApplicationVersion.Display</strong>
+            </div>
+            <div class="sidebar-utilities">
+                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-controls="pwa-install-dialog" aria-describedby="desktop-pwa-status">
+                    <NavIcon Name="install" /> <span>Install app</span>
+                </button>
+                <span id="desktop-pwa-status" class="pwa-install-status" data-pwa-install-status hidden aria-live="polite"></span>
+                <button type="button" class="theme-toggle sidebar-utility" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+                    <span data-theme-icon aria-hidden="true">◐</span>
+                    <span data-theme-label>Theme</span>
+                </button>
+                <NavLink class="sidebar-utility" href="/help">
+                    <NavIcon Name="help" /> Help
+                </NavLink>
+            </div>
+        </div>
+    </aside>
+
+    <header class="mobile-header">
+        <a class="mobile-brand" href="/" @onclick="CloseMobileMenu">
+            <span class="brand-mark">TC</span>
+            <span><strong>Command Center</strong><small>TrueNAS</small></span>
+        </a>
+        <div class="mobile-header-actions">
+            <button type="button" class="mobile-install-button" data-pwa-install aria-label="Install TrueNAS Command Center" aria-controls="pwa-install-dialog" aria-describedby="mobile-header-pwa-status">
+                <NavIcon Name="install" /><span>Install</span>
+            </button>
+            <span id="mobile-header-pwa-status" class="visually-hidden" data-pwa-install-status hidden aria-live="polite"></span>
+            <button type="button" class="mobile-menu-button" aria-label="Open navigation" aria-expanded="@(_mobileMenuOpen ? "true" : "false")" aria-controls="mobile-navigation" @onclick="ToggleMobileMenu">
+                <NavIcon Name="menu" /><span>Menu</span>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        @Body
+    </main>
+
+    <dialog id="pwa-install-dialog" class="pwa-install-dialog" data-pwa-install-dialog aria-labelledby="pwa-install-dialog-title">
+        <div class="pwa-install-dialog-content">
+            <div class="pwa-install-dialog-heading">
+                <div>
+                    <span class="eyebrow" data-pwa-install-platform>Browser installation</span>
+                    <h2 id="pwa-install-dialog-title" data-pwa-install-title>Install TrueNAS Command Center</h2>
+                </div>
+                <button type="button" class="pwa-install-dialog-close" data-pwa-install-close aria-label="Close installation help"><NavIcon Name="close" /></button>
+            </div>
+
+            <p class="pwa-install-dialog-message" data-pwa-install-message>Use your browser's installation command to add this app to your device.</p>
+            <div class="notice danger pwa-install-error" data-pwa-install-error hidden role="alert"></div>
+
+            <div class="pwa-install-readiness" aria-label="Installation readiness">
+                <div data-pwa-readiness-secure>
+                    <span>Secure page</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+                <div data-pwa-readiness-manifest>
+                    <span>App manifest</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+                <div data-pwa-readiness-worker>
+                    <span>Offline worker</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+                <div data-pwa-readiness-method>
+                    <span>Install method</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+            </div>
+
+            <ol class="pwa-install-steps" data-pwa-install-steps></ol>
+
+            <div class="pwa-install-origin">
+                <span>Current address</span>
+                <code data-pwa-install-address></code>
+            </div>
+
+            <div class="pwa-install-dialog-actions">
+                <button type="button" class="primary" data-pwa-install-retry hidden>Install now</button>
+                <button type="button" data-pwa-install-close>Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    @if (_mobileMenuOpen)
+    {
+        <button type="button" class="mobile-menu-backdrop" aria-label="Close navigation" @onclick="CloseMobileMenu"></button>
+        <aside id="mobile-navigation" class="mobile-menu-panel" aria-label="Mobile navigation">
+            <div class="mobile-menu-heading">
+                <div>
+                    <span class="eyebrow">TrueNAS</span>
+                    <strong>Command Center</strong>
+                </div>
+                <button type="button" class="mobile-menu-close" aria-label="Close navigation" @onclick="CloseMobileMenu"><NavIcon Name="close" /></button>
+            </div>
+            <nav>
+                <NavLink href="/" Match="NavLinkMatch.All" @onclick="CloseMobileMenu"><NavIcon Name="dashboard" /> Dashboard</NavLink>
+                <NavLink href="/apps" @onclick="CloseMobileMenu"><NavIcon Name="apps" /> Apps</NavLink>
+                <NavLink href="/system" @onclick="CloseMobileMenu"><NavIcon Name="system" /> System</NavLink>
+                <NavLink href="/monitoring" @onclick="CloseMobileMenu"><NavIcon Name="monitoring" /> Monitoring</NavLink>
+                <NavLink href="/history" @onclick="CloseMobileMenu"><NavIcon Name="history" /> History</NavLink>
+                <NavLink href="/settings" @onclick="CloseMobileMenu"><NavIcon Name="settings" /> Settings</NavLink>
+                <NavLink href="/help" @onclick="CloseMobileMenu"><NavIcon Name="help" /> Help</NavLink>
+            </nav>
+            <div class="mobile-menu-footer">
+                <div class="mobile-menu-meta">
+                    <span>TrueNAS IP <strong>@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong></span>
+                    <span>Version <strong>@ApplicationVersion.Display</strong></span>
+                </div>
+                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-controls="pwa-install-dialog" aria-describedby="mobile-pwa-status">
+                    <NavIcon Name="install" /> <span>Install app</span>
+                </button>
+                <span id="mobile-pwa-status" class="pwa-install-status" data-pwa-install-status hidden aria-live="polite"></span>
+                <button type="button" class="theme-toggle sidebar-utility" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+                    <span data-theme-icon aria-hidden="true">◐</span>
+                    <span data-theme-label>Theme</span>
+                </button>
+            </div>
+        </aside>
+    }
+</div>
+
+@code {
+    private TrueNasServerAddress? _serverAddress;
+    private bool _mobileMenuOpen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _serverAddress = await ServerAddressService.GetAsync();
+    }
+
+    private void ToggleMobileMenu()
+    {
+        _mobileMenuOpen = !_mobileMenuOpen;
+    }
+
+    private void CloseMobileMenu()
+    {
+        _mobileMenuOpen = false;
+    }
+}
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">×</span>
+</div>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="application-name" content="TrueNAS Command Center" />
+    <meta name="description" content="Manage, monitor, and safely update TrueNAS applications from an installable web app." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Command Center" />
+    <meta id="theme-color" name="theme-color" content="#f4f6fa" />
+    <base href="/" />
+    <script>
+        (() => {
+            const storageKey = "truenas-command-center-theme";
+            const legacyStorageKey = "truenas-app-manager-theme";
+            let preference = null;
+
+            try {
+                const currentPreference = localStorage.getItem(storageKey);
+                const legacyPreference = localStorage.getItem(legacyStorageKey);
+                preference = currentPreference ?? legacyPreference;
+                if (currentPreference === null && (legacyPreference === "light" || legacyPreference === "dark")) {
+                    localStorage.setItem(storageKey, legacyPreference);
+                }
+            } catch {
+                // Storage can be unavailable in hardened or private browser contexts.
+            }
+
+            const theme = preference === "dark" || (preference !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+                ? "dark"
+                : "light";
+
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.style.colorScheme = theme;
+            document.getElementById("theme-color")?.setAttribute("content", theme === "dark" ? "#0d1118" : "#f4f6fa");
+        })();
+    </script>
+    <ResourcePreloader />
+    <link rel="icon" type="image/svg+xml" href="@Assets["favicon.svg"]" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["TrueNASCommandCenter.styles.css"]" />
+    <ImportMap />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <ReconnectModal />
+    <script src="@Assets["theme.js"]" defer></script>
+    <script src="@Assets["pwa-install-guide.js"]" defer></script>
+    <script src="@Assets["pwa.js"]" defer></script>
+    <script src="@Assets["app-tools.js"]"></script>
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

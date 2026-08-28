@@ -1,0 +1,403 @@
+@page "/system"
+@inject ITrueNasSystemOverviewService SystemOverviewService
+
+<PageTitle>System · TrueNAS Command Center</PageTitle>
+
+<div class="page system-page">
+    <header class="page-header">
+        <div>
+            <h1>System</h1>
+            <p class="subtitle">Read-only TrueNAS host health, alerts, operating-system updates, and storage.</p>
+        </div>
+        <button class="primary" disabled="@_loading" @onclick="RefreshAsync">
+            @if (_loading)
+            {
+                <span class="spinner"></span>
+            }
+            Refresh system
+        </button>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="notice @(_messageIsError ? "danger" : "success")" role="status">@_message</div>
+    }
+
+    @if (_loading && _overview is null)
+    {
+        <div class="panel empty-state"><span class="spinner"></span> Loading TrueNAS system health…</div>
+    }
+    else if (_overview is not null)
+    {
+        <section class="summary-grid system-summary" aria-label="TrueNAS system summary">
+            <a class="summary-item summary-link" href="#host-overview">
+                <strong>@(_overview.Host.Information?.Hostname ?? "—")</strong>
+                <span>TrueNAS host</span>
+            </a>
+            <a class="summary-item summary-link" href="#system-alerts">
+                <strong>@(_overview.Alerts.IsAvailable ? _overview.Alerts.ActiveCount : "—")</strong>
+                <span>Active alerts</span>
+            </a>
+            <a class="summary-item summary-link" href="#storage-pools">
+                <strong>@PoolSummary()</strong>
+                <span>Healthy pools</span>
+            </a>
+            <a class="summary-item summary-link" href="#system-update">
+                <strong>@UpdateSummary()</strong>
+                <span>TrueNAS update</span>
+            </a>
+        </section>
+
+        <div class="system-overview-grid">
+            <section class="panel system-host-panel" id="host-overview" aria-labelledby="host-overview-heading">
+                <div class="panel-heading-row">
+                    <div>
+                        <h2 id="host-overview-heading">Host overview</h2>
+                        <p class="muted">Identity, hardware, load, and uptime.</p>
+                    </div>
+                    @if (_overview.Host.Information is not null)
+                    {
+                        <span class="badge success">Online</span>
+                    }
+                </div>
+
+                @if (_overview.Host.RequiresReadOnlyAdmin)
+                {
+                    <div class="optional-feature-state">
+                        <strong>Host details are optional.</strong>
+                        <span>Add <code>READONLY_ADMIN</code> to show identity and hardware information.</span>
+                        <a href="/help">Setup help</a>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_overview.Host.Error))
+                {
+                    <div class="optional-feature-state warning"><strong>Host details are unavailable.</strong><span>@_overview.Host.Error</span></div>
+                }
+                else if (_overview.Host.Information is { } host)
+                {
+                    <div class="system-host-identity">
+                        <div>
+                            <span class="system-host-label">@host.Version</span>
+                            <strong>@host.Hostname</strong>
+                            <span>@HardwareName(host)</span>
+                        </div>
+                        <div class="system-uptime">
+                            <span>Uptime</span>
+                            <strong>@(string.IsNullOrWhiteSpace(host.Uptime) ? "—" : host.Uptime)</strong>
+                        </div>
+                    </div>
+                    <dl class="system-detail-grid">
+                        <div><dt>CPU</dt><dd>@(string.IsNullOrWhiteSpace(host.CpuModel) ? "—" : host.CpuModel)</dd></div>
+                        <div><dt>Cores</dt><dd>@CoreSummary(host)</dd></div>
+                        <div><dt>Memory</dt><dd>@FormatBytes(host.PhysicalMemoryBytes)</dd></div>
+                        <div><dt>ECC memory</dt><dd>@(host.HasEccMemory ? "Yes" : "No")</dd></div>
+                        <div><dt>Load average</dt><dd>@LoadAverageSummary(host)</dd></div>
+                        <div><dt>Booted</dt><dd>@FormatDate(host.BootTimeUtc)</dd></div>
+                        <div><dt>Timezone</dt><dd>@(string.IsNullOrWhiteSpace(host.TimeZoneId) ? "—" : host.TimeZoneId)</dd></div>
+                    </dl>
+                }
+            </section>
+
+            <section class="panel system-update-panel" id="system-update" aria-labelledby="system-update-heading">
+                <div class="panel-heading-row">
+                    <div>
+                        <h2 id="system-update-heading">TrueNAS update</h2>
+                        <p class="muted">Operating-system update status; installation remains in TrueNAS.</p>
+                    </div>
+                    @if (_overview.Update.Information is { } updateBadge)
+                    {
+                        <span class="badge @UpdateClass(updateBadge)">@UpdateText(updateBadge)</span>
+                    }
+                </div>
+
+                @if (_overview.Update.RequiresSystemUpdateRead)
+                {
+                    <div class="optional-feature-state">
+                        <strong>Update visibility is optional.</strong>
+                        <span>Add <code>SYSTEM_UPDATE_READ</code> to show TrueNAS update status.</span>
+                        <a href="/help">Setup help</a>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_overview.Update.Error))
+                {
+                    <div class="optional-feature-state warning"><strong>Update status is unavailable.</strong><span>@_overview.Update.Error</span></div>
+                }
+                else if (_overview.Update.Information is { } update)
+                {
+                    @if (!string.IsNullOrWhiteSpace(update.CheckError))
+                    {
+                        <div class="notice warning system-inline-notice"><strong>Update check failed.</strong> @update.CheckError</div>
+                    }
+                    <dl class="system-update-details">
+                        <div><dt>Installed</dt><dd>@(_overview.Host.Information?.Version ?? "—")</dd></div>
+                        <div><dt>Available</dt><dd>@(update.AvailableVersion ?? "No update reported")</dd></div>
+                        <div><dt>Train</dt><dd>@(update.Train ?? "—")</dd></div>
+                        <div><dt>Profile</dt><dd>@ProfileSummary(update)</dd></div>
+                    </dl>
+                    @if (update.DownloadPercent is { } downloadPercent)
+                    {
+                        <div class="system-download">
+                            <div><strong>@(update.DownloadDescription ?? "Downloading update")</strong><span>@(update.DownloadVersion ?? update.AvailableVersion) · @downloadPercent.ToString("0.#")%</span></div>
+                            <div class="pool-capacity-track" role="progressbar" aria-label="TrueNAS update download" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(downloadPercent)"><span style="@ProgressStyle(downloadPercent)"></span></div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(update.ReleaseNotes))
+                    {
+                        <p class="system-release-notes">@update.ReleaseNotes</p>
+                    }
+                    @if (update.ReleaseNotesUri is not null)
+                    {
+                        <a class="button small" href="@update.ReleaseNotesUri" target="_blank" rel="noopener noreferrer">Open release notes ↗</a>
+                    }
+                }
+            </section>
+        </div>
+
+        <section class="panel system-alert-panel" id="system-alerts" aria-labelledby="system-alerts-heading">
+            <div class="panel-heading-row">
+                <div>
+                    <h2 id="system-alerts-heading">TrueNAS alerts</h2>
+                    <p class="muted">Native host alerts shown read-only; dismiss or restore them in TrueNAS.</p>
+                </div>
+                @if (_overview.Alerts.IsAvailable)
+                {
+                    <span class="badge @(_overview.Alerts.ActiveCount == 0 ? "success" : _overview.Alerts.CriticalCount > 0 ? "danger" : "warning")">@_overview.Alerts.ActiveCount active</span>
+                }
+            </div>
+
+            @if (_overview.Alerts.RequiresAlertListRead)
+            {
+                <div class="optional-feature-state">
+                    <strong>System alerts are optional.</strong>
+                    <span>Add <code>ALERT_LIST_READ</code> to show active and dismissed TrueNAS alerts.</span>
+                    <a href="/help">Setup help</a>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_overview.Alerts.Error))
+            {
+                <div class="optional-feature-state warning"><strong>System alerts are unavailable.</strong><span>@_overview.Alerts.Error</span></div>
+            }
+            else if (_overview.Alerts.Alerts.Count == 0)
+            {
+                <div class="system-all-clear"><span class="status-dot success" aria-hidden="true"></span><div><strong>No TrueNAS alerts</strong><p class="muted">The host did not return any active or dismissed alerts.</p></div></div>
+            }
+            else
+            {
+                <div class="system-alert-filters panel-toolbar">
+                    <div class="field">
+                        <label class="visually-hidden" for="system-alert-search">Search alerts</label>
+                        <input id="system-alert-search" type="search" placeholder="Search alert text, class, source, or node" autocomplete="off" @bind="_alertSearch" @bind:event="oninput" />
+                    </div>
+                    <div class="field">
+                        <label class="visually-hidden" for="system-alert-state">Filter by state</label>
+                        <select id="system-alert-state" @bind="_alertStateFilter">
+                            <option value="active">Active</option>
+                            <option value="dismissed">Dismissed</option>
+                            <option value="all">All states</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="visually-hidden" for="system-alert-severity">Filter by severity</label>
+                        <select id="system-alert-severity" @bind="_alertSeverityFilter">
+                            <option value="all">All severities</option>
+                            @foreach (var severity in AlertSeverities())
+                            {
+                                <option value="@severity">@SeverityText(severity)</option>
+                            }
+                        </select>
+                    </div>
+                    <span class="muted">Showing @FilteredAlerts().Count of @_overview.Alerts.Alerts.Count</span>
+                </div>
+
+                @if (FilteredAlerts().Count == 0)
+                {
+                    <div class="empty-state compact"><h3>No matching alerts</h3><button class="small" @onclick="ClearAlertFilters">Clear filters</button></div>
+                }
+                else
+                {
+                    <div class="table-wrap desktop-system-alert-table">
+                        <table>
+                            <thead><tr><th>Alert</th><th>Severity</th><th>Source</th><th>Last occurrence</th><th>State</th></tr></thead>
+                            <tbody>
+                                @foreach (var alert in FilteredAlerts())
+                                {
+                                    <tr>
+                                        <td class="system-alert-message"><strong>@alert.Text</strong><span class="app-meta">@alert.ClassName@if (alert.IsOneShot) { <text> · One-shot</text> }</span></td>
+                                        <td><span class="badge @SeverityClass(alert.Severity)">@SeverityText(alert.Severity)</span></td>
+                                        <td><strong>@alert.Source</strong><span class="app-meta">@alert.Node</span></td>
+                                        <td>@FormatDate(alert.LastOccurrenceUtc)</td>
+                                        <td><span class="badge @(alert.IsDismissed ? "info" : "warning")">@(alert.IsDismissed ? "Dismissed" : "Active")</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mobile-system-alert-list">
+                        @foreach (var alert in FilteredAlerts())
+                        {
+                            <article class="panel system-alert-card">
+                                <div class="row"><span class="badge @SeverityClass(alert.Severity)">@SeverityText(alert.Severity)</span><span class="badge @(alert.IsDismissed ? "info" : "warning")">@(alert.IsDismissed ? "Dismissed" : "Active")</span></div>
+                                <h3>@alert.Text</h3>
+                                <dl class="details-list compact-details">
+                                    <dt>Class</dt><dd>@alert.ClassName</dd>
+                                    <dt>Source</dt><dd>@alert.Source</dd>
+                                    <dt>Node</dt><dd>@alert.Node</dd>
+                                    <dt>Last seen</dt><dd>@FormatDate(alert.LastOccurrenceUtc)</dd>
+                                </dl>
+                            </article>
+                        }
+                    </div>
+                }
+            }
+        </section>
+
+        <section class="panel pool-overview system-pools" id="storage-pools" aria-labelledby="system-pools-heading">
+            <div class="panel-heading-row">
+                <div>
+                    <h2 id="system-pools-heading">Storage pools</h2>
+                    <p class="muted">Capacity, health, and fragmentation reported by TrueNAS.</p>
+                </div>
+            </div>
+            @if (_overview.Storage.RequiresPoolRead)
+            {
+                <div class="optional-feature-state">
+                    <strong>Pool health is optional.</strong>
+                    <span>Add <code>POOL_READ</code> to show storage capacity.</span>
+                    <a href="/help">Setup help</a>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_overview.Storage.Error))
+            {
+                <div class="optional-feature-state warning"><strong>Pool health is unavailable.</strong><span>@_overview.Storage.Error</span></div>
+            }
+            else if (_overview.Storage.Pools.Count > 0)
+            {
+                <div class="pool-health-grid">
+                    @foreach (var pool in _overview.Storage.Pools)
+                    {
+                        <article class="pool-health-card">
+                            <div class="row"><strong>@pool.Name</strong><span class="badge @PoolClass(pool)">@pool.Status</span></div>
+                            <div class="pool-capacity-row"><span><strong>@FormatBytes(pool.AllocatedBytes)</strong> used</span><span>@FormatBytes(pool.FreeBytes) free</span></div>
+                            <div class="pool-capacity-track" role="progressbar" aria-label="@pool.Name storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(pool.UsedPercentage ?? 0)"><span style="@ProgressStyle(pool.UsedPercentage ?? 0)"></span></div>
+                            <div class="pool-card-meta"><span>@((pool.UsedPercentage ?? 0).ToString("0.#"))% of @FormatBytes(pool.SizeBytes)</span>@if (!string.IsNullOrWhiteSpace(pool.Fragmentation)) { <span>@pool.Fragmentation fragmented</span> }</div>
+                            @if (!string.IsNullOrWhiteSpace(pool.StatusDetail))
+                            {
+                                <p class="pool-warning">@pool.StatusDetail</p>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="optional-feature-state"><span>No storage pools were returned by TrueNAS.</span></div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private TrueNasSystemOverview? _overview;
+    private string _alertSearch = string.Empty;
+    private string _alertStateFilter = "active";
+    private string _alertSeverityFilter = "all";
+    private string? _message;
+    private bool _messageIsError;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _message = null;
+        try
+        {
+            await LoadAsync();
+            _message = "System overview refreshed.";
+            _messageIsError = false;
+        }
+        catch
+        {
+            _message = "The system overview could not be refreshed.";
+            _messageIsError = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _overview = await SystemOverviewService.GetAsync();
+        _loading = false;
+    }
+
+    private List<TrueNasSystemAlert> FilteredAlerts()
+    {
+        if (_overview is null)
+        {
+            return [];
+        }
+
+        var query = _overview.Alerts.Alerts.AsEnumerable();
+        query = _alertStateFilter switch
+        {
+            "active" => query.Where(alert => !alert.IsDismissed),
+            "dismissed" => query.Where(alert => alert.IsDismissed),
+            _ => query
+        };
+        if (_alertSeverityFilter != "all")
+        {
+            query = query.Where(alert => string.Equals(alert.Severity, _alertSeverityFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_alertSearch))
+        {
+            var term = _alertSearch.Trim();
+            query = query.Where(alert => Contains(alert.Text, term) || Contains(alert.ClassName, term) || Contains(alert.Source, term) || Contains(alert.Node, term));
+        }
+
+        return query.ToList();
+    }
+
+    private IReadOnlyList<string> AlertSeverities() => _overview?.Alerts.Alerts.Select(alert => alert.Severity).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(SeverityPriority).ToList() ?? [];
+    private void ClearAlertFilters() { _alertSearch = string.Empty; _alertStateFilter = "active"; _alertSeverityFilter = "all"; }
+    private string FormatDate(DateTimeOffset value) => DisplayTimeFormatter.Format(value.UtcDateTime, _overview?.Host.Information?.TimeZoneId, "—");
+    private string PoolSummary() => _overview?.Storage.IsAvailable == true ? $"{_overview.Storage.Pools.Count(pool => pool.IsHealthy && !pool.HasWarning)} / {_overview.Storage.Pools.Count}" : "—";
+    private string UpdateSummary() => _overview?.Update.Information is not { } update ? "—" : update.IsUpdateAvailable ? update.AvailableVersion! : string.IsNullOrWhiteSpace(update.CheckError) ? "Current" : "Check failed";
+    private static string HardwareName(TrueNasHostInformation host) => string.Join(" · ", new[] { host.SystemManufacturer, host.SystemProduct }.Where(value => !string.IsNullOrWhiteSpace(value))) is { Length: > 0 } name ? name : "Hardware details unavailable";
+    private static string CoreSummary(TrueNasHostInformation host) => host.PhysicalCoreCount > 0 && host.PhysicalCoreCount != host.CoreCount ? $"{host.CoreCount} logical · {host.PhysicalCoreCount} physical" : host.CoreCount > 0 ? host.CoreCount.ToString() : "—";
+    private static string LoadAverageSummary(TrueNasHostInformation host) => string.Join(" / ", new[] { FormatNumber(host.LoadAverageOneMinute), FormatNumber(host.LoadAverageFiveMinutes), FormatNumber(host.LoadAverageFifteenMinutes) });
+    private static string ProfileSummary(TrueNasUpdateInformation update) => string.Join(" · ", new[] { update.Profile, update.MatchesProfile is null ? null : update.MatchesProfile.Value ? "Matched" : "Not matched" }.Where(value => !string.IsNullOrWhiteSpace(value))) is { Length: > 0 } summary ? summary : "—";
+    private static string UpdateText(TrueNasUpdateInformation update) => !string.IsNullOrWhiteSpace(update.CheckError) ? "Check failed" : update.IsDownloading ? "Downloading" : update.IsUpdateAvailable ? "Available" : "Current";
+    private static string UpdateClass(TrueNasUpdateInformation update) => !string.IsNullOrWhiteSpace(update.CheckError) ? "warning" : update.IsUpdateAvailable ? "info" : "success";
+    private static string PoolClass(StoragePoolHealth pool) => pool.IsHealthy && !pool.HasWarning ? "success" : pool.HasWarning ? "warning" : "danger";
+    private static string ProgressStyle(double percent) => $"width: {Math.Clamp(percent, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+    private static string SeverityText(string severity) => string.IsNullOrWhiteSpace(severity) ? "Unknown" : System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(severity.ToLowerInvariant());
+    private static string SeverityClass(string severity) => severity switch { "EMERGENCY" or "ALERT" or "CRITICAL" or "ERROR" => "danger", "WARNING" => "warning", "NOTICE" or "INFO" => "info", _ => string.Empty };
+    private static int SeverityPriority(string severity) => severity switch { "EMERGENCY" => 0, "ALERT" => 1, "CRITICAL" => 2, "ERROR" => 3, "WARNING" => 4, "NOTICE" => 5, "INFO" => 6, "DEBUG" => 7, _ => 8 };
+    private static string FormatNumber(double? value) => value?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "—";
+    private static bool Contains(string value, string term) => value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatBytes(long? bytes)
+    {
+        if (bytes is null)
+        {
+            return "—";
+        }
+
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+        var value = Math.Max(0, (double)bytes.Value);
+        var unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:0.#} {units[unitIndex]}";
+    }
+}

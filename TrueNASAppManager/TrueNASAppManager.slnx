@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/AppManagerBlazor/">
-    <Project Path="AppManagerBlazor/TrueNASAppManager.csproj" />
-  </Folder>
-  <Folder Name="/Tests/">
-    <Project Path="Tests/TrueNASAppManager.Tests/TrueNASAppManager.Tests.csproj" />
-  </Folder>
-</Solution>

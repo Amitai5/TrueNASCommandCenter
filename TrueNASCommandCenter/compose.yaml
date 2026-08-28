@@ -1,0 +1,39 @@
+services:
+  truenas-command-center:
+    cap_drop:
+      - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_APP_ID: truenas-command-center
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenascommandcenter:latest
+    labels:
+      org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASCommandCenter
+      org.opencontainers.image.title: TrueNAS Command Center
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASCommandCenter
+    network_mode: host
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
+volumes:
+  update-manager-data: null
+x-app-port: 2600
+x-notes: >-
+  TrueNAS Command Center monitors app health, exposes ports and Web UI links, streams container logs,
+  and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
+x-portals:
+  - host: 0.0.0.0
+    name: Web UI
+    path: /
+    port: 2600
+    scheme: http

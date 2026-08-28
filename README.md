@@ -1,13 +1,13 @@
-# TrueNAS App Manager
+# TrueNAS Command Center
 
-[![Production build](https://img.shields.io/github/actions/workflow/status/Amitai5/TrueNASAppManager/publish-container.yml?branch=production&style=for-the-badge&label=production)](https://github.com/Amitai5/TrueNASAppManager/actions/workflows/publish-container.yml)
-[![Container image](https://img.shields.io/badge/GHCR-latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Amitai5/TrueNASAppManager/pkgs/container/truenasappmanager)
-[![Version](https://img.shields.io/github/v/tag/Amitai5/TrueNASAppManager?style=for-the-badge&label=version)](https://github.com/Amitai5/TrueNASAppManager/tags)
+[![Production build](https://img.shields.io/github/actions/workflow/status/Amitai5/TrueNASCommandCenter/publish-container.yml?branch=production&style=for-the-badge&label=production)](https://github.com/Amitai5/TrueNASCommandCenter/actions/workflows/publish-container.yml)
+[![Container image](https://img.shields.io/badge/GHCR-latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Amitai5/TrueNASCommandCenter/pkgs/container/truenascommandcenter)
+[![Version](https://img.shields.io/github/v/tag/Amitai5/TrueNASCommandCenter?style=for-the-badge&label=version)](https://github.com/Amitai5/TrueNASCommandCenter/tags)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![TrueNAS](https://img.shields.io/badge/TrueNAS-25.10%2B-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://www.truenas.com/)
 [![License](https://img.shields.io/badge/license-MIT-16A34A?style=for-the-badge)](LICENSE)
 
-TrueNAS App Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, manages their lifecycle, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email, webhook, or browser push notifications.
+TrueNAS Command Center is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, manages their lifecycle, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email, webhook, or browser push notifications.
 
 TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, host information, native alerts, operating-system update status, live resource and pool status, app lifecycle actions, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
 
@@ -42,8 +42,8 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 ## Documentation
 
-- **[First-Time Setup Guide](TrueNASAppManager/Docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
-- **[Developer Guide](TrueNASAppManager/Docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
+- **[First-Time Setup Guide](TrueNASCommandCenter/Docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
+- **[Developer Guide](TrueNASCommandCenter/Docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
 - **In-app setup help** — after installation, open `http://<truenas-address>:2600/help` or select **Help** in the web UI
 
 ## Requirements
@@ -63,28 +63,28 @@ This is the recommended TrueNAS installation method.
 
 1. Open **Apps → Discover**.
 2. Open the menu beside **Custom App** and select **Install via YAML**.
-3. Enter an application name such as `truenas-app-manager`.
+3. Enter an application name such as `truenas-command-center`.
 4. Paste the following Compose configuration into **Custom Config**.
 5. Click **Save** and wait for the app to report a running state.
 
 ```yaml
 services:
-  truenas-app-manager:
+  truenas-command-center:
     cap_drop:
       - ALL
     environment:
       ASPNETCORE_HTTP_PORTS: 2600
       DATA_PATH: /data
-      TRUENAS_APP_ID: truenas-app-manager
+      TRUENAS_APP_ID: truenas-command-center
       TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
     extra_hosts:
       - truenas.local:10.0.0.21
-    image: ghcr.io/amitai5/truenasappmanager:latest
+    image: ghcr.io/amitai5/truenascommandcenter:latest
     labels:
       org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
-      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASAppManager
-      org.opencontainers.image.title: TrueNAS App Manager
-      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASAppManager
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASCommandCenter
+      org.opencontainers.image.title: TrueNAS Command Center
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASCommandCenter
     network_mode: host
     pull_policy: always
     read_only: true
@@ -99,7 +99,7 @@ volumes:
   update-manager-data: null
 x-app-port: 2600
 x-notes: >-
-  TrueNAS App Manager monitors app health, exposes ports and Web UI links, streams container logs,
+  TrueNAS Command Center monitors app health, exposes ports and Web UI links, streams container logs,
   and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
 x-portals:
   - host: 0.0.0.0
@@ -113,15 +113,15 @@ Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not 
 
 ### Install on a phone, tablet, or desktop
 
-Open the manager through an HTTPS address, then choose **Install app** in the desktop sidebar or mobile header. Chrome and Edge show the native install prompt. Samsung Internet may instead show its install icon in the address bar; if it does not, open the Samsung Internet menu and choose **Add page to → Home screen**, then confirm **Install on Apps screen**. The App Manager now shows browser-specific instructions and live checks for HTTPS, the app manifest, and the service worker whenever a browser does not expose its native prompt. On iPhone and iPad, open the browser Share menu and choose **Add to Home Screen**. The installed app opens in its own window and includes shortcuts to Dashboard, Apps, and Monitoring.
+Open the manager through an HTTPS address, then choose **Install app** in the desktop sidebar or mobile header. Chrome and Edge show the native install prompt. Samsung Internet may instead show its install icon in the address bar; if it does not, open the Samsung Internet menu and choose **Add page to → Home screen**, then confirm **Install on Apps screen**. The Command Center now shows browser-specific instructions and live checks for HTTPS, the app manifest, and the service worker whenever a browser does not expose its native prompt. On iPhone and iPad, open the browser Share menu and choose **Add to Home Screen**. The installed app opens in its own window and includes shortcuts to Dashboard, Apps, and Monitoring.
 
-Browser security rules do not permit manifest-based installation from plain `http://truenas.local` or a private IP, including on Samsung Galaxy devices. Use an authenticated HTTPS reverse proxy for an installable production address; `http://localhost` and `http://127.0.0.1` remain valid for local development. Also open the address in a full browser rather than an embedded browser inside another app. The service worker caches only the branded offline screen and static icon assets. Live TrueNAS status, logs, Uptime Kuma reports, and management actions always require a working connection to the App Manager server.
+Browser security rules do not permit manifest-based installation from plain `http://truenas.local` or a private IP, including on Samsung Galaxy devices. Use an authenticated HTTPS reverse proxy for an installable production address; `http://localhost` and `http://127.0.0.1` remain valid for local development. Also open the address in a full browser rather than an embedded browser inside another app. The service worker caches only the branded offline screen and static icon assets. Live TrueNAS status, logs, Uptime Kuma reports, and management actions always require a working connection to the Command Center server.
 
 ### Enable browser push notifications
 
 Open **Settings → Notifications → Browser push** from each phone, tablet, or computer that should receive alerts, give the device an optional name, and select **Enable on this device**. Permission is requested only from that explicit click. Use **Send test push** before relying on the device, and use **Forget** to retire a device you no longer control.
 
-Push requires the same secure context as PWA installation. On iPhone and iPad, first add the App Manager to the Home Screen and enable push from the installed app. The App Manager container must also be able to make outbound HTTPS requests to the push-service host returned by each browser. Each browser subscription is stored locally in `/data`; the VAPID private key is encrypted at rest. Browser-vendor push services receive an authenticated, payload-free wake-up—not app names, TrueNAS addresses, or error details. The device displays a generic alert and opens the Dashboard for details. Push is sent for attention events such as app downtime, failed recovery, manual approval, blocked or failed updates, rollback, scheduled-check failure, and TrueNAS connection failure. Per-app downtime delivery still follows that app's configured downtime action.
+Push requires the same secure context as PWA installation. On iPhone and iPad, first add the Command Center to the Home Screen and enable push from the installed app. The Command Center container must also be able to make outbound HTTPS requests to the push-service host returned by each browser. Each browser subscription is stored locally in `/data`; the VAPID private key is encrypted at rest. Browser-vendor push services receive an authenticated, payload-free wake-up—not app names, TrueNAS addresses, or error details. The device displays a generic alert and opens the Dashboard for details. Push is sent for attention events such as app downtime, failed recovery, manual approval, blocked or failed updates, rollback, scheduled-check failure, and TrueNAS connection failure. Per-app downtime delivery still follows that app's configured downtime action.
 
 This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
 
@@ -137,22 +137,22 @@ Bridge networking makes port `2600` appear in TrueNAS workload metadata, but som
 
 ```yaml
 services:
-  truenas-app-manager:
+  truenas-command-center:
     cap_drop:
       - ALL
     environment:
       ASPNETCORE_HTTP_PORTS: 2600
       DATA_PATH: /data
-      TRUENAS_APP_ID: truenas-app-manager
+      TRUENAS_APP_ID: truenas-command-center
       TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
     extra_hosts:
       - truenas.local:10.0.0.21
-    image: ghcr.io/amitai5/truenasappmanager:latest
+    image: ghcr.io/amitai5/truenascommandcenter:latest
     labels:
       org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
-      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASAppManager
-      org.opencontainers.image.title: TrueNAS App Manager
-      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASAppManager
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASCommandCenter
+      org.opencontainers.image.title: TrueNAS Command Center
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASCommandCenter
     ports:
       - protocol: tcp
         published: 2600
@@ -170,7 +170,7 @@ volumes:
   update-manager-data: null
 x-app-port: 2600
 x-notes: >-
-  TrueNAS App Manager monitors app health, exposes ports and Web UI links, streams container logs,
+  TrueNAS Command Center monitors app health, exposes ports and Web UI links, streams container logs,
   and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
 x-portals:
   - host: 0.0.0.0
@@ -188,21 +188,21 @@ Create a persistent volume and run the published image:
 docker volume create update-manager-data
 
 docker run --detach \
-  --name truenas-app-manager \
+  --name truenas-command-center \
   --restart unless-stopped \
   --network host \
   --add-host truenas.local:10.0.0.21 \
-  --env TRUENAS_APP_ID=truenas-app-manager \
+  --env TRUENAS_APP_ID=truenas-command-center \
   --env TRUENAS_WEBSOCKET_URL=wss://truenas.local/api/current \
   --mount source=update-manager-data,target=/data \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
   --cap-drop ALL \
   --security-opt no-new-privileges=true \
-  ghcr.io/amitai5/truenasappmanager:latest
+  ghcr.io/amitai5/truenascommandcenter:latest
 ```
 
-If the TrueNAS Web UI address changes from `10.0.0.21`, update `--add-host`, then open `http://localhost:2600` and follow the [First-Time Setup Guide](TrueNASAppManager/Docs/SETUP.md).
+If the TrueNAS Web UI address changes from `10.0.0.21`, update `--add-host`, then open `http://localhost:2600` and follow the [First-Time Setup Guide](TrueNASCommandCenter/Docs/SETUP.md).
 
 ## First launch
 
@@ -213,7 +213,7 @@ The wizard uses the secure TrueNAS endpoint configured in the deployment YAML bu
 3. Optionally configure TrueNAS-native email or webhook notifications.
 4. Discover installed apps and assign an explicit policy to each one.
 
-The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](TrueNASAppManager/Docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
+The **Continue** button on the connection step remains disabled until **Test connection** succeeds. See the [setup guide](TrueNASCommandCenter/Docs/SETUP.md) or the in-app **Help** page for account, certificate, connection, and browser troubleshooting.
 
 ## Dashboard, system health, and app organization
 
@@ -227,7 +227,7 @@ Five optional or automatic views become available after the initial connection s
 4. **Live app resources** — `APPS_READ`, already required for discovery, also permits the shared `app.stats` stream. No additional setting is needed. After a successful connection, CPU and memory appear on the Apps page after the first sample; open an app's details page for network and block-I/O values. Samples remain in memory and are never added to history or backups.
 5. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in the password-protected full recovery backup.
 
-See [Manage, monitor, and inspect apps](TrueNASAppManager/Docs/SETUP.md#6-manage-monitor-and-inspect-apps) for detailed TrueNAS navigation, validation steps, and troubleshooting.
+See [Manage, monitor, and inspect apps](TrueNASCommandCenter/Docs/SETUP.md#6-manage-monitor-and-inspect-apps) for detailed TrueNAS navigation, validation steps, and troubleshooting.
 
 ## App access, logs, and configuration backups
 
@@ -296,11 +296,17 @@ Host networking is intentionally enabled so this single-purpose manager can reac
 
 ## Updating
 
-Every production release has one semantic version stored in [`VERSION`](TrueNASAppManager/VERSION). The running version appears in the sidebar, on the Settings page, in startup logs, in the `X-Application-Version` response header, and at `/version`. The container carries the same `org.opencontainers.image.version` label.
+Every production release has one semantic version stored in [`VERSION`](TrueNASCommandCenter/VERSION). The running version appears in the sidebar, on the Settings page, in startup logs, in the `X-Application-Version` response header, and at `/version`. The container carries the same `org.opencontainers.image.version` label.
 
 The `latest` and `production` image tags track the current `production` branch. Immutable release tags such as `1.1.0`, minor-channel tags such as `1.1`, and commit tags such as `sha-<commit>` are published together. Increment `VERSION` before the next production release; publishing refuses to reuse a version that already belongs to another commit. Pin the image to an exact version when reproducibility matters, or keep `latest` with `pull_policy: always` for automatic image discovery.
 
 In **Apps → Configuration → Settings**, keep **Check for docker image updates** enabled. To apply an available image, update/redeploy the custom app or edit its YAML and save without changing the `/data` volume. `pull_policy: always` does not restart a running container by itself; it takes effect when TrueNAS reapplies the Compose project. After an update, hard-refresh the browser if it has cached older frontend assets.
+
+### Upgrading from TrueNAS App Manager
+
+Version 2.0.0 renames the product, repository, projects, image, and PWA to **TrueNAS Command Center**. Existing `/data` volumes and password-protected recovery JSON files remain compatible. The production workflow also publishes the legacy `ghcr.io/amitai5/truenasappmanager` image alias so existing deployments continue receiving updates while they move to `ghcr.io/amitai5/truenascommandcenter`.
+
+Keep `TRUENAS_APP_ID=truenas-app-manager` when that is still the installed app ID shown by TrueNAS; change it only if the TrueNAS app itself is recreated or renamed to `truenas-command-center`.
 
 ## Health endpoints
 
@@ -311,4 +317,4 @@ Temporary TrueNAS downtime does not make application readiness fail.
 
 ## TrueNAS custom-app metadata limits
 
-The YAML supplies a Web UI portal, operator notes, and OCI labels. TrueNAS still identifies YAML installs as custom apps, so its native **Application Info** card can continue to show a generic icon, `App Version: custom`, and `Source: N/A`. The published image's `org.opencontainers.image.version` label and the App Manager's persistent running-version display provide the authoritative release number. TrueNAS App Manager displays richer workload data and optional GitHub facts inside its own app-details page; it does not create unsupported catalog metadata files or catalog routes.
+The YAML supplies a Web UI portal, operator notes, and OCI labels. TrueNAS still identifies YAML installs as custom apps, so its native **Application Info** card can continue to show a generic icon, `App Version: custom`, and `Source: N/A`. The published image's `org.opencontainers.image.version` label and the Command Center's persistent running-version display provide the authoritative release number. TrueNAS Command Center displays richer workload data and optional GitHub facts inside its own app-details page; it does not create unsupported catalog metadata files or catalog routes.

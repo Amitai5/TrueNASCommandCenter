@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="title">
+  <title id="title">TrueNAS Command Center</title>
+  <rect x="1" y="1" width="30" height="30" rx="8" fill="#1f2340" stroke="#6366f1" stroke-width="2" />
+  <text x="16" y="20.5" fill="#ffffff" font-family="Arial, sans-serif" font-size="10" font-weight="700" text-anchor="middle">TC</text>
+</svg>

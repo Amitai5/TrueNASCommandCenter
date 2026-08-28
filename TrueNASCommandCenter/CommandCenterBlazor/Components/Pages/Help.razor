@@ -1,0 +1,255 @@
+@page "/help"
+@inject TrueNasEndpointOptions TrueNasEndpoint
+
+<PageTitle>Setup help · TrueNAS Command Center</PageTitle>
+
+<div class="page help-page">
+    <header class="page-header">
+        <div>
+            <h1>Setup help</h1>
+            <p class="subtitle">Create the TrueNAS account, connect securely, and finish the first-launch wizard.</p>
+        </div>
+        <div class="actions">
+            <a class="button primary" href="/onboarding">Open setup wizard</a>
+        </div>
+    </header>
+
+    <div class="notice" role="note">
+        <strong>Connection rule:</strong> Continue stays disabled until Test connection succeeds. Use the API key owner's exact username and a key with <code>APPS_READ</code> and <code>APPS_WRITE</code>.
+    </div>
+
+    <nav class="help-toc" aria-label="Setup topics">
+        <a href="/help#account"><span class="help-toc-number">1</span><span><strong>Account and key</strong><small>Create least-privilege access</small></span></a>
+        <a href="/help#first-connection"><span class="help-toc-number">2</span><span><strong>Connect</strong><small>Enter and test the fields</small></span></a>
+        <a href="/help#wizard"><span class="help-toc-number">3</span><span><strong>Finish setup</strong><small>Schedule, notify, discover</small></span></a>
+        <a href="/help#operations"><span class="help-toc-number">4</span><span><strong>Operate and back up</strong><small>Links, logs, and restore</small></span></a>
+        <a href="/help#troubleshooting"><span class="help-toc-number">5</span><span><strong>Troubleshoot</strong><small>Fix common first-run issues</small></span></a>
+    </nav>
+
+    <section id="account" class="panel help-section">
+        <div class="help-heading">
+            <span class="help-step-number" aria-hidden="true">1</span>
+            <div>
+                <h2>Create a service account and API key</h2>
+                <p class="muted">Use a dedicated account instead of a personal administrator key.</p>
+            </div>
+        </div>
+
+        <ol class="help-list">
+            <li>In TrueNAS, open <strong>Credentials → Users</strong>, click <strong>Add</strong>, and create a user such as <code>autoupdate</code>. Keep Shell and SSH access disabled.</li>
+            <li>Note the user's primary group. Open <strong>Credentials → Groups → Privileges</strong> and click <strong>Add</strong>.</li>
+            <li>Select the service account's group under <strong>Local Groups</strong>. Add <code>APPS_READ</code> and <code>APPS_WRITE</code>. For the read-only <strong>System</strong> page, optionally add <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, and <code>SYSTEM_UPDATE_READ</code>. Host identity and hardware require the broader read-only <code>READONLY_ADMIN</code> role. Leave Web Shell Access disabled and save.</li>
+            <li>Return to <strong>Credentials → Users</strong>, select the service account, and choose <strong>Add API Key</strong>. Copy the generated key immediately.</li>
+        </ol>
+
+        <div class="notice warning help-inline-notice">
+            Treat the API key like a password. TrueNAS shows the complete value only when it is created or reset.
+        </div>
+    </section>
+
+    <section id="first-connection" class="panel help-section">
+        <div class="help-heading">
+            <span class="help-step-number" aria-hidden="true">2</span>
+            <div>
+                <h2>Connect to TrueNAS</h2>
+                <p class="muted">The secure endpoint is configured in the TrueNAS app deployment. Enter these values in Step 1 of the wizard.</p>
+            </div>
+        </div>
+
+        <h3>Complete TrueNAS app YAML</h3>
+        <p>Replace the entire custom app configuration with this YAML. It uses the current TrueNAS Web UI address, <code>10.0.0.21</code>.</p>
+        <pre class="help-yaml"><code>services:
+  truenas-command-center:
+    cap_drop:
+      - ALL
+    environment:
+      ASPNETCORE_HTTP_PORTS: 2600
+      DATA_PATH: /data
+      TRUENAS_APP_ID: truenas-command-center
+      TRUENAS_WEBSOCKET_URL: wss://truenas.local/api/current
+    extra_hosts:
+      - truenas.local:10.0.0.21
+    image: ghcr.io/amitai5/truenascommandcenter:latest
+    labels:
+      org.opencontainers.image.description: Manage, monitor, inspect, and safely update TrueNAS apps.
+      org.opencontainers.image.source: https://github.com/Amitai5/TrueNASCommandCenter
+      org.opencontainers.image.title: TrueNAS Command Center
+      org.opencontainers.image.url: https://github.com/Amitai5/TrueNASCommandCenter
+    network_mode: host
+    pull_policy: always
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - update-manager-data:/data
+volumes:
+  update-manager-data: null
+x-app-port: 2600
+x-notes: &gt;-
+  TrueNAS Command Center monitors app health, exposes ports and Web UI links, streams container logs,
+  and refreshes inventory before every scheduled update check. Open the Web UI to finish setup.
+x-portals:
+  - host: 0.0.0.0
+    name: Web UI
+    path: /
+    port: 2600
+    scheme: http</code></pre>
+
+        <div class="table-wrap help-table">
+            <table>
+                <thead>
+                    <tr><th>Field</th><th>Value</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Username</td><td>The API key owner's exact, case-sensitive username</td></tr>
+                    <tr><td>API key</td><td>The value copied when the key was created</td></tr>
+                    <tr><td>Configured endpoint</td><td><code>@TrueNasEndpoint.ServerUrl</code></td></tr>
+                    <tr><td>Verify TLS certificate</td><td>Keep enabled when the certificate is trusted and covers <code>@TrueNasEndpoint.ServerUri.Host</code></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>Click <strong>Test connection</strong>. A successful test enables <strong>Continue</strong>. The app uses the validated <code>TRUENAS_WEBSOCKET_URL</code> from the deployment and does not expose the server address as an editable browser field.</p>
+
+        <p class="muted">Prefer a stable hostname and a trusted certificate that covers it. When container DNS cannot resolve a local hostname, map that hostname to the TrueNAS IPv4 address with <code>extra_hosts</code> in the app YAML.</p>
+
+        <div class="notice help-inline-notice">
+            <strong>Need deeper diagnostics?</strong> A failed connection test displays an error code and diagnostic ID. Search the TrueNAS app's container logs for that ID to see the failing connection stage, DNS results, port, TLS setting, WebSocket error, and RPC method. Credentials and RPC payloads are never written to the log.
+        </div>
+    </section>
+
+    <section id="wizard" class="panel help-section">
+        <div class="help-heading">
+            <span class="help-step-number" aria-hidden="true">3</span>
+            <div>
+                <h2>Finish the wizard</h2>
+                <p class="muted">Nothing updates automatically until you explicitly assign policies.</p>
+            </div>
+        </div>
+
+        <div class="help-card-grid">
+            <article>
+                <h3>Schedule</h3>
+                <p>Optionally enable scheduled checks. Use a five-field cron expression and an IANA timezone, for example <code>0 4 * * *</code> with <code>America/Los_Angeles</code>.</p>
+            </article>
+            <article>
+                <h3>Notifications</h3>
+                <p>Optionally use TrueNAS-native email or an HTTPS webhook. Blank email recipients use the administrator addresses configured in TrueNAS.</p>
+            </article>
+            <article>
+                <h3>Discovery</h3>
+                <p>Discovery is read-only. Every app begins as <strong>Unconfigured</strong> and cannot auto-update until you review its policy.</p>
+            </article>
+            <article>
+                <h3>App management</h3>
+                <p>Open an app to see ports, live resources, route-aware Web UI links, containers, and logs. Choose Ignore, Notify only, or one automatic restart attempt for downtime.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="operations" class="panel help-section">
+        <div class="help-heading">
+            <span class="help-step-number" aria-hidden="true">4</span>
+            <div>
+                <h2>Operate apps and protect configuration</h2>
+                <p class="muted">Use route-aware access, focused logs, and portable backups without exposing secrets by default.</p>
+            </div>
+        </div>
+
+        <div class="help-card-grid">
+            <article>
+                <h3>Local and remote Web UI</h3>
+                <p>Set separate local and remote URLs under each app's <strong>Settings</strong>. Local manager hosts use the local route; public manager domains use only the configured remote route.</p>
+            </article>
+            <article>
+                <h3>Live logs</h3>
+                <p>Start a container stream, then use <strong>Copy all</strong> for ISO-8601 plain text or <strong>Fullscreen</strong> for a focused console. The latest 500 lines stay only in browser memory.</p>
+            </article>
+            <article>
+                <h3>Install on this device</h3>
+                <p>Open the manager through HTTPS and choose <strong>Install app</strong> in the sidebar or mobile header. On a Samsung Galaxy, Samsung Internet may use its address-bar install icon; otherwise choose <strong>Add page to → Home screen</strong> from its menu and confirm <strong>Install on Apps screen</strong>. The install panel checks the secure connection, manifest, and offline worker when a native prompt is unavailable. On iPhone and iPad, use Share → Add to Home Screen. Plain <code>http://truenas.local</code> remains usable in a browser but cannot be installed under browser security rules.</p>
+            </article>
+            <article>
+                <h3>Health</h3>
+                <p>Completed one-shot workloads such as <code>permissions</code> appear as <strong>Exited normally</strong> and do not degrade an otherwise running app.</p>
+            </article>
+            <article>
+                <h3>System overview</h3>
+                <p>Open <strong>System</strong> for native TrueNAS alerts, OS update availability, host identity and uptime, and pool health. Every panel is read-only and remains independently optional.</p>
+            </article>
+            <article>
+                <h3>Favorites and groups</h3>
+                <p>Star an app from the list, assign a custom group under its <strong>Settings</strong>, and use the dashboard filter to focus on favorites or one group.</p>
+            </article>
+            <article>
+                <h3>Uptime Kuma reports</h3>
+                <p>Configure Uptime Kuma to start automatic read-only imports, then map imported monitors under each app's <strong>Settings</strong>. Manual sync remains available whenever you want an immediate refresh.</p>
+            </article>
+            <article>
+                <h3>Backup and restore</h3>
+                <p>Use <strong>Settings → Backup &amp; restore</strong> to download a password-protected full recovery JSON containing credentials, Uptime Kuma settings, monitor mappings, favorites, groups, and app policies. Restore accepts only a full recovery file plus its password, validates it before making changes, and merges by app ID without deleting history or unlisted app settings.</p>
+            </article>
+        </div>
+
+        <div class="notice warning help-inline-notice">
+            Portable JSON excludes inventory, logs, incidents, cache, and history. Continue backing up <code>/data</code> for complete disaster recovery. The installed PWA also keeps live data online-only and shows an explicit reconnect screen when the server cannot be reached.
+        </div>
+    </section>
+
+    <section id="troubleshooting" class="panel help-section">
+        <div class="help-heading">
+            <span class="help-step-number" aria-hidden="true">5</span>
+            <div>
+                <h2>Troubleshooting</h2>
+                <p class="muted">Start with the symptom you see.</p>
+            </div>
+        </div>
+
+        <div class="help-troubleshooting">
+            <details open>
+                <summary>Test connection or Continue does nothing</summary>
+                <p>Hard-refresh with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>, confirm the newest container image is deployed, and verify <code>/_framework/blazor.web.js</code> returns HTTP 200 in browser developer tools. The page can look complete even when the Blazor handlers did not load.</p>
+            </details>
+            <details>
+                <summary>Continue is disabled</summary>
+                <p>This is expected until Test connection succeeds. Correct the connection, authentication, certificate, or role error shown above the form.</p>
+            </details>
+            <details>
+                <summary>TrueNAS keeps using an older image</summary>
+                <p>Replace the custom app configuration with the complete YAML above, enable <strong>Apps → Configuration → Settings → Check for docker image updates</strong>, and save/redeploy the app. The pull policy checks GHCR when TrueNAS reapplies the app; it does not restart a running container by itself.</p>
+            </details>
+            <details>
+                <summary>Authentication failed</summary>
+                <p>Confirm the username owns the key, reset the key if its value is uncertain, and check whether an earlier insecure connection caused TrueNAS to revoke it.</p>
+            </details>
+            <details>
+                <summary>Missing app permissions</summary>
+                <p>Verify the service account's group is attached to a custom privilege containing both <code>APPS_READ</code> and <code>APPS_WRITE</code>. The System page explains which optional read role each unavailable panel needs: <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, <code>SYSTEM_UPDATE_READ</code>, or the broader <code>READONLY_ADMIN</code>. Do not edit built-in TrueNAS privileges.</p>
+            </details>
+            <details>
+                <summary>Certificate validation error</summary>
+                <p>Confirm the certificate covers <code>@TrueNasEndpoint.ServerUri.Host</code>. Prefer correcting the hostname or certificate; otherwise disable certificate verification only on a trusted network.</p>
+            </details>
+            <details>
+                <summary>DNS failure, network unreachable, or connection refused</summary>
+                <p>Verify <code>TRUENAS_WEBSOCKET_URL</code> and the <code>extra_hosts</code> mapping in the TrueNAS app YAML, then redeploy. The hostname should map to the current TrueNAS Web UI IPv4 address and the URL must end in <code>/api/current</code>.</p>
+            </details>
+            <details>
+                <summary>No apps are discovered</summary>
+                <p>Confirm the TrueNAS Apps service is running, at least one app is installed, and the service account has <code>APPS_READ</code>.</p>
+            </details>
+        </div>
+    </section>
+
+    <section class="panel help-section">
+        <h2>More help</h2>
+        <p>The repository's full setup guide includes installation, backups, security checks, and additional troubleshooting.</p>
+        <div class="actions">
+            <a class="button" href="https://github.com/Amitai5/TrueNASCommandCenter/blob/production/TrueNASCommandCenter/Docs/SETUP.md" target="_blank" rel="noopener noreferrer">Open full setup guide ↗</a>
+            <a class="button" href="https://www.truenas.com/docs/scale/api/" target="_blank" rel="noopener noreferrer">TrueNAS API key guidance ↗</a>
+        </div>
+    </section>
+</div>

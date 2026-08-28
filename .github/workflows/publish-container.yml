@@ -15,7 +15,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/truenascommandcenter
+  LEGACY_IMAGE_NAME: ${{ github.repository_owner }}/truenasappmanager
 
 jobs:
   container:
@@ -33,7 +34,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          version="$(tr -d '\r\n' < TrueNASAppManager/VERSION)"
+          version="$(tr -d '\r\n' < TrueNASCommandCenter/VERSION)"
           echo "value=$version" >> "$GITHUB_OUTPUT"
           echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
 
@@ -69,7 +70,9 @@ jobs:
         id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY }}/${{ env.LEGACY_IMAGE_NAME }}
           tags: |
             type=raw,value=production
             type=raw,value=latest
@@ -83,7 +86,7 @@ jobs:
       - name: Build and publish image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: ./TrueNASAppManager
+          context: ./TrueNASCommandCenter
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

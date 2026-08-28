@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/CommandCenterBlazor/">
+    <Project Path="CommandCenterBlazor/TrueNASCommandCenter.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/TrueNASCommandCenter.Tests/TrueNASCommandCenter.Tests.csproj" />
+  </Folder>
+</Solution>
