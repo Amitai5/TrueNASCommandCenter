@@ -1,0 +1,29 @@
+<section class="permission-guide" aria-labelledby="truenas-api-permissions-title">
+    <div class="permission-guide-header">
+        <div>
+            <h3 id="truenas-api-permissions-title">TrueNAS API permissions</h3>
+            <p>Grant only the roles needed for the features you use.</p>
+        </div>
+        <a href="/help#api-permissions">Permission help</a>
+    </div>
+
+    <div class="permission-grid">
+        <article class="permission-card required">
+            <span class="permission-label">Required</span>
+            <div class="permission-role-list"><code>APPS_READ</code><code>APPS_WRITE</code></div>
+            <p>Installed-app inventory, health, logs, lifecycle actions, updates, and rollback.</p>
+        </article>
+        <article class="permission-card discover">
+            <span class="permission-label">Discover gallery</span>
+            <div class="permission-role-list"><code>CATALOG_READ</code></div>
+            <p>Catalog browsing and app details. This is separate from <code>APPS_READ</code>.</p>
+        </article>
+        <article class="permission-card optional">
+            <span class="permission-label">Optional system panels</span>
+            <div class="permission-role-list"><code>POOL_READ</code><code>ALERT_LIST_READ</code><code>SYSTEM_UPDATE_READ</code></div>
+            <p><code>READONLY_ADMIN</code> adds broader host details and all read roles; use it only when that wider access is acceptable.</p>
+        </article>
+    </div>
+
+    <p class="permission-note"><strong>Changed a privilege?</strong> Run <strong>Test connection</strong> or use <strong>Reconnect &amp; retry</strong> on Discover so the new TrueNAS session receives it.</p>
+</section>

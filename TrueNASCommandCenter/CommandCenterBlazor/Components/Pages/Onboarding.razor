@@ -44,7 +44,7 @@
     {
         <section class="panel">
             <h2>1. TrueNAS connection</h2>
-            <p class="muted">The manager connects to <code>@TrueNasEndpoint.ServerUri.Host</code> using the secure endpoint configured in the app deployment. Enter a service account/API key with APPS_READ and APPS_WRITE.</p>
+            <p class="muted">The manager connects to <code>@TrueNasEndpoint.ServerUri.Host</code> using the secure endpoint configured in the app deployment. Enter a service account/API key with <code>APPS_READ</code> and <code>APPS_WRITE</code>. Add <code>CATALOG_READ</code> to use Discover.</p>
             <div class="form-grid">
                 <div class="field">
                     <label for="wizard-user">Username</label>
@@ -58,6 +58,7 @@
                 </div>
             </div>
             <div class="toggle-row"><input id="wizard-tls" type="checkbox" @bind="_model.VerifyTls" /><label for="wizard-tls">Verify TLS certificate (disable only for an untrusted or mismatched certificate)</label></div>
+            <TrueNasPermissionGuide />
             <div class="actions" style="justify-content:space-between;margin-top:1rem">
                 <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>
                 <button class="primary" disabled="@(_busy || !_connectionTested)" @onclick="NextAsync">Continue</button>

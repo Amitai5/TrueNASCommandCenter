@@ -148,6 +148,28 @@ public sealed class CatalogDiscoveryTests
 
         Assert.AreEqual(CatalogAvailability.PermissionDenied, snapshot.Availability);
         Assert.HasCount(0, snapshot.Apps);
+        StringAssert.Contains(snapshot.Message, "CATALOG_READ");
+        StringAssert.Contains(snapshot.Message, "Diagnostic ID:");
+    }
+
+    [TestMethod]
+    public async Task ReconnectAndRefreshAsync_UpdatedPrivilege_ReauthenticatesBeforeRetry()
+    {
+        var catalog = new FakeCatalogClient(SingleCatalog())
+        {
+            QueryException = new TrueNasClientException("-32001", "TrueNAS rejected the request")
+        };
+        var installed = new FakeInstalledClient([]);
+        var service = CreateService(catalog, installed, new FakeDeploymentProvider(AvailableDeployments()));
+        var denied = await service.GetCatalogAsync(false);
+        catalog.QueryException = null;
+
+        var refreshed = await service.ReconnectAndRefreshAsync();
+
+        Assert.AreEqual(CatalogAvailability.PermissionDenied, denied.Availability);
+        Assert.AreEqual(1, installed.ResetCount);
+        Assert.AreEqual(CatalogAvailability.Available, refreshed.Availability);
+        Assert.HasCount(1, refreshed.Apps);
     }
 
     [TestMethod]
@@ -369,6 +391,7 @@ public sealed class CatalogDiscoveryTests
     private sealed class FakeInstalledClient(IReadOnlyList<TrueNasAppDto> apps) : ITrueNasClient
     {
         public bool? HasWriteAccess => true;
+        public int ResetCount { get; private set; }
 
         public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<TrueNasAppDto>> QueryAppsAsync(CancellationToken cancellationToken = default) => Task.FromResult(apps);
@@ -388,6 +411,10 @@ public sealed class CatalogDiscoveryTests
             await Task.CompletedTask;
             yield break;
         }
-        public Task ResetConnectionAsync() => Task.CompletedTask;
+        public Task ResetConnectionAsync()
+        {
+            ResetCount++;
+            return Task.CompletedTask;
+        }
     }
 }

@@ -10,6 +10,10 @@ public interface ICatalogDiscoveryService
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The catalog gallery snapshot.</returns>
     Task<CatalogDiscoverySnapshot> GetCatalogAsync(bool forceRefresh, CancellationToken cancellationToken = default);
+    /// <summary>Re-authenticates to TrueNAS before refreshing the catalog after a connection or permission change.</summary>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The refreshed catalog gallery snapshot.</returns>
+    Task<CatalogDiscoverySnapshot> ReconnectAndRefreshAsync(CancellationToken cancellationToken = default);
     /// <summary>Returns one catalog app and optional similar-app suggestions.</summary>
     /// <param name="identity">The app train and catalog name.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>

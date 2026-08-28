@@ -1,6 +1,6 @@
 # First-Time Setup Guide
 
-[Back to the main README](../../README.md) · [Developer guide](DEVELOPMENT.md)
+[Back to the main README](../../README.md) · [Permission guide](PERMISSIONS.md) · [Developer guide](DEVELOPMENT.md)
 
 This guide walks through installing TrueNAS Command Center, creating a least-privilege TrueNAS service account, connecting the first-launch wizard, and resolving the most common setup problems. The TrueNAS navigation names below follow Community Edition / SCALE 25.10 and later.
 
@@ -51,13 +51,14 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Co
 5. Under **Roles**, select:
    - `APPS_READ`
    - `APPS_WRITE`
+   - `CATALOG_READ` when the read-only Discover gallery will be used
    - Optionally, `POOL_READ` for storage-pool health and capacity
    - Optionally, `ALERT_LIST_READ` for native TrueNAS alerts
    - Optionally, `SYSTEM_UPDATE_READ` for TrueNAS operating-system update availability
    - Optionally, `READONLY_ADMIN` for host identity, hardware, load, and uptime
 6. Leave **Web Shell Access** disabled and save the privilege.
 
-`APPS_READ` allows discovery, health, ports, portals, containers, logs, and live application resource statistics. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. The four System-page permissions are not required for app management, and every unavailable read-only panel explains the exact role it needs. `READONLY_ADMIN` is intentionally broader than the three focused read roles; omit it if host hardware details are not worth that additional visibility. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or app-update actions through this account.
+`APPS_READ` allows installed-app inventory, health, ports, portals, containers, logs, update metadata, and live application resource statistics. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. `CATALOG_READ` is a separate role used by the Discover gallery; `APPS_READ` does not include it. The four System-page permissions are not required for app management, and every unavailable read-only panel explains the exact role it needs. `READONLY_ADMIN` is intentionally broader than the focused read roles and includes the available read-only roles; omit it if host hardware details are not worth that additional visibility. See the [complete permission guide](PERMISSIONS.md) for recommended profiles. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or app-update actions through this account.
 
 ### Create the API key
 
@@ -227,7 +228,7 @@ This fail-closed default prevents newly discovered applications from updating wi
 
 Open **Discover** in the main navigation to browse applications published by the connected TrueNAS catalog. The gallery supports search, filters, sorting, detailed catalog metadata, installed-app badges, and links to the official TrueNAS Apps page. It never installs an app and does not call `app.create`; complete installation in the TrueNAS Apps interface.
 
-The required `APPS_READ` role already provides catalog-read access on the supported TrueNAS release, so no additional privilege is normally needed. Approximate active-deployment counts are optional and come from TrueNAS public anonymous telemetry. They are cached for six hours, time out quickly, and display as unavailable without blocking the catalog when the container cannot reach the telemetry endpoint.
+The gallery requires `CATALOG_READ`, which is separate from the core `APPS_READ` role. If that role is added after Command Center already connected, select **Reconnect & retry** on Discover or run **Settings → Connection → Test connection** so TrueNAS creates a session with the updated privilege. Approximate active-deployment counts are optional and come from TrueNAS public anonymous telemetry. They are cached for six hours, time out quickly, and display as unavailable without blocking the catalog when the container cannot reach the telemetry endpoint.
 
 ## 6. Manage, monitor, and inspect apps
 
@@ -259,11 +260,13 @@ Pool cards require the additional read-only `POOL_READ` role:
 
 ### Discover Apps is empty or unavailable
 
-1. Confirm **Settings → Connection → Test connection** succeeds with the same API key used by the running container.
-2. Confirm the service-account privilege still includes `APPS_READ`.
-3. Select **Refresh catalog** after TrueNAS has synchronized its catalog.
-4. If the page reports that TrueNAS is offline, verify the container route and `TRUENAS_WEBSOCKET_URL` using the connection troubleshooting steps below.
-5. If only deployment counts are unavailable, catalog discovery is working correctly; allow outbound HTTPS to `telemetry.sys.truenas.net` if you want those optional counts.
+1. Confirm the service-account privilege includes `CATALOG_READ`. `APPS_READ` by itself is not sufficient for the catalog API.
+2. Select **Reconnect & retry**. This resets the existing TrueNAS WebSocket so a newly granted role takes effect.
+3. Confirm **Settings → Connection → Test connection** succeeds with the same API key used by the running container.
+4. If the page still fails, search the container logs for the diagnostic ID displayed by Discover.
+5. Confirm TrueNAS has synchronized its Apps catalog, then select **Refresh catalog**.
+6. If the page reports that TrueNAS is offline, verify the container route and `TRUENAS_WEBSOCKET_URL` using the connection troubleshooting steps below.
+7. If only deployment counts are unavailable, catalog discovery is working correctly; allow outbound HTTPS to `telemetry.sys.truenas.net` if you want those optional counts.
 
 Catalog results are cached for 15 minutes. A failed manual refresh keeps and labels the last successful results instead of clearing the gallery.
 

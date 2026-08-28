@@ -60,7 +60,7 @@
             <div class="panel-header">
                 <div>
                     <h2>TrueNAS connection</h2>
-                    <p class="field-help">The deployment connects securely to <code>@TrueNasEndpoint.ServerUrl</code>. Use a scoped API key with APPS_READ and APPS_WRITE.</p>
+                    <p class="field-help">The deployment connects securely to <code>@TrueNasEndpoint.ServerUrl</code>. Core app management requires <code>APPS_READ</code> and <code>APPS_WRITE</code>; the Discover gallery also requires <code>CATALOG_READ</code>.</p>
                 </div>
             </div>
             <div class="form-grid">
@@ -89,6 +89,8 @@
             {
                 <div class="notice warning">Certificate identity verification is disabled. The connection remains encrypted with WSS, but the server identity is not verified.</div>
             }
+
+            <TrueNasPermissionGuide />
 
             <div class="actions" style="margin-top:1rem">
                 <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>

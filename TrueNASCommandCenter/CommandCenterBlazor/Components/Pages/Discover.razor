@@ -38,10 +38,20 @@
             <div class="catalog-state-icon" aria-hidden="true">@StateIcon()</div>
             <h2>@StateTitle()</h2>
             <p class="muted">@(_snapshot?.Message ?? "The TrueNAS catalog could not be loaded.")</p>
+            @if (_snapshot?.Availability is CatalogAvailability.PermissionDenied)
+            {
+                <div class="catalog-permission-hint" role="note">
+                    <strong>Required for Discover:</strong> add <code>CATALOG_READ</code> to the API key owner's custom privilege. After changing roles, reconnect so TrueNAS creates a session with the new access.
+                </div>
+            }
             <div class="actions catalog-centered-actions">
-                <button class="primary" disabled="@_refreshing" @onclick="RefreshAsync">Retry</button>
+                <button class="primary" disabled="@_refreshing" @onclick="ReconnectAndRetryAsync">@(_refreshing ? "Reconnecting…" : "Reconnect & retry")</button>
                 <a class="button" href="/settings">Connection settings</a>
             </div>
+            @if (_lastAttemptedAtUtc is not null)
+            {
+                <p class="catalog-last-attempt">Last attempt completed @_lastAttemptedAtUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")</p>
+            }
         </section>
     }
     else
@@ -159,6 +169,7 @@
     private CatalogSortOrder _sortOrder;
     private bool _loading = true;
     private bool _refreshing;
+    private DateTimeOffset? _lastAttemptedAtUtc;
 
     protected override async Task OnInitializedAsync()
     {
@@ -167,10 +178,21 @@
 
     private async Task RefreshAsync()
     {
+        if (_snapshot is not null && _snapshot.Availability is not CatalogAvailability.Available)
+        {
+            await ReconnectAndRetryAsync();
+            return;
+        }
+
         await LoadAsync(true);
     }
 
-    private async Task LoadAsync(bool forceRefresh)
+    private async Task ReconnectAndRetryAsync()
+    {
+        await LoadAsync(true, true);
+    }
+
+    private async Task LoadAsync(bool forceRefresh, bool reconnect = false)
     {
         if (forceRefresh)
         {
@@ -179,13 +201,16 @@
 
         try
         {
-            _snapshot = await CatalogDiscoveryService.GetCatalogAsync(forceRefresh);
+            _snapshot = reconnect
+                ? await CatalogDiscoveryService.ReconnectAndRefreshAsync()
+                : await CatalogDiscoveryService.GetCatalogAsync(forceRefresh);
             _categories = _snapshot.Apps.SelectMany(app => app.Categories).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
             _trains = _snapshot.Apps.Select(app => app.Identity.Train).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
             ApplyFilters();
         }
         finally
         {
+            _lastAttemptedAtUtc = DateTimeOffset.UtcNow;
             _loading = false;
             _refreshing = false;
         }

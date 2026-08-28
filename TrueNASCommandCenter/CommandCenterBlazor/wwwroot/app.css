@@ -3809,6 +3809,104 @@ html:not([data-theme]) .summary-grid {
     justify-content: center;
 }
 
+.catalog-permission-hint {
+    width: min(680px, 100%);
+    margin: 1rem auto;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid var(--warning);
+    border-radius: 8px;
+    background: var(--warning-background);
+    color: var(--warning-text);
+    text-align: left;
+}
+
+.catalog-permission-hint code,
+.permission-guide code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 0.9em;
+}
+
+.catalog-last-attempt {
+    margin: 0.8rem 0 0;
+    color: var(--secondary);
+    font-size: 0.82rem;
+}
+
+.permission-guide {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+}
+
+.permission-guide-header {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.permission-guide-header h3,
+.permission-guide-header p {
+    margin: 0;
+}
+
+.permission-guide-header p {
+    margin-top: 0.25rem;
+    color: var(--secondary);
+}
+
+.permission-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+}
+
+.permission-card {
+    padding: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.permission-card p {
+    margin: 0.55rem 0 0;
+    color: var(--secondary);
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.permission-label {
+    color: var(--heading);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.permission-role-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.permission-role-list code {
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--input-border);
+    border-radius: 5px;
+    background: var(--input-background);
+    color: var(--heading);
+}
+
+.permission-note {
+    margin: 0.85rem 0 0;
+    color: var(--secondary);
+    font-size: 0.88rem;
+}
+
 .catalog-filter-panel {
     margin-bottom: 1rem;
     padding: 1rem;

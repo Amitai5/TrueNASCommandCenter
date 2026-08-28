@@ -44,7 +44,8 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 ## Documentation
 
-- **[First-Time Setup Guide](TrueNASCommandCenter/Docs/SETUP.md)** — service account, `APPS_READ` / `APPS_WRITE` privileges, API key, connection fields, wizard steps, and troubleshooting
+- **[First-Time Setup Guide](TrueNASCommandCenter/Docs/SETUP.md)** — service account, API key, connection fields, wizard steps, and troubleshooting
+- **[TrueNAS API Permission Guide](TrueNASCommandCenter/Docs/PERMISSIONS.md)** — required and optional roles, recommended privilege profiles, and role-specific troubleshooting
 - **[Developer Guide](TrueNASCommandCenter/Docs/DEVELOPMENT.md)** — local builds, tests, container development, architecture, publishing, and TrueNAS middleware methods
 - **In-app setup help** — after installation, open `http://<truenas-address>:2600/help` or select **Help** in the web UI
 
@@ -52,10 +53,12 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - TrueNAS Community Edition / SCALE 25.10 or later
 - A configured TrueNAS Apps storage pool
-- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; optionally add `POOL_READ`, `ALERT_LIST_READ`, `SYSTEM_UPDATE_READ`, and the broader read-only `READONLY_ADMIN` for System-page visibility
+- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; add `CATALOG_READ` for Discover, and optionally add `POOL_READ`, `ALERT_LIST_READ`, `SYSTEM_UPDATE_READ`, or the broader `READONLY_ADMIN` for System-page visibility
 - A trusted LAN/VPN, or an authenticated reverse proxy in front of the web UI
 
 The application does not include its own user accounts or RBAC. Do not expose it directly to an untrusted network.
+
+`CATALOG_READ` is not included by `APPS_READ`. After adding or changing a role, run **Settings → Connection → Test connection** or use **Discover → Reconnect & retry** so the WebSocket authenticates with the updated privilege. See the [permission guide](TrueNASCommandCenter/Docs/PERMISSIONS.md) for least-privilege profiles and feature-by-feature behavior.
 
 ## Installation
 

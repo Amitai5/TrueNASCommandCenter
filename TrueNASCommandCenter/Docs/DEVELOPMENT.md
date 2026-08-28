@@ -1,6 +1,6 @@
 # Developer Guide
 
-[Back to the main README](../../README.md) · [First-time setup guide](SETUP.md)
+[Back to the main README](../../README.md) · [First-time setup guide](SETUP.md) · [Permission guide](PERMISSIONS.md)
 
 This document covers local development, tests, container builds, project structure, publishing, and the TrueNAS middleware surface used by the application.
 
@@ -117,11 +117,14 @@ Build-time static-asset compression is disabled because compressed Blazor respon
 
 ## TrueNAS middleware methods
 
-Discovery and status:
+Catalog discovery (`CATALOG_READ`):
 
 - `catalog.apps`
 - `catalog.get_app_details`
 - `app.similar`
+
+Installed-app discovery and status (`APPS_READ`):
+
 - `app.query`
 - `app.get_instance`
 - `app.outdated_docker_images`
@@ -129,12 +132,15 @@ Discovery and status:
 - `app.rollback_versions`
 - `app.container_log_follow` through `core.subscribe`
 - `app.stats` through `core.subscribe`
+
+Optional read-only panels:
+
 - `system.info` when the optional `READONLY_ADMIN` role is available
 - `alert.list` when the optional `ALERT_LIST_READ` role is available
 - `update.status` when the optional `SYSTEM_UPDATE_READ` role is available
 - `pool.query` when the optional `POOL_READ` role is available
 
-Execution and jobs:
+Execution and jobs (`APPS_WRITE` for lifecycle methods; authenticated core methods for transport and job coordination):
 
 - `app.upgrade`
 - `app.pull_images`
@@ -147,6 +153,8 @@ Execution and jobs:
 - `mail.send`
 
 API DTOs are intentionally narrow. Validate the installed TrueNAS API schemas when adding support for a new TrueNAS release.
+
+Do not infer catalog access from `APPS_READ`. TrueNAS assigns `catalog.apps`, `catalog.get_app_details`, and `app.similar` to `CATALOG_READ`. Keep [the permission guide](PERMISSIONS.md) synchronized whenever the middleware surface changes.
 
 ## Container publishing
 

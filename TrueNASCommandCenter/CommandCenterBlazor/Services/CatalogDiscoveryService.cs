@@ -58,8 +58,9 @@ public sealed class CatalogDiscoveryService(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                var (availability, message) = Classify(exception);
-                logger.LogWarning(exception, "The TrueNAS app catalog could not be refreshed. Availability={CatalogAvailability}", availability);
+                var diagnosticId = Guid.NewGuid().ToString("N");
+                var (availability, message) = Classify(exception, diagnosticId);
+                logger.LogWarning(exception, "The TrueNAS app catalog could not be refreshed. Availability={CatalogAvailability} DiagnosticId={DiagnosticId}", availability, diagnosticId);
                 if (cached is not null && cached.Apps.Count > 0)
                 {
                     cached = cached with
@@ -77,6 +78,13 @@ public sealed class CatalogDiscoveryService(
         {
             refreshGate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogDiscoverySnapshot> ReconnectAndRefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await trueNasClient.ResetConnectionAsync();
+        return await GetCatalogAsync(true, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -124,8 +132,9 @@ public sealed class CatalogDiscoveryService(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            var (availability, message) = Classify(exception);
-            logger.LogWarning(exception, "Catalog details were unavailable for {CatalogTrain}/{CatalogAppName}", identity.Train, identity.Name);
+            var diagnosticId = Guid.NewGuid().ToString("N");
+            var (availability, message) = Classify(exception, diagnosticId);
+            logger.LogWarning(exception, "Catalog details were unavailable for {CatalogTrain}/{CatalogAppName}. DiagnosticId={DiagnosticId}", identity.Train, identity.Name, diagnosticId);
             return summary is null
                 ? new CatalogDetailsSnapshot(null, [], availability, message)
                 : new CatalogDetailsSnapshot(summary, [], CatalogAvailability.Available, $"Detailed catalog data could not be refreshed. {message}");
@@ -288,21 +297,21 @@ public sealed class CatalogDiscoveryService(
     private static string? ReadMetadataString(JsonElement metadata, string propertyName) =>
         metadata.ValueKind == JsonValueKind.Object && metadata.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
-    private static (CatalogAvailability Availability, string Message) Classify(Exception exception)
+    private static (CatalogAvailability Availability, string Message) Classify(Exception exception, string diagnosticId)
     {
         var code = exception is TrueNasClientException clientException ? clientException.Code.ToUpperInvariant() : string.Empty;
         var details = $"{code} {exception.Message}";
-        if (details.Contains("EACCES", StringComparison.OrdinalIgnoreCase) || details.Contains("EPERM", StringComparison.OrdinalIgnoreCase) || details.Contains("NOT AUTHORIZED", StringComparison.OrdinalIgnoreCase) || details.Contains("PERMISSION", StringComparison.OrdinalIgnoreCase))
+        if (code == "-32001" || details.Contains("EACCES", StringComparison.OrdinalIgnoreCase) || details.Contains("EPERM", StringComparison.OrdinalIgnoreCase) || details.Contains("NOT AUTHORIZED", StringComparison.OrdinalIgnoreCase) || details.Contains("PERMISSION", StringComparison.OrdinalIgnoreCase))
         {
-            return (CatalogAvailability.PermissionDenied, "The configured TrueNAS account cannot read the app catalog. Grant catalog read access and retry.");
+            return (CatalogAvailability.PermissionDenied, $"The API key cannot read the TrueNAS app catalog. Add CATALOG_READ, then reconnect the API session. APPS_READ alone does not include catalog access. Diagnostic ID: {diagnosticId}.");
         }
 
         if (details.Contains("NETWORK", StringComparison.OrdinalIgnoreCase) || details.Contains("UNREACHABLE", StringComparison.OrdinalIgnoreCase) || details.Contains("TIMEOUT", StringComparison.OrdinalIgnoreCase) || details.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase) || details.Contains("DNS", StringComparison.OrdinalIgnoreCase) || exception is HttpRequestException or TimeoutException)
         {
-            return (CatalogAvailability.Offline, "The TrueNAS catalog is unreachable. Check the TrueNAS connection and retry.");
+            return (CatalogAvailability.Offline, $"The TrueNAS catalog is unreachable. Check the TrueNAS connection and reconnect. Diagnostic ID: {diagnosticId}.");
         }
 
-        return (CatalogAvailability.Failed, "The TrueNAS catalog could not be loaded. Check the container logs and retry.");
+        return (CatalogAvailability.Failed, $"The catalog request failed. Reconnect and retry, then search the container logs for diagnostic ID {diagnosticId} if it remains unavailable.");
     }
 
     private sealed record InstalledMatchSnapshot(bool IsAvailable, HashSet<CatalogAppIdentity> Identities);
