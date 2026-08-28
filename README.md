@@ -16,6 +16,8 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Explicit **Auto Update**, **Notify Only**, **Ignore**, and fail-closed **Unconfigured** policies
 - Conservative Any Version, Minor + Patch, and Patch-only version scopes
 - Catalog upgrades and image-only refreshes
+- Read-only **Discover Apps** gallery backed by the native TrueNAS catalog API, with search, filters, installed/recommended badges, app details, and safe links to TrueNAS Apps
+- Optional approximate active-deployment counts from TrueNAS public anonymous telemetry; catalog browsing remains available when telemetry is unavailable
 - Start, stop, and restart controls backed by TrueNAS jobs
 - Five-field cron scheduling with IANA timezones
 - Sequential updates with TrueNAS job waiting and post-update verification

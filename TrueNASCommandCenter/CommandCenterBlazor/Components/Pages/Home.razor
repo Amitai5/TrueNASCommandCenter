@@ -60,11 +60,12 @@
 
     @if (_loading)
     {
-        <div class="panel empty-state"><span class="spinner"></span> Loading apps…</div>
+        <div class="panel empty-state state-loading"><span class="spinner"></span><strong>Loading apps…</strong></div>
     }
     else if (_apps.Count == 0)
     {
         <div class="panel empty-state">
+            <span class="state-icon" aria-hidden="true"><NavIcon Name="apps" /></span>
             <h2>No apps discovered</h2>
             <p class="muted">Configure the TrueNAS connection, then refresh the app list. New apps remain Unconfigured.</p>
             <div class="actions" style="justify-content:center">
@@ -103,6 +104,7 @@
         @if (filteredApps.Count == 0)
         {
             <div class="panel empty-state">
+                <span class="state-icon" aria-hidden="true"><NavIcon Name="discover" /></span>
                 <h2>No matching apps</h2>
                 <p class="muted">Try a different app name, group, status, version, or port.</p>
                 <button @onclick="ClearFilters">Clear filters</button>

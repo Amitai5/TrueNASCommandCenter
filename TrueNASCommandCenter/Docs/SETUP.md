@@ -223,6 +223,12 @@ Every discovered app starts with an **Unconfigured** policy. Review each app and
 
 This fail-closed default prevents newly discovered applications from updating without an explicit policy.
 
+### Browse the read-only app catalog
+
+Open **Discover** in the main navigation to browse applications published by the connected TrueNAS catalog. The gallery supports search, filters, sorting, detailed catalog metadata, installed-app badges, and links to the official TrueNAS Apps page. It never installs an app and does not call `app.create`; complete installation in the TrueNAS Apps interface.
+
+The required `APPS_READ` role already provides catalog-read access on the supported TrueNAS release, so no additional privilege is normally needed. Approximate active-deployment counts are optional and come from TrueNAS public anonymous telemetry. They are cached for six hours, time out quickly, and display as unavailable without blocking the catalog when the container cannot reach the telemetry endpoint.
+
 ## 6. Manage, monitor, and inspect apps
 
 Open an app from the **Apps** page to start, stop, or restart it through TrueNAS. The app list also provides a quick **Start** action for stopped or crashed apps and a **Restart** action for running apps. Lifecycle actions wait for the TrueNAS job to finish before refreshing the displayed state.
@@ -250,6 +256,16 @@ Pool cards require the additional read-only `POOL_READ` role:
 5. Confirm each pool card shows its TrueNAS health state, used/free capacity, and fragmentation value.
 
 `POOL_READ` is optional. A missing or denied role displays an explanatory unavailable state and never blocks app discovery, monitoring, or lifecycle operations.
+
+### Discover Apps is empty or unavailable
+
+1. Confirm **Settings → Connection → Test connection** succeeds with the same API key used by the running container.
+2. Confirm the service-account privilege still includes `APPS_READ`.
+3. Select **Refresh catalog** after TrueNAS has synchronized its catalog.
+4. If the page reports that TrueNAS is offline, verify the container route and `TRUENAS_WEBSOCKET_URL` using the connection troubleshooting steps below.
+5. If only deployment counts are unavailable, catalog discovery is working correctly; allow outbound HTTPS to `telemetry.sys.truenas.net` if you want those optional counts.
+
+Catalog results are cached for 15 minutes. A failed manual refresh keeps and labels the last successful results instead of clearing the gallery.
 
 ### Enable the read-only System overview
 

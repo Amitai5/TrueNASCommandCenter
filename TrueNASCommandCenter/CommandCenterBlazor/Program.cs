@@ -51,6 +51,7 @@ builder.Services.AddSingleton<ITrueNasServerAddressService, TrueNasServerAddress
 builder.Services.AddSingleton<IWebSocketTransportFactory, ClientWebSocketTransportFactory>();
 builder.Services.AddSingleton<TrueNasJsonRpcClient>();
 builder.Services.AddSingleton<ITrueNasClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
+builder.Services.AddSingleton<ITrueNasCatalogClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
 builder.Services.AddSingleton<ITrueNasSystemClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
 builder.Services.AddSingleton<IStoragePoolOverviewService, StoragePoolOverviewService>();
 builder.Services.AddSingleton<ITrueNasSystemOverviewService, TrueNasSystemOverviewService>();
@@ -68,6 +69,10 @@ builder.Services.AddScoped<IUpdateExecutor, UpdateExecutor>();
 builder.Services.AddScoped<IUpdateCoordinator, UpdateCoordinator>();
 builder.Services.AddSingleton<IAppLinkService, AppLinkService>();
 builder.Services.AddSingleton<IGitHubMetadataService, GitHubMetadataService>();
+builder.Services.AddSingleton<ICatalogLinkService, CatalogLinkService>();
+builder.Services.AddSingleton<ICatalogReadmeSanitizer, CatalogReadmeSanitizer>();
+builder.Services.AddSingleton<IActiveDeploymentProvider, TrueNasActiveDeploymentProvider>();
+builder.Services.AddSingleton<ICatalogDiscoveryService, CatalogDiscoveryService>();
 builder.Services.AddSingleton<UptimeKumaMetricsParser>();
 builder.Services.AddSingleton<IUptimeKumaClient, UptimeKumaClient>();
 builder.Services.AddSingleton<IUptimeKumaSyncService, UptimeKumaSyncService>();
@@ -87,6 +92,8 @@ builder.Services.AddHttpClient("github", client =>
     client.BaseAddress = new Uri("https://api.github.com/");
     client.Timeout = TimeSpan.FromSeconds(5);
 });
+builder.Services.AddHttpClient("truenas-catalog-telemetry", client => client.Timeout = TimeSpan.FromSeconds(5))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("uptime-kuma", client => client.Timeout = TimeSpan.FromSeconds(15))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("uptime-kuma-insecure", client => client.Timeout = TimeSpan.FromSeconds(15))
@@ -141,7 +148,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.XFrameOptions = "DENY";
     context.Response.Headers["X-Application-Version"] = ApplicationVersion.Current;
     context.Response.Headers.ContentSecurityPolicy =
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+        "default-src 'self'; img-src 'self' data: https://media.sys.truenas.net; style-src 'self' 'unsafe-inline'; " +
         "script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     await next();

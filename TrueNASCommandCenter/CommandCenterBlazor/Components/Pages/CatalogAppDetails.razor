@@ -1,0 +1,367 @@
+@page "/discover/{Train}/{Name}"
+@inject ICatalogDiscoveryService CatalogDiscoveryService
+
+<PageTitle>@(_app?.Title ?? "App details") · Discover · TrueNAS Command Center</PageTitle>
+
+<div class="page catalog-details-page">
+    <a class="back-link" href="/discover">← Discover apps</a>
+
+    @if (_loading)
+    {
+        <section class="panel catalog-loading-state" aria-label="Loading app details" aria-busy="true">
+            <span class="spinner"></span>
+            <div><strong>Loading app details…</strong><span>TrueNAS is returning the latest catalog record.</span></div>
+        </section>
+    }
+    else if (_app is null)
+    {
+        <section class="panel empty-state catalog-error-state" role="alert">
+            <div class="catalog-state-icon" aria-hidden="true">!</div>
+            <h1>App details unavailable</h1>
+            <p class="muted">@(_snapshot?.Message ?? "This catalog app could not be found.")</p>
+            <div class="actions catalog-centered-actions">
+                <button class="primary" @onclick="LoadAsync">Retry</button>
+                <a class="button" href="/discover">Back to discovery</a>
+            </div>
+        </section>
+    }
+    else
+    {
+        <header class="panel catalog-detail-hero">
+            <div class="catalog-detail-icon" aria-hidden="true">
+                <span>@Initials(_app.Title)</span>
+                @if (!_iconFailed && _app.IconUrl is not null)
+                {
+                    <img src="@_app.IconUrl" alt="" referrerpolicy="no-referrer" @onerror="HandleIconError" />
+                }
+            </div>
+            <div class="catalog-detail-intro">
+                <div class="catalog-detail-title-row">
+                    <h1>@_app.Title</h1>
+                    <div class="catalog-badge-row">
+                        @if (_app.IsInstalled is true)
+                        {
+                            <span class="badge success">✓ Installed</span>
+                        }
+                        @if (_app.IsRecommended)
+                        {
+                            <span class="badge success">★ Recommended</span>
+                        }
+                    </div>
+                </div>
+                <p>@_app.Description</p>
+                <div class="catalog-badge-row">
+                    <span class="badge info">@TitleCase(_app.Identity.Train) train</span>
+                    @foreach (var category in _app.Categories)
+                    {
+                        <span class="badge">@TitleCase(category)</span>
+                    }
+                    @foreach (var tag in _app.Tags)
+                    {
+                        <span class="badge">#@TitleCase(tag)</span>
+                    }
+                </div>
+                <div class="catalog-detail-meta">
+                    <span><strong>Version</strong> @VersionText(_app)</span>
+                    <span><strong>Updated</strong> @DateText(_app.LastUpdatedUtc)</span>
+                    <span title="@DeploymentTooltip(_app)">
+                        <strong>@DeploymentText(_app.ActiveDeployments)</strong> ⓘ
+                    </span>
+                </div>
+            </div>
+            <div class="catalog-detail-actions">
+                <a class="button primary" href="@_app.TrueNasAppsUrl" target="_blank" rel="noopener noreferrer">View on TrueNAS Apps ↗</a>
+                @if (_app.HomeUrl is not null)
+                {
+                    <a class="button" href="@_app.HomeUrl" target="_blank" rel="noopener noreferrer">Website ↗</a>
+                }
+                @if (PrimaryResource(_app) is { } resource)
+                {
+                    <a class="button" href="@resource" target="_blank" rel="noopener noreferrer">@ResourceButtonLabel(resource) ↗</a>
+                }
+            </div>
+        </header>
+
+        <div class="notice catalog-readonly-notice" role="note">
+            <strong>Discovery is read-only.</strong> Install and configure this app from its TrueNAS Apps page.
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_snapshot?.Message))
+        {
+            <div class="notice warning" role="status">@_snapshot.Message</div>
+        }
+
+        @if (!_app.IsCatalogHealthy)
+        {
+            <div class="notice warning"><strong>The catalog marked this entry unhealthy.</strong> @_app.CatalogHealthError</div>
+        }
+
+        @if (_app.ScreenshotUrls.Count > 0)
+        {
+            <section class="catalog-screenshot-section" aria-labelledby="catalog-screenshots-heading">
+                <div class="catalog-section-heading">
+                    <h2 id="catalog-screenshots-heading">Screenshots</h2>
+                    <span class="muted">Published by the TrueNAS catalog</span>
+                </div>
+                <div class="catalog-screenshot-grid">
+                    @foreach (var screenshot in _app.ScreenshotUrls.Take(6))
+                    {
+                        <a href="@screenshot" target="_blank" rel="noopener noreferrer">
+                            <img src="@screenshot" alt="@_app.Title screenshot" loading="lazy" referrerpolicy="no-referrer" />
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+
+        <div class="catalog-detail-layout">
+            <div class="catalog-detail-main">
+                <section class="panel catalog-readme-panel">
+                    <div class="catalog-section-heading">
+                        <div><span class="eyebrow">Catalog README</span><h2>About @_app.Title</h2></div>
+                    </div>
+                    @if (string.IsNullOrWhiteSpace(_app.ReadmeText))
+                    {
+                        <p class="muted">This catalog entry does not include README content.</p>
+                    }
+                    else
+                    {
+                        <div class="catalog-readme-text">@_app.ReadmeText</div>
+                    }
+                </section>
+
+                @if (_snapshot?.SimilarApps.Count > 0)
+                {
+                    <section class="catalog-similar-section" aria-labelledby="similar-apps-heading">
+                        <div class="catalog-section-heading"><h2 id="similar-apps-heading">Similar apps</h2></div>
+                        <div class="catalog-similar-grid">
+                            @foreach (var similar in _snapshot.SimilarApps)
+                            {
+                                <CatalogAppCard App="similar" Compact="true" @key="similar.Identity" />
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+
+            <aside class="catalog-detail-rail" aria-label="Catalog app facts">
+                <section class="panel">
+                    <h2>App information</h2>
+                    <dl class="catalog-fact-list">
+                        <div><dt>Catalog name</dt><dd><code>@_app.Identity.Name</code></dd></div>
+                        <div><dt>Train</dt><dd>@TitleCase(_app.Identity.Train)</dd></div>
+                        <div><dt>Catalog version</dt><dd>@(_app.LatestVersion ?? "Not published")</dd></div>
+                        <div><dt>App version</dt><dd>@(_app.LatestAppVersion ?? "Not published")</dd></div>
+                        <div><dt>Human version</dt><dd>@(_app.LatestHumanVersion ?? "Not published")</dd></div>
+                        <div><dt>Date added</dt><dd>@DateTimeText(_app.DateAddedUtc)</dd></div>
+                        <div><dt>Last updated</dt><dd>@DateTimeText(_app.LastUpdatedUtc)</dd></div>
+                        <div><dt>Minimum TrueNAS</dt><dd>@(_app.MinimumTrueNasVersion ?? "Not published")</dd></div>
+                    </dl>
+                </section>
+
+                <section class="panel">
+                    <h2>Deployment requirements</h2>
+                    @if (_app.RequiredFeatures.Count > 0)
+                    {
+                        <h3>Required features</h3>
+                        <ul class="catalog-detail-list">
+                            @foreach (var feature in _app.RequiredFeatures)
+                            {
+                                <li><span>@feature</span></li>
+                            }
+                        </ul>
+                    }
+                    @if (_app.HostMounts.Count > 0)
+                    {
+                        <h3>Host mounts</h3>
+                        <ul class="catalog-detail-list">
+                            @foreach (var mount in _app.HostMounts)
+                            {
+                                <li><code>@mount</code></li>
+                            }
+                        </ul>
+                    }
+                    @if (_app.RequiredFeatures.Count == 0 && _app.HostMounts.Count == 0)
+                    {
+                        <p class="muted">The catalog API did not publish required features or host mounts for this app. Resource values, mounts, and install options are not inferred.</p>
+                    }
+                    <a href="@_app.TrueNasAppsUrl" target="_blank" rel="noopener noreferrer">Review in TrueNAS Apps ↗</a>
+                </section>
+
+                <section class="panel">
+                    <h2>Security context</h2>
+                    <h3>Run as</h3>
+                    @if (_app.RunAsContexts.Count == 0)
+                    {
+                        <p class="muted">No run-as context was published.</p>
+                    }
+                    else
+                    {
+                        <ul class="catalog-detail-list">
+                            @foreach (var context in _app.RunAsContexts)
+                            {
+                                <li><strong>@RunAsTitle(context)</strong><span>@context.Description</span></li>
+                            }
+                        </ul>
+                    }
+                    <h3>Linux capabilities</h3>
+                    @if (_app.Capabilities.Count == 0)
+                    {
+                        <p class="muted">No additional capabilities were published.</p>
+                    }
+                    else
+                    {
+                        <ul class="catalog-detail-list">
+                            @foreach (var capability in _app.Capabilities)
+                            {
+                                <li><strong><code>@capability.Name</code></strong><span>@capability.Description</span></li>
+                            }
+                        </ul>
+                    }
+                </section>
+
+                @if (_app.Maintainers.Count > 0)
+                {
+                    <section class="panel">
+                        <h2>Maintainers</h2>
+                        <ul class="catalog-link-list">
+                            @foreach (var maintainer in _app.Maintainers)
+                            {
+                                <li>
+                                    <span><strong>@maintainer.Name</strong><small>@maintainer.Email</small></span>
+                                    @if (maintainer.Url is not null)
+                                    {
+                                        <a href="@maintainer.Url" target="_blank" rel="noopener noreferrer" aria-label="Open @maintainer.Name website">↗</a>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+
+                @if (_app.SourceUrls.Count > 0)
+                {
+                    <section class="panel">
+                        <h2>Sources &amp; documentation</h2>
+                        <ul class="catalog-link-list">
+                            @foreach (var source in _app.SourceUrls)
+                            {
+                                <li><a href="@source" target="_blank" rel="noopener noreferrer">@LinkLabel(source) ↗</a></li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string Train { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Name { get; set; } = string.Empty;
+
+    private CatalogDetailsSnapshot? _snapshot;
+    private CatalogApp? _app;
+    private bool _loading = true;
+    private bool _iconFailed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _iconFailed = false;
+        try
+        {
+            var identity = new CatalogAppIdentity(Uri.UnescapeDataString(Train), Uri.UnescapeDataString(Name));
+            _snapshot = await CatalogDiscoveryService.GetDetailsAsync(identity);
+            _app = _snapshot.App;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void HandleIconError()
+    {
+        _iconFailed = true;
+    }
+
+    private static string Initials(string title)
+    {
+        var words = title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
+
+    private static string VersionText(CatalogApp app) => app.LatestAppVersion ?? app.LatestHumanVersion ?? app.LatestVersion ?? "Not published";
+
+    private static string DateText(DateTimeOffset? value) => value is null ? "Not published" : value.Value.ToUniversalTime().ToString("MMM d, yyyy");
+
+    private static string DateTimeText(DateTimeOffset? value) => value is null ? "Not published" : value.Value.ToUniversalTime().ToString("MMM d, yyyy h:mm tt 'UTC'");
+
+    private static string DeploymentText(long? value) => value is null ? "Deployment count unavailable" : $"≈ {value.Value:N0} approximate active deployments";
+
+    private static string DeploymentTooltip(CatalogApp app)
+    {
+        var retrieved = app.ActiveDeploymentsRetrievedAtUtc is null ? "Retrieval time unavailable." : $"Retrieved {app.ActiveDeploymentsRetrievedAtUtc.Value.ToUniversalTime():MMM d, yyyy h:mm tt} UTC.";
+        var stale = app.IsActiveDeploymentDataStale ? " The last refresh failed, so this count is cached." : string.Empty;
+        return $"Approximate active deployments from public anonymous TrueNAS telemetry. Counts can be delayed and are not guaranteed to be exact. {retrieved}{stale}";
+    }
+
+    private static string TitleCase(string value) => string.Join(' ', value.Replace('-', ' ').Replace('_', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
+
+    private static string RunAsTitle(CatalogRunAsContext context)
+    {
+        var user = context.UserId is null ? context.UserName : $"{context.UserName ?? "User"} ({context.UserId})";
+        var group = context.GroupId is null ? context.GroupName : $"{context.GroupName ?? "Group"} ({context.GroupId})";
+        return $"{user ?? "Unknown user"} · {group ?? "Unknown group"}";
+    }
+
+    private static string LinkLabel(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return "Resource";
+        }
+
+        if (uri.Host.Equals("apps.truenas.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return "TrueNAS Apps";
+        }
+
+        if (uri.Host.Contains("github.com", StringComparison.OrdinalIgnoreCase) || uri.Host.Contains("gitlab.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Source code · {uri.Host}";
+        }
+
+        if (uri.Host.Contains("readthedocs", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("docs", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Documentation · {uri.Host}";
+        }
+
+        return $"Resource · {uri.Host}";
+    }
+
+    private static string? PrimaryResource(CatalogApp app) => app.SourceUrls.FirstOrDefault(value =>
+        !value.Equals(app.TrueNasAppsUrl, StringComparison.OrdinalIgnoreCase) &&
+        !value.Equals(app.HomeUrl, StringComparison.OrdinalIgnoreCase));
+
+    private static string ResourceButtonLabel(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return "Resource";
+        }
+
+        return uri.Host.Contains("readthedocs", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("docs", StringComparison.OrdinalIgnoreCase)
+            ? "Documentation"
+            : "Source";
+    }
+}

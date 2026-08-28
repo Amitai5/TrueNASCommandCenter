@@ -1,0 +1,271 @@
+@page "/discover"
+@inject ICatalogDiscoveryService CatalogDiscoveryService
+@implements IDisposable
+
+<PageTitle>Discover apps · TrueNAS Command Center</PageTitle>
+
+<div class="page catalog-page">
+    <header class="page-header">
+        <div>
+            <h1>Discover apps</h1>
+            <p class="subtitle">Explore apps available from the TrueNAS catalog.</p>
+        </div>
+        <div class="actions">
+            <button disabled="@_refreshing" @onclick="RefreshAsync">
+                @if (_refreshing)
+                {
+                    <span class="spinner"></span>
+                }
+                @(_refreshing ? "Refreshing…" : "Refresh catalog")
+            </button>
+        </div>
+    </header>
+
+    <div class="notice catalog-readonly-notice" role="note">
+        <strong>Discovery is read-only.</strong> Installation and configuration stay in TrueNAS.
+    </div>
+
+    @if (_loading)
+    {
+        <section class="panel catalog-loading-state" aria-label="Loading app catalog" aria-busy="true">
+            <span class="spinner"></span>
+            <div><strong>Loading the TrueNAS catalog…</strong><span>Apps will appear here when discovery finishes.</span></div>
+        </section>
+    }
+    else if (_snapshot is null || (_snapshot.Availability is not CatalogAvailability.Available && _snapshot.Apps.Count == 0))
+    {
+        <section class="panel empty-state catalog-error-state" role="alert">
+            <div class="catalog-state-icon" aria-hidden="true">@StateIcon()</div>
+            <h2>@StateTitle()</h2>
+            <p class="muted">@(_snapshot?.Message ?? "The TrueNAS catalog could not be loaded.")</p>
+            <div class="actions catalog-centered-actions">
+                <button class="primary" disabled="@_refreshing" @onclick="RefreshAsync">Retry</button>
+                <a class="button" href="/settings">Connection settings</a>
+            </div>
+        </section>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_snapshot.Message))
+        {
+            <div class="notice @(_snapshot.IsStale ? "warning" : null)" role="status">@_snapshot.Message</div>
+        }
+
+        <section class="catalog-filter-panel" aria-label="Catalog search and filters">
+            <div class="catalog-search-field">
+                <label class="visually-hidden" for="catalog-search">Search catalog apps</label>
+                <input id="catalog-search" type="search" value="@_search" placeholder="Search by app, description, category, or tag" autocomplete="off" @oninput="SearchChangedAsync" />
+            </div>
+            <div class="catalog-filter-grid">
+                <div class="field">
+                    <label for="catalog-category">Category</label>
+                    <select id="catalog-category" @bind="_category" @bind:after="ApplyFilters">
+                        <option value="">All categories</option>
+                        @foreach (var category in _categories)
+                        {
+                            <option value="@category">@TitleCase(category)</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="catalog-train">Train</label>
+                    <select id="catalog-train" @bind="_train" @bind:after="ApplyFilters">
+                        <option value="">All trains</option>
+                        @foreach (var train in _trains)
+                        {
+                            <option value="@train">@TitleCase(train)</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="catalog-installed">Installed</label>
+                    <select id="catalog-installed" @bind="_installed" @bind:after="ApplyFilters">
+                        <option value="@CatalogPresenceFilter.All">All apps</option>
+                        <option value="@CatalogPresenceFilter.Yes">Installed</option>
+                        <option value="@CatalogPresenceFilter.No">Not installed</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="catalog-recommended">Recommended</label>
+                    <select id="catalog-recommended" @bind="_recommended" @bind:after="ApplyFilters">
+                        <option value="@CatalogPresenceFilter.All">All apps</option>
+                        <option value="@CatalogPresenceFilter.Yes">Recommended</option>
+                        <option value="@CatalogPresenceFilter.No">Not recommended</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="catalog-sort">Sort by</label>
+                    <select id="catalog-sort" @bind="_sortOrder" @bind:after="ApplyFilters">
+                        <option value="@CatalogSortOrder.Name">Name A–Z</option>
+                        <option value="@CatalogSortOrder.Newest" disabled="@(!_snapshot.HasDateAdded)">Newest@(_snapshot.HasDateAdded ? null : " (unavailable)")</option>
+                        <option value="@CatalogSortOrder.RecentlyUpdated">Recently updated</option>
+                        <option value="@CatalogSortOrder.Popularity" disabled="@(!_snapshot.HasPopularityRanks)">Popularity@(_snapshot.HasPopularityRanks ? null : " (unavailable)")</option>
+                        <option value="@CatalogSortOrder.ActiveDeployments" disabled="@(!HasDeploymentCounts())">Active deployments@(HasDeploymentCounts() ? null : " (unavailable)")</option>
+                    </select>
+                </div>
+            </div>
+            <div class="catalog-filter-summary">
+                <span aria-live="polite">Showing <strong>@_visibleApps.Count</strong> of @_snapshot.Apps.Count apps</span>
+                <span>Catalog refreshed <strong>@RefreshText()</strong>@if (_snapshot.IsStale){<text> · cached results</text>}</span>
+                <span title="Public anonymous TrueNAS telemetry is optional and never blocks catalog browsing.">Deployment data <strong>@DeploymentRefreshText()</strong></span>
+                @if (HasFilters())
+                {
+                    <button class="small" @onclick="ClearFilters">Clear filters</button>
+                }
+            </div>
+        </section>
+
+        @if (_snapshot.Apps.Count == 0)
+        {
+            <section class="panel empty-state">
+                <span class="state-icon" aria-hidden="true"><NavIcon Name="discover" /></span>
+                <h2>The catalog is empty</h2>
+                <p class="muted">TrueNAS returned no apps. Refresh the catalog after its catalog sync completes.</p>
+                <button class="primary" disabled="@_refreshing" @onclick="RefreshAsync">Refresh catalog</button>
+            </section>
+        }
+        else if (_visibleApps.Count == 0)
+        {
+            <section class="panel empty-state">
+                <span class="state-icon" aria-hidden="true"><NavIcon Name="discover" /></span>
+                <h2>No matching apps</h2>
+                <p class="muted">Try another search term or remove one of the filters.</p>
+                <button @onclick="ClearFilters">Clear filters</button>
+            </section>
+        }
+        else
+        {
+            <section class="catalog-card-grid" aria-label="TrueNAS catalog apps">
+                @foreach (var app in _visibleApps)
+                {
+                    <CatalogAppCard App="app" @key="app.Identity" />
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private CatalogDiscoverySnapshot? _snapshot;
+    private IReadOnlyList<CatalogApp> _visibleApps = [];
+    private IReadOnlyList<string> _categories = [];
+    private IReadOnlyList<string> _trains = [];
+    private CancellationTokenSource? _searchDebounce;
+    private string _search = string.Empty;
+    private string _category = string.Empty;
+    private string _train = string.Empty;
+    private CatalogPresenceFilter _installed;
+    private CatalogPresenceFilter _recommended;
+    private CatalogSortOrder _sortOrder;
+    private bool _loading = true;
+    private bool _refreshing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(false);
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync(true);
+    }
+
+    private async Task LoadAsync(bool forceRefresh)
+    {
+        if (forceRefresh)
+        {
+            _refreshing = true;
+        }
+
+        try
+        {
+            _snapshot = await CatalogDiscoveryService.GetCatalogAsync(forceRefresh);
+            _categories = _snapshot.Apps.SelectMany(app => app.Categories).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
+            _trains = _snapshot.Apps.Select(app => app.Identity.Train).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
+            ApplyFilters();
+        }
+        finally
+        {
+            _loading = false;
+            _refreshing = false;
+        }
+    }
+
+    private async Task SearchChangedAsync(ChangeEventArgs eventArgs)
+    {
+        _search = eventArgs.Value?.ToString() ?? string.Empty;
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(250, _searchDebounce.Token);
+            ApplyFilters();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        if (_snapshot is null)
+        {
+            _visibleApps = [];
+            return;
+        }
+
+        var query = new CatalogGalleryQuery(_search, _category, _train, _installed, _recommended, _sortOrder);
+        _visibleApps = CatalogGalleryQueryEngine.Apply(_snapshot.Apps, query);
+    }
+
+    private void ClearFilters()
+    {
+        _search = string.Empty;
+        _category = string.Empty;
+        _train = string.Empty;
+        _installed = CatalogPresenceFilter.All;
+        _recommended = CatalogPresenceFilter.All;
+        _sortOrder = CatalogSortOrder.Name;
+        ApplyFilters();
+    }
+
+    private bool HasFilters() => !string.IsNullOrWhiteSpace(_search) || !string.IsNullOrWhiteSpace(_category) || !string.IsNullOrWhiteSpace(_train) || _installed is not CatalogPresenceFilter.All || _recommended is not CatalogPresenceFilter.All || _sortOrder is not CatalogSortOrder.Name;
+
+    private bool HasDeploymentCounts() => _snapshot?.Apps.Any(app => app.ActiveDeployments is not null) is true;
+
+    private string RefreshText() => _snapshot?.RefreshedAtUtc is null ? "never" : _snapshot.RefreshedAtUtc.Value.ToUniversalTime().ToString("MMM d, yyyy h:mm tt 'UTC'");
+
+    private string DeploymentRefreshText()
+    {
+        if (_snapshot?.IsDeploymentDataAvailable is not true || _snapshot.DeploymentDataAtUtc is null)
+        {
+            return "unavailable";
+        }
+
+        var label = _snapshot.DeploymentDataAtUtc.Value.ToUniversalTime().ToString("MMM d, yyyy h:mm tt 'UTC'");
+        return _snapshot.IsDeploymentDataStale ? $"{label} (cached)" : label;
+    }
+
+    private string StateTitle() => _snapshot?.Availability switch
+    {
+        CatalogAvailability.PermissionDenied => "Catalog access is not permitted",
+        CatalogAvailability.Offline => "TrueNAS is offline",
+        _ => "Catalog unavailable"
+    };
+
+    private string StateIcon() => _snapshot?.Availability switch
+    {
+        CatalogAvailability.PermissionDenied => "🔒",
+        CatalogAvailability.Offline => "↯",
+        _ => "!"
+    };
+
+    private static string TitleCase(string value) => string.Join(' ', value.Replace('-', ' ').Replace('_', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
+
+    public void Dispose()
+    {
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+    }
+}

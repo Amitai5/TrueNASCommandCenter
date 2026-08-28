@@ -20,7 +20,7 @@ public sealed class TrueNasJsonRpcClient(
     SettingsService settingsService,
     IDbContextFactory<AppDbContext> dbFactory,
     TimeProvider timeProvider,
-    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasSystemClient, IAsyncDisposable
+    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasCatalogClient, ITrueNasSystemClient, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -99,6 +99,35 @@ public sealed class TrueNasJsonRpcClient(
             "app.query",
             [Array.Empty<object>(), new { extra = new { retrieve_config = false, include_app_schema = false } }],
             cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, TrueNasCatalogAppDto>>> QueryCatalogAppsAsync(bool forceRefresh, CancellationToken cancellationToken = default)
+    {
+        var result = await CallAsync<Dictionary<string, Dictionary<string, TrueNasCatalogAppDto>>>(
+            "catalog.apps",
+            [new { cache = !forceRefresh, cache_only = false, retrieve_all_trains = true, trains = Array.Empty<string>() }],
+            cancellationToken);
+        return result.ToDictionary(
+            train => train.Key,
+            train => (IReadOnlyDictionary<string, TrueNasCatalogAppDto>)train.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc />
+    public Task<TrueNasCatalogAppDto> GetCatalogAppDetailsAsync(string appName, string train, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(train);
+        return CallAsync<TrueNasCatalogAppDto>("catalog.get_app_details", [appName, new { train }], cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasCatalogAppDto>> QuerySimilarCatalogAppsAsync(string appName, string train, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(train);
+        return CallAsync<IReadOnlyList<TrueNasCatalogAppDto>>("app.similar", [appName, train], cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task<TrueNasSystemInfoDto> GetSystemInfoAsync(CancellationToken cancellationToken = default) =>

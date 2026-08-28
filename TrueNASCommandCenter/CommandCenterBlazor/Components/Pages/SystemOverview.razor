@@ -25,7 +25,7 @@
 
     @if (_loading && _overview is null)
     {
-        <div class="panel empty-state"><span class="spinner"></span> Loading TrueNAS system health…</div>
+        <div class="panel empty-state state-loading"><span class="spinner"></span><strong>Loading TrueNAS system health…</strong></div>
     }
     else if (_overview is not null)
     {

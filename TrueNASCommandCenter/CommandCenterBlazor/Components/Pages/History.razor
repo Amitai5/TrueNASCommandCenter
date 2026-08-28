@@ -54,11 +54,11 @@
         </div>
     </section>
 
-    <section style="margin-top:1.5rem">
-        <h2>Recent runs</h2>
+    <section class="content-section">
+        <div class="section-heading"><div><h2>Recent runs</h2><p class="muted">Automation checks and update runs.</p></div><span class="badge">@_runs.Count</span></div>
         @if (_runs.Count == 0)
         {
-            <div class="panel empty-state"><p class="muted">No matching runs.</p></div>
+            <div class="panel empty-state"><span class="state-icon" aria-hidden="true"><NavIcon Name="history" /></span><h3>No matching runs</h3><p class="muted">Adjust the filters to include more automation history.</p></div>
         }
         else
         {
@@ -107,11 +107,11 @@
         }
     </section>
 
-    <section style="margin-top:1.5rem">
-        <h2>App events</h2>
+    <section class="content-section">
+        <div class="section-heading"><div><h2>App events</h2><p class="muted">Per-app outcomes and notification delivery.</p></div><span class="badge">@_attempts.Count</span></div>
         @if (_attempts.Count == 0)
         {
-            <div class="panel empty-state"><p class="muted">No matching app events.</p></div>
+            <div class="panel empty-state"><span class="state-icon" aria-hidden="true"><NavIcon Name="apps" /></span><h3>No matching app events</h3><p class="muted">Adjust the filters to include more app activity.</p></div>
         }
         else
         {

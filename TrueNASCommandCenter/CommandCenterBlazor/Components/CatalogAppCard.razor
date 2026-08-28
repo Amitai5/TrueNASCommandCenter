@@ -1,0 +1,100 @@
+@namespace TrueNasCommandCenter.Components
+
+<article class="catalog-app-card @(Compact ? "compact" : null)">
+    <div class="catalog-card-heading">
+        <div class="catalog-app-icon" aria-hidden="true">
+            <span>@Initials()</span>
+            @if (!_iconFailed && App.IconUrl is not null)
+            {
+                <img src="@App.IconUrl" alt="" loading="lazy" referrerpolicy="no-referrer" @onerror="HandleIconError" />
+            }
+        </div>
+        <div class="catalog-card-identity">
+            <h2>@App.Title</h2>
+            <div class="catalog-badge-row">
+                <span class="badge info">@TitleCase(App.Identity.Train)</span>
+                @if (App.Categories.Count > 0)
+                {
+                    <span class="badge">@TitleCase(App.Categories[0])</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <p class="catalog-card-description">@App.Description</p>
+
+    @if (!Compact)
+    {
+        <dl class="catalog-card-facts">
+            <div><dt>Version</dt><dd>@VersionText()</dd></div>
+            <div><dt>Last updated</dt><dd>@DateText(App.LastUpdatedUtc)</dd></div>
+        </dl>
+
+        <div class="catalog-card-status">
+            <div class="catalog-badge-row">
+                @if (App.IsInstalled is true)
+                {
+                    <span class="badge success">✓ Installed</span>
+                }
+                @if (App.IsRecommended)
+                {
+                    <span class="badge success">★ Recommended</span>
+                }
+            </div>
+            <span class="catalog-deployment-count" title="@DeploymentTooltip()">
+                @DeploymentText()
+                <span aria-hidden="true">ⓘ</span>
+            </span>
+        </div>
+    }
+
+    <div class="catalog-card-actions">
+        <a class="button small" href="@DetailsUrl()">Details</a>
+        <a class="button small" href="@App.TrueNasAppsUrl" target="_blank" rel="noopener noreferrer">View on TrueNAS Apps ↗</a>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public CatalogApp App { get; set; } = null!;
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    private bool _iconFailed;
+
+    private void HandleIconError()
+    {
+        _iconFailed = true;
+    }
+
+    private string DetailsUrl() => $"/discover/{Uri.EscapeDataString(App.Identity.Train)}/{Uri.EscapeDataString(App.Identity.Name)}";
+
+    private string Initials()
+    {
+        var words = App.Title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
+
+    private string VersionText() => App.LatestAppVersion ?? App.LatestHumanVersion ?? App.LatestVersion ?? "Not published";
+
+    private static string DateText(DateTimeOffset? value) => value is null ? "Not published" : value.Value.ToUniversalTime().ToString("MMM d, yyyy");
+
+    private string DeploymentText() => App.ActiveDeployments is null ? "Deployment count unavailable" : $"≈ {CompactCount(App.ActiveDeployments.Value)} active deployments";
+
+    private string DeploymentTooltip()
+    {
+        var retrieved = App.ActiveDeploymentsRetrievedAtUtc is null ? "Retrieval time unavailable." : $"Retrieved {App.ActiveDeploymentsRetrievedAtUtc.Value.ToUniversalTime():MMM d, yyyy h:mm tt} UTC.";
+        var stale = App.IsActiveDeploymentDataStale ? " The last refresh failed, so this count is cached." : string.Empty;
+        return $"Approximate active deployments from public anonymous TrueNAS telemetry. Counts can be delayed and are not guaranteed to be exact. {retrieved}{stale}";
+    }
+
+    private static string CompactCount(long value) => value switch
+    {
+        >= 1_000_000 => $"{value / 1_000_000d:0.#}M",
+        >= 1_000 => $"{value / 1_000d:0.#}K",
+        _ => value.ToString("N0")
+    };
+
+    private static string TitleCase(string value) => string.Join(' ', value.Replace('-', ' ').Replace('_', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
+}

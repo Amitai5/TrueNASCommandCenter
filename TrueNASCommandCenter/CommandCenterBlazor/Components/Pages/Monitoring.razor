@@ -26,11 +26,12 @@
 
     @if (_loading)
     {
-        <div class="panel empty-state"><span class="spinner"></span> Loading Uptime Kuma reports…</div>
+        <div class="panel empty-state state-loading"><span class="spinner"></span><strong>Loading Uptime Kuma reports…</strong></div>
     }
     else if (!HasConnectionSettings() && PresentMonitors().Count == 0)
     {
         <div class="panel empty-state">
+            <span class="state-icon" aria-hidden="true"><NavIcon Name="monitoring" /></span>
             <h2>Uptime Kuma is not configured</h2>
             <p class="muted">Add a Kuma connection URL and, when required, a Prometheus API key.</p>
             <a class="button primary" href="/settings">Configure Uptime Kuma</a>
@@ -83,11 +84,11 @@
 
         @if (PresentMonitors().Count == 0)
         {
-            <div class="panel empty-state"><h2>No monitor metrics imported</h2><p class="muted">Test the connection and confirm Kuma's <code>/metrics</code> endpoint returns monitor data.</p></div>
+            <div class="panel empty-state"><span class="state-icon" aria-hidden="true"><NavIcon Name="monitoring" /></span><h2>No monitor metrics imported</h2><p class="muted">Test the connection and confirm Kuma's <code>/metrics</code> endpoint returns monitor data.</p></div>
         }
         else if (FilteredMonitors().Count == 0)
         {
-            <div class="panel empty-state"><h2>No matching monitors</h2><button @onclick="ClearFilters">Clear filters</button></div>
+            <div class="panel empty-state"><span class="state-icon" aria-hidden="true"><NavIcon Name="discover" /></span><h2>No matching monitors</h2><button @onclick="ClearFilters">Clear filters</button></div>
         }
         else
         {

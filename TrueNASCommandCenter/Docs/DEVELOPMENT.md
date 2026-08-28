@@ -96,6 +96,8 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 - The web application uses interactive server-side Blazor on ASP.NET Core .NET 10.
 - SQLite state is stored under `DATA_PATH`.
 - TrueNAS remains the lifecycle authority; inventory, host information, native alerts, OS update status, workload health, live app statistics, storage-pool status, logs, lifecycle actions, mail, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
+- Catalog discovery uses a dedicated read-only TrueNAS client contract and composite train/app identities so duplicate names in different trains cannot be merged accidentally.
+- Catalog metadata, sanitized README text, safe external links, and optional public active-deployment telemetry are mapped into immutable discovery models before reaching Blazor components. Telemetry has its own bounded response, timeout, and cache and never gates catalog availability.
 - Complete inventory refresh and missing-app reconciliation always run before update evaluation.
 - Per-app health incidents persist a single recovery-attempt marker so scheduled retries cannot loop.
 - GitHub enrichment accepts only canonical public `github.com` sources, uses ETags and a 24-hour SQLite cache, and never gates TrueNAS operations.
@@ -117,6 +119,9 @@ Build-time static-asset compression is disabled because compressed Blazor respon
 
 Discovery and status:
 
+- `catalog.apps`
+- `catalog.get_app_details`
+- `app.similar`
 - `app.query`
 - `app.get_instance`
 - `app.outdated_docker_images`

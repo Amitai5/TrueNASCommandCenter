@@ -15,11 +15,12 @@
 <div class="page app-details-page">
     @if (_loading)
     {
-        <div class="panel empty-state"><span class="spinner"></span> Loading app…</div>
+        <div class="panel empty-state state-loading"><span class="spinner"></span><strong>Loading app…</strong></div>
     }
     else if (_app is null)
     {
         <div class="panel empty-state">
+            <span class="state-icon" aria-hidden="true"><NavIcon Name="apps" /></span>
             <h1>App not found</h1>
             <a class="button" href="/">Back to apps</a>
         </div>
