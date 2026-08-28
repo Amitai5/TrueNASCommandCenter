@@ -38,7 +38,7 @@
         <ol class="help-list">
             <li>In TrueNAS, open <strong>Credentials → Users</strong>, click <strong>Add</strong>, and create a user such as <code>autoupdate</code>. Keep Shell and SSH access disabled.</li>
             <li>Note the user's primary group. Open <strong>Credentials → Groups → Privileges</strong> and click <strong>Add</strong>.</li>
-            <li>Select the service account's group under <strong>Local Groups</strong>. Add <code>APPS_READ</code> and <code>APPS_WRITE</code>. Optionally add <code>POOL_READ</code> for storage-pool health and capacity. Leave Web Shell Access disabled and save.</li>
+            <li>Select the service account's group under <strong>Local Groups</strong>. Add <code>APPS_READ</code> and <code>APPS_WRITE</code>. For the read-only <strong>System</strong> page, optionally add <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, and <code>SYSTEM_UPDATE_READ</code>. Host identity and hardware require the broader read-only <code>READONLY_ADMIN</code> role. Leave Web Shell Access disabled and save.</li>
             <li>Return to <strong>Credentials → Users</strong>, select the service account, and choose <strong>Add API Key</strong>. Copy the generated key immediately.</li>
         </ol>
 
@@ -169,12 +169,16 @@ x-portals:
                 <p>Start a container stream, then use <strong>Copy all</strong> for ISO-8601 plain text or <strong>Fullscreen</strong> for a focused console. The latest 500 lines stay only in browser memory.</p>
             </article>
             <article>
+                <h3>Install on this device</h3>
+                <p>Open the manager through HTTPS and choose <strong>Install app</strong> in the sidebar or mobile menu. On iPhone and iPad, use Share → Add to Home Screen. Plain <code>http://truenas.local</code> remains usable in a browser but cannot be installed under browser security rules.</p>
+            </article>
+            <article>
                 <h3>Health</h3>
                 <p>Completed one-shot workloads such as <code>permissions</code> appear as <strong>Exited normally</strong> and do not degrade an otherwise running app.</p>
             </article>
             <article>
-                <h3>Server and pools</h3>
-                <p>The Apps page can copy the resolved TrueNAS IP, open its Web UI, and show pool health when the optional <code>POOL_READ</code> role is available.</p>
+                <h3>System overview</h3>
+                <p>Open <strong>System</strong> for native TrueNAS alerts, OS update availability, host identity and uptime, and pool health. Every panel is read-only and remains independently optional.</p>
             </article>
             <article>
                 <h3>Favorites and groups</h3>
@@ -191,7 +195,7 @@ x-portals:
         </div>
 
         <div class="notice warning help-inline-notice">
-            Portable JSON excludes inventory, logs, incidents, cache, and history. Continue backing up <code>/data</code> for complete disaster recovery.
+            Portable JSON excludes inventory, logs, incidents, cache, and history. Continue backing up <code>/data</code> for complete disaster recovery. The installed PWA also keeps live data online-only and shows an explicit reconnect screen when the server cannot be reached.
         </div>
     </section>
 
@@ -223,7 +227,7 @@ x-portals:
             </details>
             <details>
                 <summary>Missing app permissions</summary>
-                <p>Verify the service account's group is attached to a custom privilege containing both <code>APPS_READ</code> and <code>APPS_WRITE</code>. Add optional <code>POOL_READ</code> only when the pool-health panel is needed. Do not edit built-in TrueNAS privileges.</p>
+                <p>Verify the service account's group is attached to a custom privilege containing both <code>APPS_READ</code> and <code>APPS_WRITE</code>. The System page explains which optional read role each unavailable panel needs: <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, <code>SYSTEM_UPDATE_READ</code>, or the broader <code>READONLY_ADMIN</code>. Do not edit built-in TrueNAS privileges.</p>
             </details>
             <details>
                 <summary>Certificate validation error</summary>

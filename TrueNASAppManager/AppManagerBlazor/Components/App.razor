@@ -3,7 +3,13 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="application-name" content="TrueNAS App Manager" />
+    <meta name="description" content="Manage, monitor, and safely update TrueNAS applications from an installable web app." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="App Manager" />
     <meta id="theme-color" name="theme-color" content="#f4f6fa" />
     <base href="/" />
     <script>
@@ -28,6 +34,8 @@
     </script>
     <ResourcePreloader />
     <link rel="icon" type="image/svg+xml" href="@Assets["favicon.svg"]" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["TrueNASAppManager.styles.css"]" />
     <ImportMap />
@@ -38,6 +46,7 @@
     <Routes @rendermode="InteractiveServer" />
     <ReconnectModal />
     <script src="@Assets["theme.js"]" defer></script>
+    <script src="@Assets["pwa.js"]" defer></script>
     <script src="@Assets["app-tools.js"]"></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>

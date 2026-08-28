@@ -3,6 +3,7 @@
 @inject ITrueNasServerAddressService ServerAddressService
 @inject IStoragePoolOverviewService PoolOverviewService
 @inject IScheduleService ScheduleService
+@inject DashboardRefreshService DashboardRefreshService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -19,7 +20,7 @@
             {
                 <span class="spinner"></span>
             }
-            Refresh dashboard
+            @(_loading ? _refreshStage : "Refresh dashboard")
         </button>
     </header>
 
@@ -34,35 +35,6 @@
     }
     else if (_overview is not null)
     {
-        <section class="panel server-status-bar dashboard-server-bar" aria-label="TrueNAS server status">
-            <div class="server-status-identity">
-                <span class="status-dot @(IsConnected() ? "success" : "danger")" aria-hidden="true"></span>
-                <span>
-                    <span class="server-status-label">TrueNAS server</span>
-                    <strong class="server-status-address">@(_serverAddress?.HostName ?? "truenas.local")</strong>
-                    <span class="server-status-host">@(_serverAddress?.DisplayAddress ?? "IP unavailable")</span>
-                </span>
-            </div>
-            <div class="server-status-secondary">
-                <div class="server-status-metadata">
-                    <span>Connection <strong>@(IsConnected() ? "Connected" : "Not connected")</strong></span>
-                    <span>Inventory <strong>@FormatDate(_overview.Settings.LastInventoryRefreshUtc)</strong></span>
-                    <span>Update check <strong>@FormatDate(_overview.Settings.LastCompletedCheckUtc)</strong></span>
-                </div>
-                <div class="server-status-actions">
-                    @if (!string.IsNullOrWhiteSpace(_serverActionMessage))
-                    {
-                        <span class="muted" role="status">@_serverActionMessage</span>
-                    }
-                    <button class="small" disabled="@(_serverAddress?.IsResolved != true)" @onclick="CopyServerIpAsync">Copy IP</button>
-                    @if (_serverAddress is not null)
-                    {
-                        <a class="button small" href="@_serverAddress.WebUiUrl" target="_blank" rel="noopener noreferrer">Open TrueNAS ↗</a>
-                    }
-                </div>
-            </div>
-        </section>
-
         <section class="summary-grid dashboard-summary" aria-label="System summary">
             <a class="summary-item summary-link" href="/apps">
                 <strong>@_overview.RunningAppCount / @_overview.AppCount</strong>
@@ -82,7 +54,89 @@
             </a>
         </section>
 
-        <div class="dashboard-operations-grid">
+        <section class="panel pool-overview dashboard-pools" aria-labelledby="pool-overview-heading">
+            <div class="panel-heading-row">
+                <div>
+                    <h2 id="pool-overview-heading">Storage pools</h2>
+                    <p class="muted">Capacity and health reported by TrueNAS.</p>
+                </div>
+                <button class="small" disabled="@_poolLoading" @onclick="LoadPoolOverviewAsync">Refresh pools</button>
+            </div>
+            @if (_poolLoading)
+            {
+                <div class="inline-loading"><span class="spinner"></span> Loading pool health…</div>
+            }
+            else if (_poolOverview?.RequiresPoolRead == true)
+            {
+                <div class="optional-feature-state">
+                    <strong>Pool health is optional.</strong>
+                    <span>Add the <code>POOL_READ</code> role to show storage capacity.</span>
+                    <a href="/help">Setup help</a>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_poolOverview?.Error))
+            {
+                <div class="optional-feature-state warning"><strong>Pool health is unavailable.</strong><span>@_poolOverview.Error</span></div>
+            }
+            else if (_poolOverview?.Pools.Count > 0)
+            {
+                <div class="pool-health-grid">
+                    @foreach (var pool in _poolOverview.Pools)
+                    {
+                        <article class="pool-health-card">
+                            <div class="row"><strong>@pool.Name</strong><span class="badge @PoolClass(pool)">@pool.Status</span></div>
+                            <div class="pool-capacity-row"><span><strong>@FormatBytes(pool.AllocatedBytes)</strong> used</span><span>@FormatBytes(pool.FreeBytes) free</span></div>
+                            <div class="pool-capacity-track" role="progressbar" aria-label="@pool.Name storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(pool.UsedPercentage ?? 0)"><span style="@PoolProgressStyle(pool)"></span></div>
+                            <div class="pool-card-meta"><span>@((pool.UsedPercentage ?? 0).ToString("0.#"))% of @FormatBytes(pool.SizeBytes)</span>@if (!string.IsNullOrWhiteSpace(pool.Fragmentation)) { <span>@pool.Fragmentation fragmented</span> }</div>
+                            @if (!string.IsNullOrWhiteSpace(pool.StatusDetail))
+                            {
+                                <p class="pool-warning">@pool.StatusDetail</p>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="optional-feature-state"><span>No storage pools were returned by TrueNAS.</span></div>
+            }
+        </section>
+
+        <div class="dashboard-operations-grid @(_overview.FavoriteApps.Count > 0 ? "has-favorites" : "without-favorites")">
+            <section class="panel dashboard-last-run" aria-labelledby="last-run-heading">
+                <div class="panel-heading-row">
+                    <div>
+                        <h2 id="last-run-heading">Last update run</h2>
+                        <p class="muted">Most recent check or update automation.</p>
+                    </div>
+                    <a href="/history">View history</a>
+                </div>
+                @if (_overview.LastRun is null)
+                {
+                    <div class="empty-state compact"><p class="muted">No update runs have been recorded.</p></div>
+                }
+                else
+                {
+                    <div class="last-run-status">
+                        <span class="badge @RunStatusClass(_overview.LastRun.Status)">@RunStatusText(_overview.LastRun.Status)</span>
+                        <div>
+                            <strong>@RunTriggerText(_overview.LastRun.Trigger)</strong>
+                            <span>@RunTimeText(_overview.LastRun)</span>
+                        </div>
+                    </div>
+                    <dl class="dashboard-run-metrics">
+                        <div><dt>Checked</dt><dd>@_overview.LastRun.CheckedCount</dd></div>
+                        <div><dt>Succeeded</dt><dd>@_overview.LastRun.SucceededCount</dd></div>
+                        <div><dt>Failed</dt><dd>@_overview.LastRun.FailedCount</dd></div>
+                        <div><dt>Skipped</dt><dd>@_overview.LastRun.SkippedCount</dd></div>
+                    </dl>
+                    @if (!string.IsNullOrWhiteSpace(_overview.LastRun.ErrorSummary))
+                    {
+                        <p class="dashboard-run-error">@_overview.LastRun.ErrorSummary</p>
+                    }
+                }
+            </section>
+
             <section class="panel dashboard-attention" id="attention" aria-labelledby="attention-heading">
                 <div class="panel-heading-row">
                     <div>
@@ -137,87 +191,64 @@
                 }
             </section>
 
-            <section class="panel dashboard-last-run" aria-labelledby="last-run-heading">
-                <div class="panel-heading-row">
-                    <div>
-                        <h2 id="last-run-heading">Last update run</h2>
-                        <p class="muted">Most recent check or update automation.</p>
-                    </div>
-                    <a href="/history">View history</a>
-                </div>
-                @if (_overview.LastRun is null)
-                {
-                    <div class="empty-state compact"><p class="muted">No update runs have been recorded.</p></div>
-                }
-                else
-                {
-                    <div class="last-run-status">
-                        <span class="badge @RunStatusClass(_overview.LastRun.Status)">@RunStatusText(_overview.LastRun.Status)</span>
+            @if (_overview.FavoriteApps.Count > 0)
+            {
+                <section class="panel dashboard-favorites" aria-labelledby="favorites-heading">
+                    <div class="panel-heading-row">
                         <div>
-                            <strong>@RunTriggerText(_overview.LastRun.Trigger)</strong>
-                            <span>@RunTimeText(_overview.LastRun)</span>
+                            <h2 id="favorites-heading">Favorite apps</h2>
+                            <p class="muted">Pinned apps for quick access.</p>
                         </div>
+                        <a href="/apps">View apps</a>
                     </div>
-                    <dl class="dashboard-run-metrics">
-                        <div><dt>Checked</dt><dd>@_overview.LastRun.CheckedCount</dd></div>
-                        <div><dt>Succeeded</dt><dd>@_overview.LastRun.SucceededCount</dd></div>
-                        <div><dt>Failed</dt><dd>@_overview.LastRun.FailedCount</dd></div>
-                        <div><dt>Skipped</dt><dd>@_overview.LastRun.SkippedCount</dd></div>
-                    </dl>
-                    @if (!string.IsNullOrWhiteSpace(_overview.LastRun.ErrorSummary))
+                    <div class="dashboard-favorite-list">
+                        @foreach (var app in _overview.FavoriteApps.Take(6))
+                        {
+                            <a class="dashboard-favorite-row" href="@AppPath(app.AppId)">
+                                <span class="dashboard-favorite-star" aria-hidden="true">★</span>
+                                <span class="dashboard-favorite-copy">
+                                    <strong>@app.Name</strong>
+                                    <span>@FavoriteMeta(app)</span>
+                                </span>
+                                <span class="badge @HealthClass(app.HealthState)">@HealthText(app.HealthState)</span>
+                            </a>
+                        }
+                    </div>
+                    @if (_overview.FavoriteApps.Count > 6)
                     {
-                        <p class="dashboard-run-error">@_overview.LastRun.ErrorSummary</p>
+                        <p class="muted dashboard-more-favorites">Showing 6 of @_overview.FavoriteApps.Count favorite apps.</p>
                     }
-                }
-            </section>
+                </section>
+            }
         </div>
 
-        <section class="panel pool-overview dashboard-pools" aria-labelledby="pool-overview-heading">
-            <div class="panel-heading-row">
-                <div>
-                    <h2 id="pool-overview-heading">Storage pools</h2>
-                    <p class="muted">Capacity and health reported by TrueNAS.</p>
-                </div>
-                <button class="small" disabled="@_poolLoading" @onclick="LoadPoolOverviewAsync">Refresh pools</button>
+        <section class="panel server-status-bar dashboard-server-bar" aria-label="TrueNAS server status">
+            <div class="server-status-identity">
+                <span class="status-dot @(IsConnected() ? "success" : "danger")" aria-hidden="true"></span>
+                <span>
+                    <span class="server-status-label">TrueNAS server</span>
+                    <strong class="server-status-address">@(_serverAddress?.HostName ?? "truenas.local")</strong>
+                    <span class="server-status-host">@(_serverAddress?.DisplayAddress ?? "IP unavailable")</span>
+                </span>
             </div>
-            @if (_poolLoading)
-            {
-                <div class="inline-loading"><span class="spinner"></span> Loading pool health…</div>
-            }
-            else if (_poolOverview?.RequiresPoolRead == true)
-            {
-                <div class="optional-feature-state">
-                    <strong>Pool health is optional.</strong>
-                    <span>Add the <code>POOL_READ</code> role to show storage capacity.</span>
-                    <a href="/help">Setup help</a>
+            <div class="server-status-secondary">
+                <div class="server-status-metadata">
+                    <span>Connection <strong>@(IsConnected() ? "Connected" : "Not connected")</strong></span>
+                    <span>Inventory <strong>@FormatDate(_overview.Settings.LastInventoryRefreshUtc)</strong></span>
+                    <span>Update check <strong>@FormatDate(_overview.Settings.LastCompletedCheckUtc)</strong></span>
                 </div>
-            }
-            else if (!string.IsNullOrWhiteSpace(_poolOverview?.Error))
-            {
-                <div class="optional-feature-state warning"><strong>Pool health is unavailable.</strong><span>@_poolOverview.Error</span></div>
-            }
-            else if (_poolOverview?.Pools.Count > 0)
-            {
-                <div class="pool-health-grid">
-                    @foreach (var pool in _poolOverview.Pools)
+                <div class="server-status-actions">
+                    @if (!string.IsNullOrWhiteSpace(_serverActionMessage))
                     {
-                        <article class="pool-health-card">
-                            <div class="row"><strong>@pool.Name</strong><span class="badge @PoolClass(pool)">@pool.Status</span></div>
-                            <div class="pool-capacity-row"><span><strong>@FormatBytes(pool.AllocatedBytes)</strong> used</span><span>@FormatBytes(pool.FreeBytes) free</span></div>
-                            <div class="pool-capacity-track" role="progressbar" aria-label="@pool.Name storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(pool.UsedPercentage ?? 0)"><span style="@PoolProgressStyle(pool)"></span></div>
-                            <div class="pool-card-meta"><span>@((pool.UsedPercentage ?? 0).ToString("0.#"))% of @FormatBytes(pool.SizeBytes)</span>@if (!string.IsNullOrWhiteSpace(pool.Fragmentation)) { <span>@pool.Fragmentation fragmented</span> }</div>
-                            @if (!string.IsNullOrWhiteSpace(pool.StatusDetail))
-                            {
-                                <p class="pool-warning">@pool.StatusDetail</p>
-                            }
-                        </article>
+                        <span class="muted" role="status">@_serverActionMessage</span>
+                    }
+                    <button class="small" disabled="@(_serverAddress?.IsResolved != true)" @onclick="CopyServerIpAsync">Copy IP</button>
+                    @if (_serverAddress is not null)
+                    {
+                        <a class="button small" href="@_serverAddress.WebUiUrl" target="_blank" rel="noopener noreferrer">Open TrueNAS ↗</a>
                     }
                 </div>
-            }
-            else
-            {
-                <div class="optional-feature-state"><span>No storage pools were returned by TrueNAS.</span></div>
-            }
+            </div>
         </section>
 
         <section class="panel dashboard-freshness" aria-labelledby="freshness-heading">
@@ -244,6 +275,7 @@
     private bool _messageIsError;
     private string? _message;
     private string? _serverActionMessage;
+    private string _refreshStage = "Loading dashboard…";
 
     protected override async Task OnInitializedAsync()
     {
@@ -260,9 +292,15 @@
         _message = null;
         try
         {
+            _refreshStage = "Refreshing apps, updates, and Kuma…";
+            await InvokeAsync(StateHasChanged);
+            var refresh = await DashboardRefreshService.RefreshAsync();
+
+            _refreshStage = "Reloading dashboard…";
+            await InvokeAsync(StateHasChanged);
             await LoadAsync();
-            _message = "Dashboard refreshed.";
-            _messageIsError = false;
+            _messageIsError = !refresh.IsSuccessful;
+            _message = refresh.Message;
         }
         catch
         {
@@ -272,6 +310,7 @@
         finally
         {
             _loading = false;
+            _refreshStage = "Loading dashboard…";
         }
     }
 
@@ -337,6 +376,7 @@
     }
 
     private string RunTimeText(DashboardRunSummary run) => run.EndedUtc is null ? $"Started {FormatDate(run.StartedUtc)}" : $"Finished {FormatDate(run.EndedUtc)}";
+    private static string FavoriteMeta(DashboardFavoriteApp app) => string.Join(" · ", new[] { app.GroupName, app.Version, app.HasUpdate ? "Update available" : null }.Where(value => !string.IsNullOrWhiteSpace(value))) is { Length: > 0 } description ? description : "Pinned app";
     private static string AppPath(string appId) => $"/apps/{Uri.EscapeDataString(appId)}";
     private static string HealthText(AppHealthState state) => state switch { AppHealthState.Running => "Running", AppHealthState.Degraded => "Degraded", AppHealthState.Stopped => "Stopped", AppHealthState.Maintenance => "Maintenance", _ => "Unknown" };
     private static string HealthClass(AppHealthState state) => state switch { AppHealthState.Running => "success", AppHealthState.Degraded => "warning", AppHealthState.Stopped => "danger", AppHealthState.Maintenance => "info", _ => string.Empty };

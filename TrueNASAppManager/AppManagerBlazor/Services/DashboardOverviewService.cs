@@ -41,12 +41,17 @@ public sealed class DashboardOverviewService(IDbContextFactory<AppDbContext> dbF
             .Where(monitor => monitor.Status == UptimeKumaMonitorStatus.Down)
             .Select(monitor => new DashboardMonitorAlert(monitor.MonitorId, monitor.AppId, monitor.Name, monitor.Url ?? monitor.Hostname, monitor.LastSeenUtc))
             .ToList();
+        var favoriteApps = apps
+            .Where(app => app.IsFavorite)
+            .Select(app => new DashboardFavoriteApp(app.Id, app.Name, app.GroupName, app.HealthState, app.HumanVersion ?? app.InstalledVersion, app.CatalogUpdateAvailable || app.ImageUpdateAvailable))
+            .ToList();
 
         return new DashboardOverview(
             apps.Count,
             apps.Count(app => app.HealthState == AppHealthState.Running),
             apps.Count(app => app.CatalogUpdateAvailable || app.ImageUpdateAvailable),
             appAlerts,
+            favoriteApps,
             monitors.Count,
             monitors.Count(monitor => monitor.Status == UptimeKumaMonitorStatus.Up),
             monitorAlerts,
@@ -73,10 +78,13 @@ public sealed class DashboardOverviewService(IDbContextFactory<AppDbContext> dbF
 }
 
 /// <summary>Contains the current high-level operational state for the dashboard.</summary>
-public sealed record DashboardOverview(int AppCount, int RunningAppCount, int UpdatesAvailable, IReadOnlyList<DashboardAppAlert> AppAlerts, int MonitorCount, int MonitorsUp, IReadOnlyList<DashboardMonitorAlert> MonitorAlerts, DashboardRunSummary? LastRun, DashboardSettingsSummary Settings);
+public sealed record DashboardOverview(int AppCount, int RunningAppCount, int UpdatesAvailable, IReadOnlyList<DashboardAppAlert> AppAlerts, IReadOnlyList<DashboardFavoriteApp> FavoriteApps, int MonitorCount, int MonitorsUp, IReadOnlyList<DashboardMonitorAlert> MonitorAlerts, DashboardRunSummary? LastRun, DashboardSettingsSummary Settings);
 
 /// <summary>Describes an installed app that requires operator attention.</summary>
 public sealed record DashboardAppAlert(string AppId, string Name, AppHealthState HealthState, string? Message);
+
+/// <summary>Describes an installed app pinned to the dashboard by the operator.</summary>
+public sealed record DashboardFavoriteApp(string AppId, string Name, string? GroupName, AppHealthState HealthState, string? Version, bool HasUpdate);
 
 /// <summary>Describes a currently down Uptime Kuma monitor.</summary>
 public sealed record DashboardMonitorAlert(string MonitorId, string? AppId, string Name, string? Target, DateTime LastSeenUtc);

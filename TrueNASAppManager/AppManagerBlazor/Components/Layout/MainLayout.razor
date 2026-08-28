@@ -13,6 +13,9 @@
             <NavLink href="/apps">
                 <NavIcon Name="apps" /> Apps
             </NavLink>
+            <NavLink href="/system">
+                <NavIcon Name="system" /> System
+            </NavLink>
             <NavLink href="/monitoring">
                 <NavIcon Name="monitoring" /> Monitoring
             </NavLink>
@@ -33,6 +36,10 @@
                 <strong>@ApplicationVersion.Display</strong>
             </div>
             <div class="sidebar-utilities">
+                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-describedby="desktop-pwa-status">
+                    <NavIcon Name="install" /> <span>Install app</span>
+                </button>
+                <span id="desktop-pwa-status" class="pwa-install-status" data-pwa-install-status hidden aria-live="polite"></span>
                 <button type="button" class="theme-toggle sidebar-utility" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
                     <span data-theme-icon aria-hidden="true">◐</span>
                     <span data-theme-label>Theme</span>
@@ -44,30 +51,80 @@
         </div>
     </aside>
 
+    <header class="mobile-header">
+        <a class="mobile-brand" href="/" @onclick="CloseMobileMenu">
+            <span class="brand-mark">TM</span>
+            <span><strong>App Manager</strong><small>TrueNAS</small></span>
+        </a>
+        <div class="mobile-header-actions">
+            <button type="button" class="mobile-install-button" data-pwa-install aria-label="Install TrueNAS App Manager">
+                <NavIcon Name="install" /><span>Install</span>
+            </button>
+            <button type="button" class="mobile-menu-button" aria-label="Open navigation" aria-expanded="@(_mobileMenuOpen ? "true" : "false")" aria-controls="mobile-navigation" @onclick="ToggleMobileMenu">
+                <NavIcon Name="menu" /><span>Menu</span>
+            </button>
+        </div>
+    </header>
+
     <main>
         @Body
     </main>
 
-    <nav class="mobile-nav" aria-label="Primary navigation">
-        <NavLink href="/" Match="NavLinkMatch.All"><NavIcon Name="dashboard" />Home</NavLink>
-        <NavLink href="/apps"><NavIcon Name="apps" />Apps</NavLink>
-        <NavLink href="/monitoring"><NavIcon Name="monitoring" />Monitor</NavLink>
-        <NavLink href="/history"><NavIcon Name="history" />History</NavLink>
-        <NavLink href="/settings"><NavIcon Name="settings" />Settings</NavLink>
-        <NavLink href="/help"><NavIcon Name="help" />Help</NavLink>
-        <button type="button" class="theme-toggle mobile-theme-toggle" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
-            <span data-theme-icon aria-hidden="true">◐</span>
-            <span data-theme-label>Theme</span>
-        </button>
-    </nav>
+    @if (_mobileMenuOpen)
+    {
+        <button type="button" class="mobile-menu-backdrop" aria-label="Close navigation" @onclick="CloseMobileMenu"></button>
+        <aside id="mobile-navigation" class="mobile-menu-panel" aria-label="Mobile navigation">
+            <div class="mobile-menu-heading">
+                <div>
+                    <span class="eyebrow">TrueNAS</span>
+                    <strong>App Manager</strong>
+                </div>
+                <button type="button" class="mobile-menu-close" aria-label="Close navigation" @onclick="CloseMobileMenu"><NavIcon Name="close" /></button>
+            </div>
+            <nav>
+                <NavLink href="/" Match="NavLinkMatch.All" @onclick="CloseMobileMenu"><NavIcon Name="dashboard" /> Dashboard</NavLink>
+                <NavLink href="/apps" @onclick="CloseMobileMenu"><NavIcon Name="apps" /> Apps</NavLink>
+                <NavLink href="/system" @onclick="CloseMobileMenu"><NavIcon Name="system" /> System</NavLink>
+                <NavLink href="/monitoring" @onclick="CloseMobileMenu"><NavIcon Name="monitoring" /> Monitoring</NavLink>
+                <NavLink href="/history" @onclick="CloseMobileMenu"><NavIcon Name="history" /> History</NavLink>
+                <NavLink href="/settings" @onclick="CloseMobileMenu"><NavIcon Name="settings" /> Settings</NavLink>
+                <NavLink href="/help" @onclick="CloseMobileMenu"><NavIcon Name="help" /> Help</NavLink>
+            </nav>
+            <div class="mobile-menu-footer">
+                <div class="mobile-menu-meta">
+                    <span>TrueNAS IP <strong>@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong></span>
+                    <span>Version <strong>@ApplicationVersion.Display</strong></span>
+                </div>
+                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-describedby="mobile-pwa-status">
+                    <NavIcon Name="install" /> <span>Install app</span>
+                </button>
+                <span id="mobile-pwa-status" class="pwa-install-status" data-pwa-install-status hidden aria-live="polite"></span>
+                <button type="button" class="theme-toggle sidebar-utility" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+                    <span data-theme-icon aria-hidden="true">◐</span>
+                    <span data-theme-label>Theme</span>
+                </button>
+            </div>
+        </aside>
+    }
 </div>
 
 @code {
     private TrueNasServerAddress? _serverAddress;
+    private bool _mobileMenuOpen;
 
     protected override async Task OnInitializedAsync()
     {
         _serverAddress = await ServerAddressService.GetAsync();
+    }
+
+    private void ToggleMobileMenu()
+    {
+        _mobileMenuOpen = !_mobileMenuOpen;
+    }
+
+    private void CloseMobileMenu()
+    {
+        _mobileMenuOpen = false;
     }
 }
 <div id="blazor-error-ui" data-nosnippet>

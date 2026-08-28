@@ -62,7 +62,7 @@
         }
         else
         {
-            <div class="table-wrap">
+            <div class="table-wrap history-desktop-table">
                 <table>
                     <thead>
                         <tr><th>Started</th><th>Trigger</th><th>Duration</th><th>Checked</th><th>Updates</th><th>Status</th><th>Diagnostic</th></tr>
@@ -83,6 +83,27 @@
                     </tbody>
                 </table>
             </div>
+            <div class="history-mobile-list">
+                @foreach (var run in _runs)
+                {
+                    <article class="panel history-card">
+                        <div class="history-card-header">
+                            <div><strong>@RunTriggerText(run.Trigger)</strong><span>@FormatDate(run.StartedUtc)</span></div>
+                            <span class="badge @RunStatusClass(run.Status)">@run.Status</span>
+                        </div>
+                        <dl class="history-card-grid">
+                            <div><dt>Duration</dt><dd>@Duration(run.StartedUtc, run.EndedUtc)</dd></div>
+                            <div><dt>Checked</dt><dd>@run.CheckedCount</dd></div>
+                            <div><dt>Succeeded</dt><dd>@run.SucceededCount</dd></div>
+                            <div><dt>Failed / skipped</dt><dd>@run.FailedCount / @run.SkippedCount</dd></div>
+                        </dl>
+                        @if (!string.IsNullOrWhiteSpace(run.ErrorSummary))
+                        {
+                            <p class="history-card-detail"><strong>Diagnostic</strong>@run.ErrorSummary</p>
+                        }
+                    </article>
+                }
+            </div>
         }
     </section>
 
@@ -94,7 +115,7 @@
         }
         else
         {
-            <div class="table-wrap">
+            <div class="table-wrap history-desktop-table">
                 <table>
                     <thead>
                         <tr><th>Time</th><th>App</th><th>Event</th><th>Target</th><th>Result</th><th>Reason</th><th>Notification</th></tr>
@@ -117,6 +138,24 @@
                         }
                     </tbody>
                 </table>
+            </div>
+            <div class="history-mobile-list">
+                @foreach (var attempt in _attempts)
+                {
+                    <article class="panel history-card">
+                        <div class="history-card-header">
+                            <div><a class="app-name" href="@AppPath(attempt.AppId)">@attempt.App.Name</a><span>@FormatDate(attempt.StartedUtc)</span></div>
+                            <span class="badge @AttemptStatusClass(attempt.Status)">@attempt.Status</span>
+                        </div>
+                        <dl class="history-card-grid">
+                            <div><dt>Event</dt><dd>@AttemptText(attempt.Kind)</dd></div>
+                            <div><dt>Target</dt><dd>@TargetText(attempt)</dd></div>
+                            <div><dt>Duration</dt><dd>@Duration(attempt.StartedUtc, attempt.EndedUtc)</dd></div>
+                            <div><dt>Notification</dt><dd>@NotificationText(attempt.AppId, attempt.ToVersion ?? attempt.OutdatedImagesJson)</dd></div>
+                        </dl>
+                        <p class="history-card-detail"><strong>Reason</strong>@attempt.ReasonMessage</p>
+                    </article>
+                }
             </div>
         }
     </section>

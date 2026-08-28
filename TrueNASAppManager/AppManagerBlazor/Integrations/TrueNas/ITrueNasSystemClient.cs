@@ -1,8 +1,23 @@
 namespace TrueNasAppManager.Integrations.TrueNas;
 
-/// <summary>Reads optional TrueNAS storage information and live application resource statistics.</summary>
+/// <summary>Reads optional TrueNAS host, alert, update, storage, and live application resource information.</summary>
 public interface ITrueNasSystemClient
 {
+    /// <summary>Returns basic identity, hardware, and uptime information for the TrueNAS host.</summary>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The current TrueNAS host information.</returns>
+    Task<TrueNasSystemInfoDto> GetSystemInfoAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Returns all current TrueNAS alerts, including dismissed alerts.</summary>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The alerts currently known to TrueNAS.</returns>
+    Task<IReadOnlyList<TrueNasAlertDto>> ListAlertsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Returns the current TrueNAS operating-system update status.</summary>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The current operating-system update status.</returns>
+    Task<TrueNasUpdateStatusDto> GetUpdateStatusAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Returns the current TrueNAS storage pools.</summary>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The storage pools visible to the authenticated account.</returns>

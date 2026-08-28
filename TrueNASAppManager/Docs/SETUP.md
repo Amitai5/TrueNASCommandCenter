@@ -22,6 +22,12 @@ http://<truenas-address>:2600
 
 The liveness endpoint should return a successful response at `http://<truenas-address>:2600/health/live`.
 
+### Optional Progressive Web App installation
+
+For an app-like launcher on a phone, tablet, or desktop, open TrueNAS App Manager through an authenticated HTTPS reverse proxy and select **Install app** from the sidebar or mobile navigation menu. Chromium browsers display their native installation prompt. On iPhone and iPad, use the browser Share menu and select **Add to Home Screen**.
+
+Plain `http://truenas.local` and private-IP URLs remain supported for normal browser use, but browsers do not consider them eligible for PWA installation. Only HTTPS, or `http://localhost` / `http://127.0.0.1` during development, meets the secure installation requirement. The installed shell shows a purpose-built offline screen when the manager cannot be reached; app state, logs, monitoring, and lifecycle actions are intentionally not cached and still require a live server connection.
+
 ## 1. Create a service account and API key
 
 Use a dedicated account instead of an administrator's personal API key. API keys provide password-equivalent middleware access and should be stored securely.
@@ -36,7 +42,7 @@ Use a dedicated account instead of an administrator's personal API key. API keys
 
 The username is case-sensitive. You will enter this exact username in TrueNAS App Manager.
 
-### Grant only the app roles
+### Grant the required app roles
 
 1. Open **Credentials → Groups**.
 2. Click **Privileges**, then **Add**.
@@ -45,10 +51,13 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Ap
 5. Under **Roles**, select:
    - `APPS_READ`
    - `APPS_WRITE`
-   - Optionally, `POOL_READ` to show storage-pool health and capacity on the Dashboard
+   - Optionally, `POOL_READ` for storage-pool health and capacity
+   - Optionally, `ALERT_LIST_READ` for native TrueNAS alerts
+   - Optionally, `SYSTEM_UPDATE_READ` for TrueNAS operating-system update availability
+   - Optionally, `READONLY_ADMIN` for host identity, hardware, load, and uptime
 6. Leave **Web Shell Access** disabled and save the privilege.
 
-`APPS_READ` allows discovery, health, ports, portals, containers, logs, and live application resource statistics. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. `POOL_READ` is not required for app management; without it, only the optional storage-pool cards remain unavailable. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or update actions through this account.
+`APPS_READ` allows discovery, health, ports, portals, containers, logs, and live application resource statistics. `APPS_WRITE` allows starts, stops, restarts, upgrades, image refreshes, and rollbacks. The four System-page permissions are not required for app management, and every unavailable read-only panel explains the exact role it needs. `READONLY_ADMIN` is intentionally broader than the three focused read roles; omit it if host hardware details are not worth that additional visibility. TrueNAS systems with a STIG security profile do not permit write roles; those systems cannot perform lifecycle or app-update actions through this account.
 
 ### Create the API key
 
@@ -239,6 +248,18 @@ Pool cards require the additional read-only `POOL_READ` role:
 
 `POOL_READ` is optional. A missing or denied role displays an explanatory unavailable state and never blocks app discovery, monitoring, or lifecycle operations.
 
+### Enable the read-only System overview
+
+The **System** page combines independent TrueNAS capabilities. Add only the read roles you want:
+
+1. Add `ALERT_LIST_READ` for active and dismissed native TrueNAS alerts.
+2. Add `SYSTEM_UPDATE_READ` for the configured update train, profile, download progress, and available OS version. Installing the update remains in the TrueNAS Web UI.
+3. Add `POOL_READ` for pool health, capacity, and fragmentation.
+4. Optionally add the broader `READONLY_ADMIN` role for hostname, TrueNAS version, CPU, memory, load average, boot time, and uptime.
+5. Save the privilege, run **Settings → TrueNAS connection → Test connection** once to reopen the API session, then open **System** and select **Refresh system**.
+
+The page never dismisses alerts, installs operating-system updates, changes pool state, or exposes the system serial number. One denied capability does not hide the other panels.
+
 ### Enable live resource statistics
 
 Live CPU, memory, network, and block-I/O data uses the required `APPS_READ` role and needs no separate switch:
@@ -265,9 +286,11 @@ To monitor an app, open its **Settings** page and choose **Notify only** or **Re
 
 The app-details page uses an operations-first layout. Live logs occupy the main workspace, while published ports, local and remote Web UI links, and workloads stay in a compact adjacent column. Application metadata, Uptime Kuma reports, update and rollback information, safety state, and recent history use the full page width below that workspace instead of continuing down a narrow sidebar. On mobile, these sections stack into one column without horizontal scrolling.
 
+At tablet and phone widths, the desktop sidebar becomes a compact sticky header and a full navigation drawer so every destination retains a readable touch target. Dense app and monitor tables already use mobile cards, and History changes to summary cards instead of requiring a wide horizontal table. Safe-area padding keeps controls clear of notches and home indicators.
+
 Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
 
-The sidebar order is **Dashboard**, **Apps**, **Monitoring**, **History**, and **Settings**. The Dashboard contains server-wide status, current app and Kuma alerts, the latest update run, the next scheduled run, pool health, and data-freshness timestamps. The Apps page remains focused on app inventory and app-specific actions. All operator-facing timestamps use a 12-hour clock with AM/PM. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
+The sidebar order is **Dashboard**, **Apps**, **System**, **Monitoring**, **History**, and **Settings**. The Dashboard contains server-wide status, current app and Kuma alerts, favorite apps, the latest update run, the next scheduled run, pool health, and data-freshness timestamps. **System** contains native TrueNAS alerts, OS update availability, host details, and pool health. The Apps page remains focused on app inventory and app-specific actions. All operator-facing timestamps use a 12-hour clock with AM/PM. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
 
 Configure separate **Local Web UI URL** and **Remote Web UI URL** values under the app's **Settings** page when it is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Generated local links default to `http://truenas.local`; the global **Local TrueNAS Web UI host** setting can override that origin. Public manager domains use only the explicitly configured remote route, and the manager does not guess subdomains.
 
@@ -344,7 +367,7 @@ For scheduled or manual update-check failures, open **History** and copy the dia
 
 Confirm that the service account's group is attached to a custom privilege containing both `APPS_READ` and `APPS_WRITE`. Do not modify TrueNAS built-in privileges.
 
-If app discovery and actions work but only the storage-pool panel is unavailable, add the optional `POOL_READ` role to the same custom privilege. The pool panel does not require or broaden app write access.
+If app discovery and actions work but a System panel is unavailable, add the role named by that panel: `POOL_READ`, `ALERT_LIST_READ`, `SYSTEM_UPDATE_READ`, or the broader read-only `READONLY_ADMIN`. These permissions do not broaden app write access.
 
 ### TrueNAS is unreachable or the connection times out
 

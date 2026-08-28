@@ -50,7 +50,9 @@ builder.Services.AddSingleton<TrueNasJsonRpcClient>();
 builder.Services.AddSingleton<ITrueNasClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
 builder.Services.AddSingleton<ITrueNasSystemClient>(services => services.GetRequiredService<TrueNasJsonRpcClient>());
 builder.Services.AddSingleton<IStoragePoolOverviewService, StoragePoolOverviewService>();
+builder.Services.AddSingleton<ITrueNasSystemOverviewService, TrueNasSystemOverviewService>();
 builder.Services.AddScoped<DashboardOverviewService>();
+builder.Services.AddScoped<DashboardRefreshService>();
 builder.Services.AddSingleton<AppResourceMonitorService>();
 builder.Services.AddSingleton<IAppResourceMonitor>(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddSingleton<RunLock>();
@@ -105,6 +107,23 @@ if (!app.Environment.IsDevelopment())
 
 app.Use(async (context, next) =>
 {
+    var requestPath = context.Request.Path.Value;
+    var isServiceWorker = string.Equals(requestPath, "/service-worker.js", StringComparison.OrdinalIgnoreCase);
+    var isManifest = string.Equals(requestPath, "/manifest.webmanifest", StringComparison.OrdinalIgnoreCase);
+    if (isServiceWorker || isManifest)
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers.CacheControl = "no-cache";
+            if (isServiceWorker)
+            {
+                context.Response.Headers["Service-Worker-Allowed"] = "/";
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
     context.Response.Headers.XContentTypeOptions = "nosniff";
     context.Response.Headers.XFrameOptions = "DENY";
     context.Response.Headers["X-Application-Version"] = ApplicationVersion.Current;

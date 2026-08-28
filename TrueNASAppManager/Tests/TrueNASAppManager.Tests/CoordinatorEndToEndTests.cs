@@ -55,6 +55,24 @@ public sealed class CoordinatorEndToEndTests
     }
 
     [TestMethod]
+    [TestCategory("Unit")]
+    public async Task CheckAndUpdate_CheckOnlyRefreshesInventoryWithoutStartingUpdates()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        await SeedPoliciesAsync(database);
+        var trueNas = new FakeTrueNasClient();
+        var coordinator = CreateCoordinator(database, trueNas);
+
+        var result = await coordinator.CheckAndUpdateAsync(RunTrigger.CheckNow, executeUpdates: false);
+
+        Assert.AreEqual(RunStatus.Succeeded, result.Status);
+        Assert.IsNotEmpty(trueNas.CallOrder);
+        Assert.AreEqual("refresh", trueNas.CallOrder[0]);
+        Assert.IsEmpty(trueNas.StartOrder);
+    }
+
+    [TestMethod]
     public async Task AppFailure_DoesNotStopLaterEligibleApps()
     {
         await using var database = new TestDatabase();

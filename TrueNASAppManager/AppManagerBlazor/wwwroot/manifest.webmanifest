@@ -1,0 +1,58 @@
+{
+  "id": "/",
+  "name": "TrueNAS App Manager",
+  "short_name": "App Manager",
+  "description": "Manage, monitor, and safely update TrueNAS applications.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
+  "background_color": "#0d1118",
+  "theme_color": "#5653e7",
+  "orientation": "any",
+  "categories": [
+    "utilities",
+    "productivity"
+  ],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/"
+    },
+    {
+      "name": "Applications",
+      "short_name": "Apps",
+      "url": "/apps"
+    },
+    {
+      "name": "Monitoring",
+      "short_name": "Monitoring",
+      "url": "/monitoring"
+    }
+  ]
+}

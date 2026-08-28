@@ -432,6 +432,121 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.AreEqual("subscription-1", unsubscribed);
     }
 
+    /// <summary>Verifies that host identity, hardware, and uptime deserialize from the expected RPC method.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task GetSystemInfo_ReturnsHostIdentityAndRuntimeInformation()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("system.info", request.GetProperty("method").GetString());
+            Assert.AreEqual(0, request.GetProperty("params").GetArrayLength());
+            transport.Respond(request.GetProperty("id").GetInt64(), new
+            {
+                version = "25.10.1",
+                hostname = "atlas",
+                physmem = 68_719_476_736L,
+                model = "Example CPU",
+                cores = 16,
+                physical_cores = 8,
+                loadavg = new[] { 0.25, 0.5, 0.75 },
+                uptime = "4 days, 2 hours",
+                uptime_seconds = 352_800d,
+                boottime = "2026-08-23T16:00:00Z",
+                timezone = "America/Los_Angeles",
+                system_manufacturer = "Example Systems",
+                system_product = "Storage Server",
+                ecc_memory = true
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var host = await client.GetSystemInfoAsync();
+
+        Assert.AreEqual("atlas", host.Hostname);
+        Assert.AreEqual("25.10.1", host.Version);
+        Assert.AreEqual(68_719_476_736L, host.PhysicalMemory);
+        Assert.AreEqual(16, host.CoreCount);
+        Assert.HasCount(3, host.LoadAverage);
+        Assert.AreEqual(0.5, host.LoadAverage[1]);
+        Assert.IsTrue(host.HasEccMemory);
+    }
+
+    /// <summary>Verifies that active and dismissed system alerts deserialize from the expected RPC method.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task ListAlerts_ReturnsSeverityAndOccurrenceInformation()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("alert.list", request.GetProperty("method").GetString());
+            Assert.AreEqual(0, request.GetProperty("params").GetArrayLength());
+            transport.Respond(request.GetProperty("id").GetInt64(), new[]
+            {
+                new
+                {
+                    uuid = "alert-1",
+                    id = "Smartd",
+                    source = "Disk",
+                    klass = "Smartd",
+                    node = "atlas",
+                    datetime = "2026-08-27T17:00:00Z",
+                    last_occurrence = "2026-08-27T18:00:00Z",
+                    dismissed = false,
+                    text = "Disk fault detected",
+                    level = "CRITICAL",
+                    one_shot = true
+                }
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var alerts = await client.ListAlertsAsync();
+
+        Assert.HasCount(1, alerts);
+        Assert.AreEqual("alert-1", alerts[0].Uuid);
+        Assert.AreEqual("CRITICAL", alerts[0].Level);
+        Assert.AreEqual(new DateTimeOffset(2026, 8, 27, 18, 0, 0, TimeSpan.Zero), alerts[0].LastOccurrence);
+        Assert.IsTrue(alerts[0].IsOneShot);
+    }
+
+    /// <summary>Verifies that TrueNAS operating-system update availability deserializes from the expected RPC method.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task GetUpdateStatus_ReturnsAvailableVersionAndDownloadProgress()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("update.status", request.GetProperty("method").GetString());
+            Assert.AreEqual(0, request.GetProperty("params").GetArrayLength());
+            transport.Respond(request.GetProperty("id").GetInt64(), new
+            {
+                code = "NORMAL",
+                status = new
+                {
+                    current_version = new { train = "TrueNAS-SCALE-25.10", profile = "GENERAL", matches_profile = true },
+                    new_version = new { version = "25.10.2", release_notes = "Reliability update", release_notes_url = "https://www.truenas.com/docs/release-notes/" }
+                },
+                error = (object?)null,
+                update_download_progress = new { percent = 35.5, description = "Downloading update", version = "25.10.2" }
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var update = await client.GetUpdateStatusAsync();
+
+        Assert.AreEqual("NORMAL", update.Code);
+        Assert.AreEqual("TrueNAS-SCALE-25.10", update.Status!.CurrentVersion!.Train);
+        Assert.AreEqual("25.10.2", update.Status.NewVersion!.Version);
+        Assert.AreEqual(35.5, update.DownloadProgress!.Percent);
+    }
+
     /// <summary>Verifies that storage-pool health and capacity deserialize from the expected RPC method.</summary>
     [TestMethod]
     [TestCategory("Unit")]

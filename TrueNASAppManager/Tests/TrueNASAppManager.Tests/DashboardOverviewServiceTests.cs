@@ -35,7 +35,7 @@ public sealed class DashboardOverviewServiceTests
         await using (var db = database.CreateDbContext())
         {
             db.Apps.AddRange(
-                new AppRecord { Id = "running", Name = "Running app", HealthState = AppHealthState.Running, IsInstalled = true },
+                new AppRecord { Id = "running", Name = "Running app", GroupName = "Core", HealthState = AppHealthState.Running, HumanVersion = "1.2.3", IsFavorite = true, IsInstalled = true },
                 new AppRecord { Id = "stopped", Name = "Stopped app", HealthState = AppHealthState.Stopped, HealthMessage = "App is stopped.", IsInstalled = true },
                 new AppRecord { Id = "maintenance", Name = "Maintenance app", HealthState = AppHealthState.Maintenance, IsInstalled = true });
             db.UptimeKumaMonitors.AddRange(
@@ -52,6 +52,10 @@ public sealed class DashboardOverviewServiceTests
         Assert.AreEqual(1, result.RunningAppCount);
         Assert.HasCount(1, result.AppAlerts);
         Assert.AreEqual("stopped", result.AppAlerts[0].AppId);
+        Assert.HasCount(1, result.FavoriteApps);
+        Assert.AreEqual("running", result.FavoriteApps[0].AppId);
+        Assert.AreEqual("Core", result.FavoriteApps[0].GroupName);
+        Assert.AreEqual("1.2.3", result.FavoriteApps[0].Version);
         Assert.AreEqual(2, result.MonitorCount);
         Assert.AreEqual(1, result.MonitorsUp);
         Assert.HasCount(1, result.MonitorAlerts);
@@ -83,6 +87,7 @@ public sealed class DashboardOverviewServiceTests
         var result = await service.GetAsync();
 
         Assert.IsNull(result.LastRun);
+        Assert.HasCount(0, result.FavoriteApps);
     }
 
     /// <summary>Verifies that all shared frontend timestamps use a 12-hour clock with an AM or PM marker.</summary>

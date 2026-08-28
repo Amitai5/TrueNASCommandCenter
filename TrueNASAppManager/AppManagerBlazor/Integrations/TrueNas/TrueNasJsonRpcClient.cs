@@ -101,6 +101,18 @@ public sealed class TrueNasJsonRpcClient(
             cancellationToken);
 
     /// <inheritdoc />
+    public Task<TrueNasSystemInfoDto> GetSystemInfoAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<TrueNasSystemInfoDto>("system.info", [], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasAlertDto>> ListAlertsAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasAlertDto>>("alert.list", [], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<TrueNasUpdateStatusDto> GetUpdateStatusAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<TrueNasUpdateStatusDto>("update.status", [], cancellationToken);
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<TrueNasPoolDto>> QueryPoolsAsync(CancellationToken cancellationToken = default) =>
         CallAsync<IReadOnlyList<TrueNasPoolDto>>("pool.query", [Array.Empty<object>(), new { }], cancellationToken);
 

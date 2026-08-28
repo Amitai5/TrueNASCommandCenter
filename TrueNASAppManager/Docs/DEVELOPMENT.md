@@ -95,7 +95,7 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 
 - The web application uses interactive server-side Blazor on ASP.NET Core .NET 10.
 - SQLite state is stored under `DATA_PATH`.
-- TrueNAS remains the lifecycle authority; inventory, workload health, live app statistics, storage-pool status, logs, lifecycle actions, mail, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
+- TrueNAS remains the lifecycle authority; inventory, host information, native alerts, OS update status, workload health, live app statistics, storage-pool status, logs, lifecycle actions, mail, upgrades, image refreshes, jobs, and rollbacks use JSON-RPC 2.0 middleware.
 - Complete inventory refresh and missing-app reconciliation always run before update evaluation.
 - Per-app health incidents persist a single recovery-attempt marker so scheduled retries cannot loop.
 - GitHub enrichment accepts only canonical public `github.com` sources, uses ETags and a 24-hour SQLite cache, and never gates TrueNAS operations.
@@ -106,6 +106,8 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 ### Frontend assets
 
 The UI supports system-aware light and dark themes with a local manual override. Shared color tokens in `wwwroot/app.css` control text, surfaces, borders, inputs, badges, navigation states, and elevation; keep new components on these tokens so both themes retain readable contrast. The app-details page uses a bounded operations grid followed by a shared overview-card grid, which collapses to one column at mobile breakpoints. Avoid recreating an independently flowing full-height details rail because it leaves empty space beside shorter primary content.
+
+The installable PWA metadata lives in `wwwroot/manifest.webmanifest`, installation and service-worker registration in `wwwroot/pwa.js`, and the network-first offline fallback in `wwwroot/service-worker.js`. Keep the service worker narrow: it may cache the explicit offline page and immutable brand assets, but it must not cache Blazor circuits, authenticated page responses, live TrueNAS data, logs, or lifecycle requests. PWA installation testing requires HTTPS or the loopback `localhost` / `127.0.0.1` development exception.
 
 Build-time static-asset compression is disabled because compressed Blazor responses produced corrupt-content failures in the target TrueNAS deployment. `Microsoft.AspNetCore.App.Internal.Assets` is a private build-only package reference so Linux restores include `_framework/blazor.web.js`; the project normalizes that package root, and the Dockerfile verifies that the raw asset and endpoint exist before publication.
 
@@ -120,6 +122,9 @@ Discovery and status:
 - `app.rollback_versions`
 - `app.container_log_follow` through `core.subscribe`
 - `app.stats` through `core.subscribe`
+- `system.info` when the optional `READONLY_ADMIN` role is available
+- `alert.list` when the optional `ALERT_LIST_READ` role is available
+- `update.status` when the optional `SYSTEM_UPDATE_READ` role is available
 - `pool.query` when the optional `POOL_READ` role is available
 
 Execution and jobs:

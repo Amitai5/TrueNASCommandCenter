@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d1118" />
+    <title>Offline · TrueNAS App Manager</title>
+    <style>
+        :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+        * { box-sizing: border-box; }
+        body { display: grid; min-height: 100vh; margin: 0; padding: 1.25rem; place-items: center; background: #0d1118; color: #e7ebf2; }
+        main { width: min(32rem, 100%); padding: clamp(1.25rem, 5vw, 2rem); border: 1px solid #313b4b; border-radius: 14px; background: #151a24; box-shadow: 0 18px 44px rgb(0 0 0 / 45%); }
+        .mark { display: grid; width: 3rem; height: 3rem; margin-bottom: 1.25rem; place-items: center; border: 1px solid #6366f1; border-radius: 12px; background: #252a45; color: #c7d2fe; font-weight: 800; }
+        h1 { margin: 0 0 0.6rem; color: #f8fafc; font-size: clamp(1.5rem, 6vw, 2rem); }
+        p { margin: 0 0 1.25rem; color: #aab4c4; line-height: 1.55; }
+        a { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0.65rem 1rem; border-radius: 8px; background: #5653e7; color: #fff; font-weight: 700; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="mark" aria-hidden="true">TM</div>
+        <h1>TrueNAS App Manager is offline</h1>
+        <p>The installed shell is available, but live app status, logs, monitoring, and management actions require a connection to this server.</p>
+        <a href="/">Try again</a>
+    </main>
+</body>
+</html>
