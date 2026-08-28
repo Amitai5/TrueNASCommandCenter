@@ -1,4 +1,4 @@
-const shellCacheName = "truenas-app-manager-shell-v1";
+const shellCacheName = "truenas-app-manager-shell-v3";
 const offlineUrl = "/offline.html";
 const shellAssets = [
     offlineUrl,
@@ -10,8 +10,14 @@ const shellAssets = [
 ];
 
 self.addEventListener("install", (event) => {
-    event.waitUntil(caches.open(shellCacheName).then((cache) => cache.addAll(shellAssets)));
-    self.skipWaiting();
+    event.waitUntil((async () => {
+        const cache = await caches.open(shellCacheName);
+        await cache.add(offlineUrl);
+        await Promise.allSettled(shellAssets
+            .filter((asset) => asset !== offlineUrl)
+            .map((asset) => cache.add(asset)));
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener("activate", (event) => {
@@ -56,4 +62,29 @@ self.addEventListener("fetch", (event) => {
 
             return cachedResponse || networkResponse;
         }));
+});
+
+self.addEventListener("push", (event) => {
+    event.waitUntil(self.registration.showNotification("TrueNAS App Manager needs attention", {
+        body: "Open the dashboard to review the latest app or system alert.",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        tag: "truenas-app-manager-alert",
+        renotify: true,
+        data: { url: "/" }
+    }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+    event.notification.close();
+    const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+    event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+        const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);
+        if (existing) {
+            await existing.navigate(targetUrl);
+            return existing.focus();
+        }
+
+        return self.clients.openWindow(targetUrl);
+    }));
 });

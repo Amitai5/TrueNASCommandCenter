@@ -39,6 +39,13 @@ jobs:
             exit 1
           fi
 
+      - name: Validate PWA install behavior
+        run: |
+          node --check TrueNASAppManager/AppManagerBlazor/wwwroot/pwa-install-guide.js
+          node --check TrueNASAppManager/AppManagerBlazor/wwwroot/pwa.js
+          node --check TrueNASAppManager/AppManagerBlazor/wwwroot/service-worker.js
+          node --test TrueNASAppManager/Tests/PwaInstallGuide.Tests.mjs
+
       - name: Set up .NET
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
         with:

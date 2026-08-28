@@ -3,6 +3,8 @@
   "name": "TrueNAS App Manager",
   "short_name": "App Manager",
   "description": "Manage, monitor, and safely update TrueNAS applications.",
+  "lang": "en-US",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

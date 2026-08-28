@@ -107,6 +107,10 @@ html[data-theme="dark"] {
     box-sizing: border-box;
 }
 
+[hidden] {
+    display: none !important;
+}
+
 img, picture, svg, video, canvas {
     max-width: 100%;
 }
@@ -410,6 +414,149 @@ label {
     border-color: var(--primary);
     background: var(--brand-background);
     color: var(--brand-text);
+}
+
+body.pwa-install-dialog-open {
+    overflow: hidden;
+}
+
+.pwa-install-dialog {
+    width: min(36rem, calc(100vw - 2rem));
+    max-width: 100%;
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 0;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--floating-shadow);
+}
+
+.pwa-install-dialog:not([open]) {
+    display: none;
+}
+
+.pwa-install-dialog::backdrop {
+    background: var(--modal-backdrop);
+    backdrop-filter: blur(3px);
+}
+
+.pwa-install-dialog-content {
+    display: grid;
+    gap: 1.1rem;
+    padding: 1.4rem;
+}
+
+.pwa-install-dialog-heading {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.pwa-install-dialog-heading h2 {
+    margin: 0.2rem 0 0;
+    font-size: 1.4rem;
+}
+
+.pwa-install-dialog-close {
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0.55rem;
+}
+
+.pwa-install-dialog-close .nav-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.pwa-install-dialog-message,
+.pwa-install-error,
+.pwa-install-steps {
+    margin: 0;
+}
+
+.pwa-install-readiness {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+}
+
+.pwa-install-readiness > div {
+    display: grid;
+    min-width: 0;
+    gap: 0.2rem;
+    padding: 0.8rem 0.9rem;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.pwa-install-readiness > div:nth-child(2n) {
+    border-right: 0;
+}
+
+.pwa-install-readiness > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+}
+
+.pwa-install-readiness span {
+    color: var(--secondary);
+    font-size: 0.75rem;
+}
+
+.pwa-install-readiness strong {
+    overflow-wrap: anywhere;
+    font-size: 0.85rem;
+}
+
+.pwa-install-readiness [data-state="ready"] strong {
+    color: var(--success);
+}
+
+.pwa-install-readiness [data-state="blocked"] strong {
+    color: var(--danger);
+}
+
+.pwa-install-steps {
+    display: grid;
+    gap: 0.7rem;
+    padding-left: 1.5rem;
+}
+
+.pwa-install-steps li {
+    padding-left: 0.25rem;
+}
+
+.pwa-install-origin {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--input-background);
+}
+
+.pwa-install-origin span {
+    color: var(--secondary);
+    font-size: 0.74rem;
+}
+
+.pwa-install-origin code {
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
+.pwa-install-dialog-actions {
+    display: flex;
+    gap: 0.65rem;
+    justify-content: flex-end;
 }
 
 main {
@@ -1514,6 +1661,56 @@ tr:last-child td {
 
 .kuma-monitor-row:last-of-type {
     margin-bottom: 0.9rem;
+}
+
+.push-actions {
+    margin-top: 1rem;
+}
+
+.push-privacy-note {
+    margin-top: 1rem;
+}
+
+.push-device-list {
+    display: grid;
+    gap: 0;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.push-device-list h3 {
+    margin: 0 0 0.35rem;
+}
+
+.push-device-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.push-device-row:last-child {
+    border-bottom: 0;
+}
+
+.push-device-row > div {
+    display: grid;
+    min-width: 0;
+    gap: 0.15rem;
+}
+
+.push-device-row strong,
+.push-device-row span {
+    overflow-wrap: anywhere;
+}
+
+.push-device-row button {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 0.4rem 0.65rem;
 }
 
 .spinner {
@@ -2902,6 +3099,20 @@ html:not([data-theme]) .summary-grid {
         color: var(--primary-contrast);
     }
 
+    .pwa-install-dialog {
+        width: 100%;
+        max-height: calc(100dvh - 0.75rem);
+        margin: auto 0 0;
+        border-right: 0;
+        border-bottom: 0;
+        border-left: 0;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .pwa-install-dialog-content {
+        padding: 1.15rem max(1rem, env(safe-area-inset-right)) calc(1.15rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    }
+
     .mobile-header-actions .nav-icon {
         width: 18px;
         height: 18px;
@@ -3542,6 +3753,19 @@ html:not([data-theme]) .summary-grid {
 
     .mobile-app-card .actions > * {
         flex-basis: 100%;
+    }
+
+    .push-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .push-actions > * {
+        width: 100%;
+    }
+
+    .push-device-row {
+        align-items: flex-start;
     }
 }
 

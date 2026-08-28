@@ -17,6 +17,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AppContainerRecord> AppContainers => Set<AppContainerRecord>();
     public DbSet<GitHubRepositoryCache> GitHubRepositories => Set<GitHubRepositoryCache>();
     public DbSet<UptimeKumaMonitorRecord> UptimeKumaMonitors => Set<UptimeKumaMonitorRecord>();
+    public DbSet<WebPushSubscriptionRecord> WebPushSubscriptions => Set<WebPushSubscriptionRecord>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -144,5 +145,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasIndex(container => new { container.AppId, container.ContainerId });
         modelBuilder.Entity<UptimeKumaMonitorRecord>()
             .HasIndex(monitor => monitor.AppId);
+        modelBuilder.Entity<WebPushSubscriptionRecord>()
+            .HasIndex(subscription => subscription.Endpoint)
+            .IsUnique();
     }
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using TrueNasAppManager.Domain;
+using TrueNasAppManager.Notifications;
 using TrueNasAppManager.Scheduling;
 using TrueNasAppManager.Services;
 
@@ -427,6 +428,58 @@ public sealed class ConfigurationBackupServiceTests
         Assert.AreEqual(4, restored.OnboardingStep);
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task FullRecoveryBackup_RestoresVapidIdentityAndBrowserSubscriptions()
+    {
+        const string password = "correct horse battery staple";
+        await using var source = new TestDatabase();
+        var sourceProtector = source.CreateProtector();
+        await source.InitializeAsync(settings => ConfigureSettings(settings, sourceProtector, "source-key"));
+        var sourcePush = new WebPushSubscriptionService(source, sourceProtector, new FixedTimeProvider(BackupTime));
+        await sourcePush.RegisterAsync(CreatePushSubscription());
+        var originalDelivery = await sourcePush.GetDeliveryConfigurationAsync();
+        var backup = await CreateService(source, sourceProtector).ExportFullRecoveryAsync(password);
+
+        await using var target = new TestDatabase();
+        var targetProtector = target.CreateProtector();
+        await target.InitializeAsync();
+        await CreateService(target, targetProtector).ImportAsync(backup.Json, password);
+
+        var restoredPush = new WebPushSubscriptionService(target, targetProtector, new FixedTimeProvider(BackupTime));
+        var restoredDelivery = await restoredPush.GetDeliveryConfigurationAsync();
+        var devices = await restoredPush.ListAsync();
+        Assert.AreEqual(originalDelivery.PublicKey, restoredDelivery.PublicKey);
+        Assert.AreEqual(originalDelivery.PrivateKey, restoredDelivery.PrivateKey);
+        Assert.HasCount(1, devices);
+        Assert.AreEqual("Recovery phone", devices[0].DeviceName);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task Preview_SchemaFiveDuplicatePushSubscriptionId_IsRejected()
+    {
+        const string password = "correct horse battery staple";
+        await using var database = new TestDatabase();
+        var protector = database.CreateProtector();
+        await database.InitializeAsync(settings => ConfigureSettings(settings, protector, "source-key"));
+        var push = new WebPushSubscriptionService(database, protector, new FixedTimeProvider(BackupTime));
+        await push.RegisterAsync(CreatePushSubscription());
+        var service = CreateService(database, protector);
+        var backup = await service.ExportFullRecoveryAsync(password);
+        var duplicated = MutateFullRecoveryPayload(backup.Json, password, payload =>
+        {
+            var subscriptions = payload["pushSubscriptions"]!.AsArray();
+            var duplicate = subscriptions[0]!.DeepClone().AsObject();
+            duplicate["endpoint"] = "https://push.example.test/send/second-device";
+            subscriptions.Add(duplicate);
+        });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(duplicated, password));
+
+        StringAssert.Contains(exception.Message, "duplicate browser push subscription IDs");
+    }
+
     private static string ConvertToSecretFreeBackup(string json, string password)
     {
         var envelope = JsonNode.Parse(json)!.AsObject();
@@ -506,7 +559,25 @@ public sealed class ConfigurationBackupServiceTests
     private static ConfigurationBackupService CreateService(TestDatabase database, ISecretProtector protector)
     {
         var timeProvider = new FixedTimeProvider(BackupTime);
-        return new ConfigurationBackupService(database, protector, new AppLinkService(), new ScheduleService(timeProvider), timeProvider);
+        var pushSubscriptions = new WebPushSubscriptionService(database, protector, timeProvider);
+        return new ConfigurationBackupService(database, protector, new AppLinkService(), pushSubscriptions, new ScheduleService(timeProvider), timeProvider);
+    }
+
+    private static WebPushSubscriptionInput CreatePushSubscription()
+    {
+        using var key = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        var parameters = key.ExportParameters(includePrivateParameters: false);
+        var publicKey = new byte[65];
+        publicKey[0] = 4;
+        parameters.Q.X!.CopyTo(publicKey, 1);
+        parameters.Q.Y!.CopyTo(publicKey, 33);
+        return new WebPushSubscriptionInput(
+            "https://push.example.test/send/recovery-device",
+            WebPushEncoding.EncodeBase64Url(publicKey),
+            WebPushEncoding.EncodeBase64Url(Enumerable.Range(1, 16).Select(value => (byte)value).ToArray()),
+            null,
+            "Recovery phone",
+            "Test browser");
     }
 
     private static void ConfigureSettings(SettingsRecord settings, ISecretProtector protector, string apiKey)

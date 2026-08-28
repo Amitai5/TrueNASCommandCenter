@@ -70,10 +70,15 @@ builder.Services.AddSingleton<IUptimeKumaClient, UptimeKumaClient>();
 builder.Services.AddSingleton<IUptimeKumaSyncService, UptimeKumaSyncService>();
 builder.Services.AddScoped<IEmailNotificationSender, EmailNotificationSender>();
 builder.Services.AddScoped<IWebhookNotificationSender, WebhookNotificationSender>();
+builder.Services.AddSingleton<IWebPushSubscriptionService, WebPushSubscriptionService>();
+builder.Services.AddSingleton<IWebPushProtocolClient, WebPushProtocolClient>();
+builder.Services.AddScoped<IWebPushNotificationSender, WebPushNotificationSender>();
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 builder.Services.AddSingleton<IScheduleService, ScheduleService>();
 builder.Services.AddSingleton<IConfigurationBackupService, ConfigurationBackupService>();
 builder.Services.AddHttpClient("webhook");
+builder.Services.AddHttpClient("web-push", client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("github", client =>
 {
     client.BaseAddress = new Uri("https://api.github.com/");
@@ -118,6 +123,11 @@ app.Use(async (context, next) =>
             if (isServiceWorker)
             {
                 context.Response.Headers["Service-Worker-Allowed"] = "/";
+                context.Response.ContentType = "text/javascript; charset=utf-8";
+            }
+            else
+            {
+                context.Response.ContentType = "application/manifest+json; charset=utf-8";
             }
 
             return Task.CompletedTask;

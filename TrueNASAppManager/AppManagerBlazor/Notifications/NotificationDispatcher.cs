@@ -14,6 +14,7 @@ public sealed class NotificationDispatcher(
     IDbContextFactory<AppDbContext> dbFactory,
     IEmailNotificationSender emailSender,
     IWebhookNotificationSender webhookSender,
+    IWebPushNotificationSender pushSender,
     TimeProvider timeProvider) : INotificationDispatcher
 {
     public async Task DispatchAsync(
@@ -50,6 +51,11 @@ public sealed class NotificationDispatcher(
         if (settings.WebhookEnabled)
         {
             await DeliverAsync(notification, NotificationProvider.Webhook, webhookSender.SendAsync, cancellationToken);
+        }
+
+        if (ShouldSendPush(notification.EventType) && await pushSender.HasSubscriptionsAsync(cancellationToken))
+        {
+            await DeliverAsync(notification, NotificationProvider.Push, pushSender.SendAsync, cancellationToken);
         }
     }
 
@@ -105,6 +111,16 @@ public sealed class NotificationDispatcher(
             NotificationEventType.TrueNasConnectionFailed => settings.NotifyConnectionFailure,
             _ => false
         };
+
+    private static bool ShouldSendPush(NotificationEventType eventType) =>
+        eventType is NotificationEventType.AppDowntime or
+            NotificationEventType.AppRecoveryFailed or
+            NotificationEventType.ManualApprovalAvailable or
+            NotificationEventType.AutomaticUpdateFailed or
+            NotificationEventType.AutomaticUpdateBlocked or
+            NotificationEventType.RollbackOccurred or
+            NotificationEventType.ScheduledCheckFailed or
+            NotificationEventType.TrueNasConnectionFailed;
 
     private static string? Sanitize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Length <= 1024 ? value : value[..1024];

@@ -157,6 +157,7 @@ public sealed class PersistenceAndNotificationTests
             database,
             email,
             new FakeWebhookSender(),
+            new FakeWebPushSender(),
             new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)));
         var notification = Event(
             NotificationEventType.ManualApprovalAvailable,
@@ -186,12 +187,77 @@ public sealed class PersistenceAndNotificationTests
             database,
             email,
             new FakeWebhookSender(),
+            new FakeWebPushSender(),
             new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)));
 
         await dispatcher.DispatchAsync(Event(NotificationEventType.TrueNasConnectionFailed, "connection|NETWORK"));
         await dispatcher.DispatchAsync(Event(NotificationEventType.TrueNasConnectionFailed, "connection|TLS"));
 
         Assert.AreEqual(1, email.Calls);
+    }
+
+    [TestMethod]
+    public async Task Dispatcher_AppDowntime_WithRegisteredDevice_DeliversPushOnce()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var push = new FakeWebPushSender(hasSubscriptions: true);
+        var dispatcher = new NotificationDispatcher(
+            database,
+            new FakeEmailSender(),
+            new FakeWebhookSender(),
+            push,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)));
+        var notification = Event(NotificationEventType.AppDowntime, "downtime|app|incident");
+
+        await dispatcher.DispatchAsync(notification);
+        await dispatcher.DispatchAsync(notification with { EventId = Guid.NewGuid() });
+
+        Assert.AreEqual(1, push.Calls);
+        await using var db = await database.CreateDbContextAsync();
+        var record = await db.Notifications.SingleAsync();
+        Assert.AreEqual(NotificationProvider.Push, record.Provider);
+        Assert.AreEqual(DeliveryStatus.Delivered, record.Status);
+    }
+
+    [TestMethod]
+    public async Task Dispatcher_AutomaticUpdateFailure_WhenEnabled_DeliversPush()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync(settings => settings.NotifyAutomaticFailure = true);
+        var push = new FakeWebPushSender(hasSubscriptions: true);
+        var dispatcher = new NotificationDispatcher(
+            database,
+            new FakeEmailSender(),
+            new FakeWebhookSender(),
+            push,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)));
+
+        await dispatcher.DispatchAsync(Event(NotificationEventType.AutomaticUpdateFailed, "update|app|failed"));
+
+        Assert.AreEqual(1, push.Calls);
+        await using var db = await database.CreateDbContextAsync();
+        Assert.AreEqual(NotificationProvider.Push, (await db.Notifications.SingleAsync()).Provider);
+    }
+
+    [TestMethod]
+    public async Task Dispatcher_AutomaticUpdateSuccess_DoesNotDeliverPush()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync(settings => settings.NotifyAutomaticSuccess = true);
+        var push = new FakeWebPushSender(hasSubscriptions: true);
+        var dispatcher = new NotificationDispatcher(
+            database,
+            new FakeEmailSender(),
+            new FakeWebhookSender(),
+            push,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)));
+
+        await dispatcher.DispatchAsync(Event(NotificationEventType.AutomaticUpdateSucceeded, "update|app|succeeded"));
+
+        Assert.AreEqual(0, push.Calls);
+        await using var db = await database.CreateDbContextAsync();
+        Assert.AreEqual(0, await db.Notifications.CountAsync());
     }
 
     [TestMethod]

@@ -36,7 +36,7 @@
                 <strong>@ApplicationVersion.Display</strong>
             </div>
             <div class="sidebar-utilities">
-                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-describedby="desktop-pwa-status">
+                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-controls="pwa-install-dialog" aria-describedby="desktop-pwa-status">
                     <NavIcon Name="install" /> <span>Install app</span>
                 </button>
                 <span id="desktop-pwa-status" class="pwa-install-status" data-pwa-install-status hidden aria-live="polite"></span>
@@ -57,9 +57,10 @@
             <span><strong>App Manager</strong><small>TrueNAS</small></span>
         </a>
         <div class="mobile-header-actions">
-            <button type="button" class="mobile-install-button" data-pwa-install aria-label="Install TrueNAS App Manager">
+            <button type="button" class="mobile-install-button" data-pwa-install aria-label="Install TrueNAS App Manager" aria-controls="pwa-install-dialog" aria-describedby="mobile-header-pwa-status">
                 <NavIcon Name="install" /><span>Install</span>
             </button>
+            <span id="mobile-header-pwa-status" class="visually-hidden" data-pwa-install-status hidden aria-live="polite"></span>
             <button type="button" class="mobile-menu-button" aria-label="Open navigation" aria-expanded="@(_mobileMenuOpen ? "true" : "false")" aria-controls="mobile-navigation" @onclick="ToggleMobileMenu">
                 <NavIcon Name="menu" /><span>Menu</span>
             </button>
@@ -69,6 +70,52 @@
     <main>
         @Body
     </main>
+
+    <dialog id="pwa-install-dialog" class="pwa-install-dialog" data-pwa-install-dialog aria-labelledby="pwa-install-dialog-title">
+        <div class="pwa-install-dialog-content">
+            <div class="pwa-install-dialog-heading">
+                <div>
+                    <span class="eyebrow" data-pwa-install-platform>Browser installation</span>
+                    <h2 id="pwa-install-dialog-title" data-pwa-install-title>Install TrueNAS App Manager</h2>
+                </div>
+                <button type="button" class="pwa-install-dialog-close" data-pwa-install-close aria-label="Close installation help"><NavIcon Name="close" /></button>
+            </div>
+
+            <p class="pwa-install-dialog-message" data-pwa-install-message>Use your browser's installation command to add this app to your device.</p>
+            <div class="notice danger pwa-install-error" data-pwa-install-error hidden role="alert"></div>
+
+            <div class="pwa-install-readiness" aria-label="Installation readiness">
+                <div data-pwa-readiness-secure>
+                    <span>Secure page</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+                <div data-pwa-readiness-manifest>
+                    <span>App manifest</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+                <div data-pwa-readiness-worker>
+                    <span>Offline worker</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+                <div data-pwa-readiness-method>
+                    <span>Install method</span>
+                    <strong data-pwa-readiness-value>Checking…</strong>
+                </div>
+            </div>
+
+            <ol class="pwa-install-steps" data-pwa-install-steps></ol>
+
+            <div class="pwa-install-origin">
+                <span>Current address</span>
+                <code data-pwa-install-address></code>
+            </div>
+
+            <div class="pwa-install-dialog-actions">
+                <button type="button" class="primary" data-pwa-install-retry hidden>Install now</button>
+                <button type="button" data-pwa-install-close>Close</button>
+            </div>
+        </div>
+    </dialog>
 
     @if (_mobileMenuOpen)
     {
@@ -95,7 +142,7 @@
                     <span>TrueNAS IP <strong>@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong></span>
                     <span>Version <strong>@ApplicationVersion.Display</strong></span>
                 </div>
-                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-describedby="mobile-pwa-status">
+                <button type="button" class="sidebar-utility pwa-install-control" data-pwa-install aria-controls="pwa-install-dialog" aria-describedby="mobile-pwa-status">
                     <NavIcon Name="install" /> <span>Install app</span>
                 </button>
                 <span id="mobile-pwa-status" class="pwa-install-status" data-pwa-install-status hidden aria-live="polite"></span>

@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using TrueNasAppManager.Data;
 using TrueNasAppManager.Domain;
+using TrueNasAppManager.Notifications;
 using TrueNasAppManager.Scheduling;
 
 namespace TrueNasAppManager.Services;
@@ -42,10 +43,11 @@ public sealed class ConfigurationBackupService(
     IDbContextFactory<AppDbContext> dbFactory,
     ISecretProtector secretProtector,
     IAppLinkService appLinkService,
+    IWebPushSubscriptionService webPushSubscriptions,
     IScheduleService scheduleService,
     TimeProvider timeProvider) : IConfigurationBackupService
 {
-    private const int SchemaVersion = 4;
+    private const int SchemaVersion = 5;
     private const int MaximumBackupBytes = 2 * 1024 * 1024;
     private const int PasswordIterations = 600_000;
     private const string AdditionalData = "TrueNasAppManager:configuration-backup:v1";
@@ -83,7 +85,7 @@ public sealed class ConfigurationBackupService(
         cancellationToken.ThrowIfCancellationRequested();
         var envelope = ParseEnvelope(json);
         var payload = ReadPayload(envelope, password);
-        ValidatePayload(payload, envelope.IncludesSecrets);
+        ValidatePayload(payload, envelope.IncludesSecrets, envelope.SchemaVersion);
         return Task.FromResult(new ConfigurationBackupPreview(envelope.SchemaVersion, envelope.ExportedAtUtc, envelope.ApplicationVersion, envelope.IncludesSecrets, payload.Apps.Count));
     }
 
@@ -92,13 +94,33 @@ public sealed class ConfigurationBackupService(
     {
         var envelope = ParseEnvelope(json);
         var payload = ReadPayload(envelope, password);
-        ValidatePayload(payload, envelope.IncludesSecrets);
+        ValidatePayload(payload, envelope.IncludesSecrets, envelope.SchemaVersion);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var settings = await db.Settings.SingleAsync(item => item.Id == 1, cancellationToken);
         ApplySettings(settings, payload.Settings, envelope.SchemaVersion);
         ApplySecrets(settings, payload.Secrets ?? throw new InvalidOperationException("The full recovery backup does not contain its secret configuration."), envelope.SchemaVersion);
+
+        if (envelope.SchemaVersion >= 5 && payload.PushSubscriptions is not null)
+        {
+            db.WebPushSubscriptions.RemoveRange(await db.WebPushSubscriptions.ToListAsync(cancellationToken));
+            foreach (var subscription in payload.PushSubscriptions)
+            {
+                db.WebPushSubscriptions.Add(new WebPushSubscriptionRecord
+                {
+                    Id = subscription.Id,
+                    Endpoint = subscription.Endpoint,
+                    P256dh = subscription.P256dh,
+                    Auth = subscription.Auth,
+                    ExpirationUtc = subscription.ExpirationUtc,
+                    DeviceName = subscription.DeviceName,
+                    UserAgent = subscription.UserAgent,
+                    CreatedUtc = subscription.CreatedUtc,
+                    LastSeenUtc = subscription.LastSeenUtc
+                });
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(settings.TrueNasUsername) || string.IsNullOrWhiteSpace(settings.TrueNasApiKeyEncrypted))
         {
@@ -139,12 +161,21 @@ public sealed class ConfigurationBackupService(
 
     private async Task<BackupPayload> LoadPayloadAsync(CancellationToken cancellationToken)
     {
+        await webPushSubscriptions.GetPublicKeyAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var settings = await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1, cancellationToken);
         var apps = await db.Apps.AsNoTracking().Include(app => app.UptimeKumaMonitors).OrderBy(app => app.Id).ToListAsync(cancellationToken);
+        var pushSubscriptions = await db.WebPushSubscriptions.AsNoTracking().OrderBy(item => item.CreatedUtc).ToListAsync(cancellationToken);
         var appConfigurations = apps.Select(CreateAppBackup).ToList();
-        var secrets = new BackupSecrets(ReadSecret(settings.TrueNasApiKeyEncrypted), ReadSecret(settings.WebhookAuthorizationEncrypted), ReadSecret(settings.WebhookHeadersEncrypted), ReadSecret(settings.UptimeKumaApiKeyEncrypted));
-        return new BackupPayload(CreateSettingsBackup(settings), appConfigurations, secrets);
+        var secrets = new BackupSecrets(
+            ReadSecret(settings.TrueNasApiKeyEncrypted),
+            ReadSecret(settings.WebhookAuthorizationEncrypted),
+            ReadSecret(settings.WebhookHeadersEncrypted),
+            ReadSecret(settings.UptimeKumaApiKeyEncrypted),
+            settings.WebPushPublicKey,
+            ReadSecret(settings.WebPushPrivateKeyEncrypted));
+        var pushConfiguration = pushSubscriptions.Select(item => new BackupPushSubscription(item.Id, item.Endpoint, item.P256dh, item.Auth, item.ExpirationUtc, item.DeviceName, item.UserAgent, item.CreatedUtc, item.LastSeenUtc)).ToList();
+        return new BackupPayload(CreateSettingsBackup(settings), appConfigurations, secrets, pushConfiguration);
     }
 
     private BackupAppConfiguration CreateAppBackup(AppRecord app)
@@ -199,7 +230,7 @@ public sealed class ConfigurationBackupService(
         settings.UptimeKumaRefreshIntervalSeconds,
         settings.OnboardingStep);
 
-    private void ValidatePayload(BackupPayload payload, bool includesSecrets)
+    private void ValidatePayload(BackupPayload payload, bool includesSecrets, int schemaVersion)
     {
         if (payload.Settings is null || payload.Apps is null || payload.Settings.EmailRecipients is null)
         {
@@ -209,6 +240,36 @@ public sealed class ConfigurationBackupService(
         if (includesSecrets != (payload.Secrets is not null))
         {
             throw new InvalidOperationException("The backup secret payload does not match its declared mode.");
+        }
+
+        if (schemaVersion >= 5)
+        {
+            if (payload.PushSubscriptions is null || string.IsNullOrWhiteSpace(payload.Secrets?.WebPushPublicKey) || string.IsNullOrWhiteSpace(payload.Secrets.WebPushPrivateKey))
+            {
+                throw new InvalidOperationException("The full recovery backup is missing its browser push configuration.");
+            }
+
+            WebPushEncoding.ValidateVapidKeyPair(payload.Secrets.WebPushPublicKey, payload.Secrets.WebPushPrivateKey);
+            var duplicateEndpoint = payload.PushSubscriptions.GroupBy(item => item.Endpoint, StringComparer.Ordinal).FirstOrDefault(group => group.Count() > 1);
+            if (duplicateEndpoint is not null)
+            {
+                throw new InvalidOperationException("The backup contains duplicate browser push subscriptions.");
+            }
+
+            var duplicateSubscriptionId = payload.PushSubscriptions.GroupBy(item => item.Id).FirstOrDefault(group => group.Count() > 1);
+            if (duplicateSubscriptionId is not null)
+            {
+                throw new InvalidOperationException("The backup contains duplicate browser push subscription IDs.");
+            }
+
+            foreach (var subscription in payload.PushSubscriptions)
+            {
+                WebPushEncoding.ValidateSubscriptionMaterial(subscription.Endpoint, subscription.P256dh, subscription.Auth);
+                if (subscription.Id == Guid.Empty || subscription.CreatedUtc == default || subscription.LastSeenUtc == default || subscription.DeviceName?.Length > 128 || subscription.UserAgent?.Length > 512)
+                {
+                    throw new InvalidOperationException("The backup contains an invalid browser push subscription.");
+                }
+            }
         }
 
         if (payload.Settings.SchedulerEnabled)
@@ -329,6 +390,12 @@ public sealed class ConfigurationBackupService(
         if (schemaVersion >= 2)
         {
             target.UptimeKumaApiKeyEncrypted = ProtectOptional(secrets.UptimeKumaApiKey);
+        }
+
+        if (schemaVersion >= 5)
+        {
+            target.WebPushPublicKey = NullIfWhiteSpace(secrets.WebPushPublicKey);
+            target.WebPushPrivateKeyEncrypted = ProtectOptional(secrets.WebPushPrivateKey);
         }
     }
 
@@ -652,7 +719,7 @@ internal sealed record BackupEnvelope
     public BackupEncryption? Encryption { get; init; }
 }
 
-internal sealed record BackupPayload(BackupSettings Settings, List<BackupAppConfiguration> Apps, BackupSecrets? Secrets);
+internal sealed record BackupPayload(BackupSettings Settings, List<BackupAppConfiguration> Apps, BackupSecrets? Secrets, List<BackupPushSubscription>? PushSubscriptions = null);
 
 internal sealed record BackupSettings(
     bool OnboardingCompleted,
@@ -701,6 +768,23 @@ internal sealed record BackupAppConfiguration(
     bool? IsFavorite = null,
     string? GroupName = null);
 
-internal sealed record BackupSecrets(string? TrueNasApiKey, string? WebhookAuthorization, string? WebhookHeaders, string? UptimeKumaApiKey = null);
+internal sealed record BackupSecrets(
+    string? TrueNasApiKey,
+    string? WebhookAuthorization,
+    string? WebhookHeaders,
+    string? UptimeKumaApiKey = null,
+    string? WebPushPublicKey = null,
+    string? WebPushPrivateKey = null);
+
+internal sealed record BackupPushSubscription(
+    Guid Id,
+    string Endpoint,
+    string P256dh,
+    string Auth,
+    DateTime? ExpirationUtc,
+    string? DeviceName,
+    string? UserAgent,
+    DateTime CreatedUtc,
+    DateTime LastSeenUtc);
 
 internal sealed record BackupEncryption(string Kdf, int Iterations, string Salt, string Cipher, string Nonce, string Tag, string Ciphertext);

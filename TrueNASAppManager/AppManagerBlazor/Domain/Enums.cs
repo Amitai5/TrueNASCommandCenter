@@ -120,7 +120,8 @@ public enum UptimeKumaMonitorStatus
 public enum NotificationProvider
 {
     Email,
-    Webhook
+    Webhook,
+    Push
 }
 
 public enum DeliveryStatus

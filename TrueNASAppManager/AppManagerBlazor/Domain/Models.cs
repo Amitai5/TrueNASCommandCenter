@@ -87,6 +87,58 @@ public sealed record NotificationEvent(
 
 public sealed record NotificationDeliveryResult(bool Success, int? HttpStatusCode = null, string? Error = null);
 
+/// <summary>Contains the browser-generated subscription material required to register one device for Web Push.</summary>
+public sealed record WebPushSubscriptionInput(
+    string Endpoint,
+    string P256dh,
+    string Auth,
+    DateTimeOffset? ExpirationTime,
+    string? DeviceName,
+    string? UserAgent)
+{
+    /// <inheritdoc />
+    public override string ToString() => $"WebPushSubscriptionInput {{ DeviceName = {DeviceName ?? "Browser device"}, HasEndpoint = {!string.IsNullOrWhiteSpace(Endpoint)} }}";
+}
+
+/// <summary>Describes Web Push capability, permission, and the current browser subscription.</summary>
+public sealed record WebPushBrowserState(
+    bool Supported,
+    bool SecureContext,
+    string Permission,
+    WebPushSubscriptionInput? Subscription,
+    string? Error = null);
+
+/// <summary>Describes one registered browser without exposing its subscription encryption keys.</summary>
+public sealed record WebPushSubscriptionSummary(
+    Guid Id,
+    string DeviceName,
+    DateTime CreatedUtc,
+    DateTime LastSeenUtc,
+    DateTime? LastSuccessUtc,
+    DateTime? LastFailureUtc,
+    int ConsecutiveFailures);
+
+/// <summary>Provides the VAPID identity and registered devices used for a push delivery operation.</summary>
+public sealed record WebPushDeliveryConfiguration(
+    string PublicKey,
+    string PrivateKey,
+    IReadOnlyList<WebPushSubscriptionRecord> Subscriptions)
+{
+    /// <inheritdoc />
+    public override string ToString() => $"WebPushDeliveryConfiguration {{ SubscriptionCount = {Subscriptions.Count} }}";
+}
+
+/// <summary>Contains a standards-based Web Push request before encryption and transport.</summary>
+public sealed record WebPushProtocolRequest(
+    string Endpoint,
+    string VapidPublicKey,
+    string VapidPrivateKey,
+    int TimeToLiveSeconds = 3600)
+{
+    /// <inheritdoc />
+    public override string ToString() => $"WebPushProtocolRequest {{ EndpointHost = {(Uri.TryCreate(Endpoint, UriKind.Absolute, out var endpoint) ? endpoint.Host : "invalid")}, TimeToLiveSeconds = {TimeToLiveSeconds} }}";
+}
+
 public sealed record AppManagementResult(bool Success, string Message, string? State = null, string? ErrorCode = null);
 
 public sealed record InventoryRefreshResult(int Discovered, int Missing, IReadOnlyList<string> AppIds);

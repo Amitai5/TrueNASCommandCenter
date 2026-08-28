@@ -286,6 +286,38 @@ public sealed class NotificationRecord
     public string? ErrorSummary { get; set; }
 }
 
+public sealed class WebPushSubscriptionRecord
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    [MaxLength(4096)]
+    public string Endpoint { get; set; } = string.Empty;
+
+    [MaxLength(256)]
+    public string P256dh { get; set; } = string.Empty;
+
+    [MaxLength(128)]
+    public string Auth { get; set; } = string.Empty;
+
+    public DateTime? ExpirationUtc { get; set; }
+
+    [MaxLength(128)]
+    public string? DeviceName { get; set; }
+
+    [MaxLength(512)]
+    public string? UserAgent { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+    public DateTime LastSeenUtc { get; set; }
+    public DateTime? LastSuccessUtc { get; set; }
+    public DateTime? LastFailureUtc { get; set; }
+    public int ConsecutiveFailures { get; set; }
+
+    [MaxLength(512)]
+    public string? LastError { get; set; }
+}
+
 public sealed class SettingsRecord
 {
     [Key]
@@ -387,4 +419,9 @@ public sealed class SettingsRecord
 
     [MaxLength(1024)]
     public string? LastUptimeKumaError { get; set; }
+
+    [MaxLength(256)]
+    public string? WebPushPublicKey { get; set; }
+
+    public string? WebPushPrivateKeyEncrypted { get; set; }
 }

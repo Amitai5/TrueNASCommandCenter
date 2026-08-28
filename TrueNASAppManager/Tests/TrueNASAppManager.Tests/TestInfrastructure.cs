@@ -176,6 +176,19 @@ internal sealed class FakeHttpClientFactory(HttpMessageHandler handler, Uri? bas
     public HttpClient CreateClient(string name) => new(handler, disposeHandler: false) { BaseAddress = baseAddress };
 }
 
+internal sealed class FakeWebPushSender(bool hasSubscriptions = false) : IWebPushNotificationSender
+{
+    public int Calls { get; private set; }
+
+    public Task<bool> HasSubscriptionsAsync(CancellationToken cancellationToken = default) => Task.FromResult(hasSubscriptions);
+
+    public Task<NotificationDeliveryResult> SendAsync(NotificationEvent notification, CancellationToken cancellationToken = default)
+    {
+        Calls++;
+        return Task.FromResult(new NotificationDeliveryResult(true, 201));
+    }
+}
+
 internal sealed class SequenceHttpHandler(params Func<HttpRequestMessage, HttpResponseMessage>[] responses)
     : HttpMessageHandler
 {

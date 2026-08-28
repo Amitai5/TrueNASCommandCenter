@@ -7,7 +7,7 @@
 [![TrueNAS](https://img.shields.io/badge/TrueNAS-25.10%2B-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://www.truenas.com/)
 [![License](https://img.shields.io/badge/license-MIT-16A34A?style=for-the-badge)](LICENSE)
 
-TrueNAS App Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, manages their lifecycle, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email or webhook notifications.
+TrueNAS App Manager is a single-container web application for TrueNAS Community Edition / SCALE 25.10 and later. It discovers installed apps, manages their lifecycle, applies explicit per-app update policies, schedules safe checks and updates, records history, and sends optional email, webhook, or browser push notifications.
 
 TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2.0 middleware API for discovery, host information, native alerts, operating-system update status, live resource and pool status, app lifecycle actions, catalog upgrades, image refreshes, job monitoring, and rollbacks. It never controls Docker directly.
 
@@ -31,7 +31,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Favorites and custom app groups with dashboard filtering and portable backup support
 - Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
 - Password-protected full-recovery JSON with validated, transactional merge restore
-- Optional TrueNAS-native email and generic webhook notifications
+- Optional TrueNAS-native email, generic webhook, and per-device browser push notifications
 - Optional public GitHub repository facts with 24-hour ETag caching and no token
 - Encrypted API, Authorization, and secret-header values
 - Detailed run, attempt, skip, failure, rollback, and notification history
@@ -113,9 +113,15 @@ Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not 
 
 ### Install on a phone, tablet, or desktop
 
-Open the manager through an HTTPS address, then choose **Install app** in the desktop sidebar or mobile navigation menu. Chrome and Edge show the native install prompt. On iPhone and iPad, open the browser Share menu and choose **Add to Home Screen**. The installed app opens in its own window and includes shortcuts to Dashboard, Apps, and Monitoring.
+Open the manager through an HTTPS address, then choose **Install app** in the desktop sidebar or mobile header. Chrome and Edge show the native install prompt. Samsung Internet may instead show its install icon in the address bar; if it does not, open the Samsung Internet menu and choose **Add page to → Home screen**, then confirm **Install on Apps screen**. The App Manager now shows browser-specific instructions and live checks for HTTPS, the app manifest, and the service worker whenever a browser does not expose its native prompt. On iPhone and iPad, open the browser Share menu and choose **Add to Home Screen**. The installed app opens in its own window and includes shortcuts to Dashboard, Apps, and Monitoring.
 
-Browser security rules do not permit manifest-based installation from plain `http://truenas.local` or a private IP. Use an authenticated HTTPS reverse proxy for an installable production address; `http://localhost` and `http://127.0.0.1` remain valid for local development. The service worker caches only the branded offline screen and static icon assets. Live TrueNAS status, logs, Uptime Kuma reports, and management actions always require a working connection to the App Manager server.
+Browser security rules do not permit manifest-based installation from plain `http://truenas.local` or a private IP, including on Samsung Galaxy devices. Use an authenticated HTTPS reverse proxy for an installable production address; `http://localhost` and `http://127.0.0.1` remain valid for local development. Also open the address in a full browser rather than an embedded browser inside another app. The service worker caches only the branded offline screen and static icon assets. Live TrueNAS status, logs, Uptime Kuma reports, and management actions always require a working connection to the App Manager server.
+
+### Enable browser push notifications
+
+Open **Settings → Notifications → Browser push** from each phone, tablet, or computer that should receive alerts, give the device an optional name, and select **Enable on this device**. Permission is requested only from that explicit click. Use **Send test push** before relying on the device, and use **Forget** to retire a device you no longer control.
+
+Push requires the same secure context as PWA installation. On iPhone and iPad, first add the App Manager to the Home Screen and enable push from the installed app. The App Manager container must also be able to make outbound HTTPS requests to the push-service host returned by each browser. Each browser subscription is stored locally in `/data`; the VAPID private key is encrypted at rest. Browser-vendor push services receive an authenticated, payload-free wake-up—not app names, TrueNAS addresses, or error details. The device displays a generic alert and opens the Dashboard for details. Push is sent for attention events such as app downtime, failed recovery, manual approval, blocked or failed updates, rollback, scheduled-check failure, and TrueNAS connection failure. Per-app downtime delivery still follows that app's configured downtime action.
 
 This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
 
@@ -245,7 +251,7 @@ The API key is stored encrypted. Keep TLS verification enabled for HTTPS connect
 
 Open **Settings → Backup & restore** for portable configuration backups:
 
-- **Full recovery JSON** is the disaster-recovery option. It contains every saved global setting and per-app configuration, including the TrueNAS API key, Uptime Kuma API key, webhook authorization and secret headers, schedules, notifications, monitor mappings, policies, favorites, groups, downtime behavior, maintenance state, and local/remote Web UI links. The payload is protected with a password-derived key and can rebuild a fresh installation without the previous `/data` volume.
+- **Full recovery JSON** is the disaster-recovery option. It contains every saved global setting and per-app configuration, including the TrueNAS API key, Uptime Kuma API key, webhook authorization and secret headers, browser push VAPID identity and device subscriptions, schedules, notifications, monitor mappings, policies, favorites, groups, downtime behavior, maintenance state, and local/remote Web UI links. The payload is protected with a password-derived key and can rebuild a fresh installation without the previous `/data` volume.
 - Restore accepts only password-protected full recovery JSON files. Secret-free exports are not accepted, and the password is required for both validation and import.
 - Imports validate and authenticate the complete file before a transactional merge. Listed app configurations are restored by app ID, unlisted apps and existing history remain unchanged, and undiscovered app policies are held until the next inventory refresh.
 

@@ -24,9 +24,9 @@ The liveness endpoint should return a successful response at `http://<truenas-ad
 
 ### Optional Progressive Web App installation
 
-For an app-like launcher on a phone, tablet, or desktop, open TrueNAS App Manager through an authenticated HTTPS reverse proxy and select **Install app** from the sidebar or mobile navigation menu. Chromium browsers display their native installation prompt. On iPhone and iPad, use the browser Share menu and select **Add to Home Screen**.
+For an app-like launcher on a phone, tablet, or desktop, open TrueNAS App Manager through an authenticated HTTPS reverse proxy and select **Install app** from the sidebar or mobile header. Chromium browsers normally display their native installation prompt. On Samsung Internet, use the address-bar install icon or choose **Add page to → Home screen** from the browser menu and confirm **Install on Apps screen**. When no native prompt is available, the App Manager opens browser-specific instructions plus checks for HTTPS, a valid manifest, and an active service worker. On iPhone and iPad, use the browser Share menu and select **Add to Home Screen**.
 
-Plain `http://truenas.local` and private-IP URLs remain supported for normal browser use, but browsers do not consider them eligible for PWA installation. Only HTTPS, or `http://localhost` / `http://127.0.0.1` during development, meets the secure installation requirement. The installed shell shows a purpose-built offline screen when the manager cannot be reached; app state, logs, monitoring, and lifecycle actions are intentionally not cached and still require a live server connection.
+Plain `http://truenas.local` and private-IP URLs remain supported for normal browser use, but Android and desktop browsers do not consider them eligible for PWA installation. Only HTTPS, or `http://localhost` / `http://127.0.0.1` during development, meets the secure installation requirement. If the page was opened inside Google Search, Gmail, Facebook, Instagram, or another embedded browser, open it in Samsung Internet or Chrome before installing. The installed shell shows a purpose-built offline screen when the manager cannot be reached; app state, logs, monitoring, and lifecycle actions are intentionally not cached and still require a live server connection.
 
 ## 1. Create a service account and API key
 
@@ -200,13 +200,16 @@ The schedule is stored in `/data`; no separate TrueNAS cron task is needed. Miss
 
 ## 4. Configure notifications
 
-Email and generic webhook notifications are optional. Enable only the providers and event types you want.
+Email, generic webhook, and browser push notifications are optional. Enable only the providers and event types you want.
 
 - Email uses the existing TrueNAS mail configuration through the authenticated `mail.send` method. Leave recipients blank to use TrueNAS administrator addresses, or enter explicit recipients.
 - Webhooks require an HTTPS endpoint and can include an Authorization value or secret headers.
+- Browser push is enabled separately on each device under **Browser push**. Enter an optional device name, select **Enable on this device**, approve the browser prompt, and send a test push. Use **Forget** for devices that should no longer receive alerts.
 - Use the test button for each configured provider before continuing.
 
 Secrets are encrypted before being stored. Leaving a saved secret field blank preserves the existing value.
+
+Browser push requires an HTTPS App Manager address; only `localhost` and `127.0.0.1` receive the browser's HTTP development exception. Plain `http://truenas.local` and private-IP pages cannot request notification permission. The App Manager container also needs outbound HTTPS access to the push-service host contained in each browser subscription. On iPhone and iPad, add the PWA to the Home Screen first and enable notifications from the installed app. Push notifications intentionally contain no app name, server address, or error text while traversing a browser-vendor push service. They open the local Dashboard for details. Push covers attention events only; app-down alerts also require that app's downtime action to be **Notify Only** or **Restart and Notify**.
 
 ## 5. Discover apps and assign policies
 
@@ -298,7 +301,7 @@ Configure separate **Local Web UI URL** and **Remote Web UI URL** values under t
 
 Open **Settings → Backup & restore** to create a portable export:
 
-- **Download full recovery JSON** backs up every saved global setting and per-app configuration, including the TrueNAS and Uptime Kuma API keys, webhook authorization and secret headers, schedules, notifications, app-to-monitor mappings, policies, favorites and groups, downtime behavior, maintenance settings, and local/remote Web UI URLs. Enter and confirm a password of at least 12 characters; the JSON payload is encrypted and the password cannot be recovered.
+- **Download full recovery JSON** backs up every saved global setting and per-app configuration, including the TrueNAS and Uptime Kuma API keys, webhook authorization and secret headers, browser push identity and device subscriptions, schedules, notifications, app-to-monitor mappings, policies, favorites and groups, downtime behavior, maintenance settings, and local/remote Web UI URLs. Enter and confirm a password of at least 12 characters; the JSON payload is encrypted and the password cannot be recovered.
 
 To restore, install and open a fresh TrueNAS App Manager instance, select a password-protected full recovery JSON file up to 2 MB, enter its password, select **Validate & preview**, review the number of app configurations, and confirm the import. Secret-free backup files are rejected. Restore is a transactional merge by app ID: unlisted apps and existing history remain unchanged. Settings for apps not yet discovered are retained and applied when the next inventory refresh finds them. Restore re-encrypts imported secrets with the new installation's local key, resets the TrueNAS client, and refreshes inventory when the restored credentials are usable.
 
