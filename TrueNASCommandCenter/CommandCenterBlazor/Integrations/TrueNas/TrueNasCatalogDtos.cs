@@ -37,7 +37,7 @@ public sealed record TrueNasCatalogAppDto
     public string? LatestHumanVersion { get; init; }
 
     [JsonPropertyName("last_update")]
-    public string? LastUpdate { get; init; }
+    public JsonElement? LastUpdate { get; init; }
 
     [JsonPropertyName("name")]
     public string Name { get; init; } = string.Empty;

@@ -16,6 +16,7 @@ public sealed class CatalogDiscoveryService(
     ILogger<CatalogDiscoveryService> logger) : ICatalogDiscoveryService
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+    private static readonly string[] ExtendedDatePropertyNames = ["$date", "date", "datetime", "timestamp", "value", "last_update"];
     private readonly SemaphoreSlim refreshGate = new(1, 1);
     private CatalogDiscoverySnapshot? cached;
 
@@ -257,6 +258,54 @@ public sealed class CatalogDiscoveryService(
     private static DateTimeOffset? ParseDate(string? value)
     {
         return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed) ? parsed : null;
+    }
+
+    private static DateTimeOffset? ParseDate(JsonElement? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        return value.Value.ValueKind switch
+        {
+            JsonValueKind.String => ParseDate(value.Value.GetString()),
+            JsonValueKind.Number => ParseUnixDate(value.Value),
+            JsonValueKind.Object => ParseExtendedJsonDate(value.Value),
+            _ => null
+        };
+    }
+
+    private static DateTimeOffset? ParseExtendedJsonDate(JsonElement value)
+    {
+        foreach (var propertyName in ExtendedDatePropertyNames)
+        {
+            if (value.TryGetProperty(propertyName, out var nested))
+            {
+                return ParseDate(nested);
+            }
+        }
+
+        return null;
+    }
+
+    private static DateTimeOffset? ParseUnixDate(JsonElement value)
+    {
+        if (!value.TryGetInt64(out var timestamp))
+        {
+            return null;
+        }
+
+        try
+        {
+            return timestamp is >= 100_000_000_000 or <= -100_000_000_000
+                ? DateTimeOffset.FromUnixTimeMilliseconds(timestamp)
+                : DateTimeOffset.FromUnixTimeSeconds(timestamp);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
     }
 
     private static string? ReadAdditionalString(TrueNasCatalogAppDto source, string propertyName)

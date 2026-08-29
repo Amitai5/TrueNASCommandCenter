@@ -25,7 +25,8 @@ public sealed class CatalogDiscoveryTests
             {
                 community = new Dictionary<string, object>
                 {
-                    ["immich"] = CatalogPayload("immich", "Immich")
+                    ["immich"] = CatalogPayload("immich", "Immich"),
+                    ["netdata"] = CatalogPayload("netdata", "Netdata", new Dictionary<string, long> { ["$date"] = 1_777_201_400_000 })
                 }
             });
             return Task.CompletedTask;
@@ -38,6 +39,29 @@ public sealed class CatalogDiscoveryTests
         Assert.IsTrue(result.ContainsKey("community"));
         Assert.AreEqual("Immich", result["community"]["immich"].Title);
         Assert.AreEqual("NET_BIND_SERVICE", result["community"]["immich"].Capabilities[0].Name);
+        Assert.AreEqual(JsonValueKind.Object, result["community"]["netdata"].LastUpdate?.ValueKind);
+    }
+
+    /// <summary>Verifies that TrueNAS extended-JSON dates do not prevent the catalog gallery from loading.</summary>
+    [TestMethod]
+    public async Task GetCatalogAsync_ExtendedJsonLastUpdate_LoadsCatalogAndParsesDate()
+    {
+        var expected = new DateTimeOffset(2026, 4, 27, 12, 50, 0, TimeSpan.Zero);
+        var dto = CatalogDto("netdata", "Netdata") with
+        {
+            LastUpdate = JsonSerializer.SerializeToElement(new Dictionary<string, long> { ["$date"] = expected.ToUnixTimeMilliseconds() })
+        };
+        var catalog = new FakeCatalogClient(new Dictionary<string, IReadOnlyDictionary<string, TrueNasCatalogAppDto>>
+        {
+            ["stable"] = new Dictionary<string, TrueNasCatalogAppDto> { ["netdata"] = dto }
+        });
+        var service = CreateService(catalog, new FakeInstalledClient([]), new FakeDeploymentProvider(AvailableDeployments()));
+
+        var snapshot = await service.GetCatalogAsync(false);
+
+        Assert.AreEqual(CatalogAvailability.Available, snapshot.Availability);
+        Assert.HasCount(1, snapshot.Apps);
+        Assert.AreEqual(expected, snapshot.Apps[0].LastUpdatedUtc);
     }
 
     [TestMethod]
@@ -327,7 +351,7 @@ public sealed class CatalogDiscoveryTests
         Healthy = true,
         LatestVersion = "1.0.0",
         LatestAppVersion = "2.0.0",
-        LastUpdate = "2026-08-27 12:30:00",
+        LastUpdate = JsonSerializer.SerializeToElement("2026-08-27 12:30:00"),
         Categories = ["photos"],
         Tags = ["backup"],
         Sources = [$"https://apps.truenas.com/catalog/{name}_community/"]
@@ -346,7 +370,7 @@ public sealed class CatalogDiscoveryTests
         TrueNasAppsUrl = "https://apps.truenas.com/catalog/"
     };
 
-    private static object CatalogPayload(string name, string title) => new
+    private static object CatalogPayload(string name, string title, object? lastUpdate = null) => new
     {
         app_readme = "<p>README</p>",
         categories = new[] { "photos" },
@@ -358,7 +382,7 @@ public sealed class CatalogDiscoveryTests
         latest_version = "1.0.0",
         latest_app_version = "2.0.0",
         latest_human_version = "2.0.0_1.0.0",
-        last_update = "2026-08-27 12:30:00",
+        last_update = lastUpdate ?? "2026-08-27 12:30:00",
         name,
         recommended = true,
         title,
