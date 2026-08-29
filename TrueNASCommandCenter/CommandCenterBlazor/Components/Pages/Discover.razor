@@ -8,32 +8,49 @@
     <header class="page-header">
         <div>
             <h1>Discover apps</h1>
-            <p class="subtitle">Explore apps available from the TrueNAS catalog.</p>
+            <p class="subtitle">@(IsDockerHub ? "Find public Docker Hub images for TrueNAS custom apps." : "Explore apps available from the TrueNAS catalog.")</p>
         </div>
-        <div class="actions">
-            <button disabled="@_refreshing" @onclick="RefreshAsync">
-                @if (_refreshing)
-                {
-                    <span class="spinner"></span>
-                }
-                @(_refreshing ? "Refreshing…" : "Refresh catalog")
-            </button>
-        </div>
+        @if (!IsDockerHub)
+        {
+            <div class="actions">
+                <button disabled="@_refreshing" @onclick="RefreshAsync">
+                    @if (_refreshing)
+                    {
+                        <span class="spinner"></span>
+                    }
+                    @(_refreshing ? "Refreshing…" : "Refresh catalog")
+                </button>
+            </div>
+        }
     </header>
 
-    <div class="notice catalog-readonly-notice" role="note">
-        <strong>Discovery is read-only.</strong> Installation and configuration stay in TrueNAS.
-    </div>
+    <nav class="discovery-source-tabs" aria-label="App discovery source">
+        <a class="@(IsDockerHub ? null : "active")" href="/discover">TrueNAS catalog</a>
+        <a class="@(IsDockerHub ? "active" : null)" href="/discover?source=docker">Docker Hub custom apps</a>
+    </nav>
 
-    @if (_loading)
+    @if (IsDockerHub)
     {
-        <section class="panel catalog-loading-state" aria-label="Loading app catalog" aria-busy="true">
-            <span class="spinner"></span>
-            <div><strong>Loading the TrueNAS catalog…</strong><span>Apps will appear here when discovery finishes.</span></div>
-        </section>
+        <div class="notice catalog-readonly-notice" role="note">
+            <strong>Custom app discovery is read-only.</strong> Results are public Docker Hub images; installation and all runtime configuration stay in TrueNAS.
+        </div>
+        <DockerHubGallery />
     }
-    else if (_snapshot is null || (_snapshot.Availability is not CatalogAvailability.Available && _snapshot.Apps.Count == 0))
+    else
     {
+        <div class="notice catalog-readonly-notice" role="note">
+            <strong>Discovery is read-only.</strong> Installation and configuration stay in TrueNAS.
+        </div>
+
+        @if (_loading)
+        {
+            <section class="panel catalog-loading-state" aria-label="Loading app catalog" aria-busy="true">
+                <span class="spinner"></span>
+                <div><strong>Loading the TrueNAS catalog…</strong><span>Apps will appear here when discovery finishes.</span></div>
+            </section>
+        }
+        else if (_snapshot is null || (_snapshot.Availability is not CatalogAvailability.Available && _snapshot.Apps.Count == 0))
+        {
         <section class="panel empty-state catalog-error-state" role="alert">
             <div class="catalog-state-icon" aria-hidden="true">@StateIcon()</div>
             <h2>@StateTitle()</h2>
@@ -53,9 +70,9 @@
                 <p class="catalog-last-attempt">Last attempt completed @_lastAttemptedAtUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")</p>
             }
         </section>
-    }
-    else
-    {
+        }
+        else
+        {
         @if (!string.IsNullOrWhiteSpace(_snapshot.Message))
         {
             <div class="notice @(_snapshot.IsStale ? "warning" : null)" role="status">@_snapshot.Message</div>
@@ -152,6 +169,7 @@
                 }
             </section>
         }
+        }
     }
 </div>
 
@@ -171,9 +189,21 @@
     private bool _refreshing;
     private DateTimeOffset? _lastAttemptedAtUtc;
 
-    protected override async Task OnInitializedAsync()
+    [SupplyParameterFromQuery(Name = "source")]
+    public string? Source { get; set; }
+
+    private bool IsDockerHub => Source?.Equals("docker", StringComparison.OrdinalIgnoreCase) is true;
+
+    protected override async Task OnParametersSetAsync()
     {
-        await LoadAsync(false);
+        if (!IsDockerHub && _snapshot is null)
+        {
+            await LoadAsync(false);
+        }
+        else if (IsDockerHub)
+        {
+            _loading = false;
+        }
     }
 
     private async Task RefreshAsync()

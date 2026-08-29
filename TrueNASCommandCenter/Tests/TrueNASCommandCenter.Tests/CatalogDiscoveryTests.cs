@@ -65,6 +65,80 @@ public sealed class CatalogDiscoveryTests
     }
 
     [TestMethod]
+    public async Task GetCatalogAsync_OfficialMarketDateAndDeploymentTelemetry_EnablesNewestAndPopularity()
+    {
+        var expectedDate = new DateTimeOffset(2024, 8, 2, 0, 0, 0, TimeSpan.Zero);
+        var marketMetadata = new AppsMarketMetadataSnapshot(
+            new Dictionary<string, DateTimeOffset> { ["/catalog/immich_community"] = expectedDate },
+            new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero),
+            true);
+        var service = CreateService(new FakeCatalogClient(SingleCatalog()), new FakeInstalledClient([]), new FakeDeploymentProvider(AvailableDeployments()), new FakeAppsMarketMetadataProvider(marketMetadata));
+
+        var snapshot = await service.GetCatalogAsync(false);
+
+        Assert.IsTrue(snapshot.HasDateAdded);
+        Assert.AreEqual(expectedDate, snapshot.Apps[0].DateAddedUtc);
+        Assert.IsTrue(snapshot.HasPopularityRanks);
+        Assert.AreEqual(1, snapshot.Apps[0].PopularityRank);
+    }
+
+    [TestMethod]
+    public async Task GetCatalogAsync_DeploymentTelemetry_DerivesPopularityOrder()
+    {
+        var catalog = new FakeCatalogClient(new Dictionary<string, IReadOnlyDictionary<string, TrueNasCatalogAppDto>>
+        {
+            ["community"] = new Dictionary<string, TrueNasCatalogAppDto>
+            {
+                ["immich"] = CatalogDto("immich", "Immich"),
+                ["photoprism"] = CatalogDto("photoprism", "PhotoPrism")
+            }
+        });
+        var deployments = new ActiveDeploymentSnapshot(
+            new Dictionary<CatalogAppIdentity, long>
+            {
+                [TrueNasActiveDeploymentProvider.Normalize("community", "immich")] = 12_000,
+                [TrueNasActiveDeploymentProvider.Normalize("community", "photoprism")] = 4_000
+            },
+            new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero),
+            true);
+        var service = CreateService(catalog, new FakeInstalledClient([]), new FakeDeploymentProvider(deployments));
+
+        var snapshot = await service.GetCatalogAsync(false);
+        var query = new CatalogGalleryQuery(string.Empty, string.Empty, string.Empty, CatalogPresenceFilter.All, CatalogPresenceFilter.All, CatalogSortOrder.Popularity);
+        var sorted = CatalogGalleryQueryEngine.Apply(snapshot.Apps, query);
+
+        Assert.AreEqual(1, snapshot.Apps.Single(app => app.Identity.Name == "immich").PopularityRank);
+        Assert.AreEqual(2, snapshot.Apps.Single(app => app.Identity.Name == "photoprism").PopularityRank);
+        CollectionAssert.AreEqual(new[] { "immich", "photoprism" }, sorted.Select(app => app.Identity.Name).ToArray());
+    }
+
+    [TestMethod]
+    public async Task GetCatalogAsync_NestedAppMetadataDate_PrefersCatalogPayload()
+    {
+        var expectedDate = new DateTimeOffset(2025, 1, 8, 0, 0, 0, TimeSpan.Zero);
+        var dto = CatalogDto("immich", "Immich") with
+        {
+            AdditionalData = new Dictionary<string, JsonElement>
+            {
+                ["app_metadata"] = JsonSerializer.SerializeToElement(new { date_added = "2025-01-08" })
+            }
+        };
+        var catalog = new FakeCatalogClient(new Dictionary<string, IReadOnlyDictionary<string, TrueNasCatalogAppDto>>
+        {
+            ["community"] = new Dictionary<string, TrueNasCatalogAppDto> { ["immich"] = dto }
+        });
+        var marketMetadata = new AppsMarketMetadataSnapshot(
+            new Dictionary<string, DateTimeOffset> { ["/catalog/immich_community"] = new DateTimeOffset(2024, 8, 2, 0, 0, 0, TimeSpan.Zero) },
+            new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero),
+            true);
+        var service = CreateService(catalog, new FakeInstalledClient([]), new FakeDeploymentProvider(AvailableDeployments()), new FakeAppsMarketMetadataProvider(marketMetadata));
+
+        var snapshot = await service.GetCatalogAsync(false);
+
+        Assert.AreEqual(expectedDate, snapshot.Apps[0].DateAddedUtc);
+    }
+
+    [TestMethod]
     public async Task CatalogDetailsAndSimilarAsync_Identity_UseExpectedReadOnlyParameters()
     {
         var setup = await TestClientFactory.CreateAsync((transport, request) =>
@@ -310,10 +384,46 @@ public sealed class CatalogDiscoveryTests
         Assert.AreEqual(123, stale.Counts[TrueNasActiveDeploymentProvider.Normalize("community", "immich")]);
     }
 
-    private static CatalogDiscoveryService CreateService(ITrueNasCatalogClient catalog, ITrueNasClient installed, IActiveDeploymentProvider deployments) => new(
+    [TestMethod]
+    public async Task GetAsync_OfficialAppsMarketMarkup_MapsAddedDatesByCatalogUrl()
+    {
+        const string html = "<html><body><a class=\"section-box catalog-card\" href=/catalog/immich_community/><div><p>Train: Community<br>Added: 2024-08-02<br></p></div></a></body></html>";
+        var provider = new TrueNasAppsMarketMetadataProvider(
+            new FakeHttpClientFactory(new SequenceHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(html, Encoding.UTF8, "text/html") })),
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero)),
+            NullLogger<TrueNasAppsMarketMetadataProvider>.Instance);
+
+        var snapshot = await provider.GetAsync(true);
+
+        Assert.IsTrue(snapshot.IsAvailable);
+        Assert.IsTrue(snapshot.TryGetDateAdded("https://apps.truenas.com/catalog/immich_community/", out var dateAddedUtc));
+        Assert.AreEqual(new DateTimeOffset(2024, 8, 2, 0, 0, 0, TimeSpan.Zero), dateAddedUtc);
+    }
+
+    [TestMethod]
+    public async Task GetAsync_AppsMarketRefreshFailureAfterSuccess_ReturnsStaleDates()
+    {
+        const string html = "<a class=\"catalog-card\" href=\"/catalog/immich_community/\"><p>Added: 2024-08-02</p></a>";
+        var provider = new TrueNasAppsMarketMetadataProvider(
+            new FakeHttpClientFactory(new SequenceHttpHandler(
+                _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(html, Encoding.UTF8, "text/html") },
+                _ => throw new HttpRequestException("offline"))),
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero)),
+            NullLogger<TrueNasAppsMarketMetadataProvider>.Instance);
+        _ = await provider.GetAsync(true);
+
+        var stale = await provider.GetAsync(true);
+
+        Assert.IsTrue(stale.IsAvailable);
+        Assert.IsTrue(stale.IsStale);
+        Assert.IsTrue(stale.TryGetDateAdded("https://apps.truenas.com/catalog/immich_community/", out _));
+    }
+
+    private static CatalogDiscoveryService CreateService(ITrueNasCatalogClient catalog, ITrueNasClient installed, IActiveDeploymentProvider deployments, IAppsMarketMetadataProvider? marketMetadata = null) => new(
         catalog,
         installed,
         deployments,
+        marketMetadata ?? new FakeAppsMarketMetadataProvider(new AppsMarketMetadataSnapshot(new Dictionary<string, DateTimeOffset>(), null, false)),
         new CatalogLinkService(),
         new CatalogReadmeSanitizer(),
         new FixedTimeProvider(new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero)),
@@ -410,6 +520,11 @@ public sealed class CatalogDiscoveryTests
     private sealed class FakeDeploymentProvider(ActiveDeploymentSnapshot snapshot) : IActiveDeploymentProvider
     {
         public Task<ActiveDeploymentSnapshot> GetAsync(bool forceRefresh, CancellationToken cancellationToken = default) => Task.FromResult(snapshot);
+    }
+
+    private sealed class FakeAppsMarketMetadataProvider(AppsMarketMetadataSnapshot snapshot) : IAppsMarketMetadataProvider
+    {
+        public Task<AppsMarketMetadataSnapshot> GetAsync(bool forceRefresh, CancellationToken cancellationToken = default) => Task.FromResult(snapshot);
     }
 
     private sealed class FakeInstalledClient(IReadOnlyList<TrueNasAppDto> apps) : ITrueNasClient

@@ -72,7 +72,9 @@ builder.Services.AddSingleton<IGitHubMetadataService, GitHubMetadataService>();
 builder.Services.AddSingleton<ICatalogLinkService, CatalogLinkService>();
 builder.Services.AddSingleton<ICatalogReadmeSanitizer, CatalogReadmeSanitizer>();
 builder.Services.AddSingleton<IActiveDeploymentProvider, TrueNasActiveDeploymentProvider>();
+builder.Services.AddSingleton<IAppsMarketMetadataProvider, TrueNasAppsMarketMetadataProvider>();
 builder.Services.AddSingleton<ICatalogDiscoveryService, CatalogDiscoveryService>();
+builder.Services.AddSingleton<IDockerHubDiscoveryService, DockerHubDiscoveryService>();
 builder.Services.AddSingleton<UptimeKumaMetricsParser>();
 builder.Services.AddSingleton<IUptimeKumaClient, UptimeKumaClient>();
 builder.Services.AddSingleton<IUptimeKumaSyncService, UptimeKumaSyncService>();
@@ -94,6 +96,13 @@ builder.Services.AddHttpClient("github", client =>
 });
 builder.Services.AddHttpClient("truenas-catalog-telemetry", client => client.Timeout = TimeSpan.FromSeconds(5))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("truenas-apps-market", client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("docker-hub", client =>
+{
+    client.BaseAddress = new Uri("https://hub.docker.com/");
+    client.Timeout = TimeSpan.FromSeconds(12);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("uptime-kuma", client => client.Timeout = TimeSpan.FromSeconds(15))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("uptime-kuma-insecure", client => client.Timeout = TimeSpan.FromSeconds(15))
@@ -148,7 +157,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.XFrameOptions = "DENY";
     context.Response.Headers["X-Application-Version"] = ApplicationVersion.Current;
     context.Response.Headers.ContentSecurityPolicy =
-        "default-src 'self'; img-src 'self' data: https://media.sys.truenas.net; style-src 'self' 'unsafe-inline'; " +
+        "default-src 'self'; img-src 'self' data: https://media.sys.truenas.net https://djeqr6to3dedg.cloudfront.net https://www.gravatar.com; style-src 'self' 'unsafe-inline'; " +
         "script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     await next();

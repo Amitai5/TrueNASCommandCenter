@@ -10,6 +10,7 @@ public sealed class CatalogDiscoveryService(
     ITrueNasCatalogClient catalogClient,
     ITrueNasClient trueNasClient,
     IActiveDeploymentProvider deploymentProvider,
+    IAppsMarketMetadataProvider appsMarketMetadataProvider,
     ICatalogLinkService linkService,
     ICatalogReadmeSanitizer readmeSanitizer,
     TimeProvider timeProvider,
@@ -42,9 +43,14 @@ public sealed class CatalogDiscoveryService(
             {
                 var catalog = await catalogClient.QueryCatalogAppsAsync(forceRefresh, cancellationToken);
                 var identities = catalog.SelectMany(train => train.Value.Keys.Select(name => new CatalogAppIdentity(train.Key, name))).ToList();
-                var installed = await QueryInstalledAsync(identities, cancellationToken);
-                var deployments = await deploymentProvider.GetAsync(forceRefresh, cancellationToken);
-                var apps = Flatten(catalog, installed, deployments);
+                var installedTask = QueryInstalledAsync(identities, cancellationToken);
+                var deploymentsTask = deploymentProvider.GetAsync(forceRefresh, cancellationToken);
+                var marketMetadataTask = appsMarketMetadataProvider.GetAsync(forceRefresh, cancellationToken);
+                await Task.WhenAll(installedTask, deploymentsTask, marketMetadataTask);
+                var installed = await installedTask;
+                var deployments = await deploymentsTask;
+                var marketMetadata = await marketMetadataTask;
+                var apps = Flatten(catalog, installed, deployments, marketMetadata);
                 cached = new CatalogDiscoverySnapshot(
                     apps,
                     now,
@@ -107,7 +113,7 @@ public sealed class CatalogDiscoveryService(
         try
         {
             var dto = await catalogClient.GetCatalogAppDetailsAsync(identity.Name, identity.Train, cancellationToken);
-            var app = Map(identity.Train, identity.Name, dto, summary?.IsInstalled, summary?.ActiveDeployments, summary?.ActiveDeploymentsRetrievedAtUtc, summary?.IsActiveDeploymentDataStale ?? false);
+            var app = PreserveSummaryMetadata(Map(identity.Train, identity.Name, dto, summary?.IsInstalled, summary?.ActiveDeployments, summary?.ActiveDeploymentsRetrievedAtUtc, summary?.IsActiveDeploymentDataStale ?? false), summary);
             IReadOnlyList<CatalogApp> similar = [];
             try
             {
@@ -117,7 +123,7 @@ public sealed class CatalogDiscoveryService(
                     {
                         var name = string.IsNullOrWhiteSpace(item.Name) ? item.Title : item.Name;
                         var matchingSummary = Find(gallery.Apps, new CatalogAppIdentity(identity.Train, name));
-                        return Map(identity.Train, name, item, matchingSummary?.IsInstalled, matchingSummary?.ActiveDeployments, matchingSummary?.ActiveDeploymentsRetrievedAtUtc, matchingSummary?.IsActiveDeploymentDataStale ?? false);
+                        return PreserveSummaryMetadata(Map(identity.Train, name, item, matchingSummary?.IsInstalled, matchingSummary?.ActiveDeployments, matchingSummary?.ActiveDeploymentsRetrievedAtUtc, matchingSummary?.IsActiveDeploymentDataStale ?? false), matchingSummary);
                     })
                     .Where(item => !IdentityEquals(item.Identity, identity))
                     .DistinctBy(item => Normalize(item.Identity))
@@ -145,7 +151,8 @@ public sealed class CatalogDiscoveryService(
     private IReadOnlyList<CatalogApp> Flatten(
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, TrueNasCatalogAppDto>> catalog,
         InstalledMatchSnapshot installed,
-        ActiveDeploymentSnapshot deployments)
+        ActiveDeploymentSnapshot deployments,
+        AppsMarketMetadataSnapshot marketMetadata)
     {
         var result = new List<CatalogApp>();
         foreach (var train in catalog.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
@@ -160,7 +167,17 @@ public sealed class CatalogDiscoveryService(
             }
         }
 
-        return result;
+        var enriched = result.Select(app =>
+        {
+            if (app.DateAddedUtc is not null || !marketMetadata.TryGetDateAdded(app.TrueNasAppsUrl, out var dateAddedUtc))
+            {
+                return app;
+            }
+
+            return app with { DateAddedUtc = dateAddedUtc };
+        }).ToList();
+
+        return ApplyPopularityRanks(enriched);
     }
 
     private CatalogApp Map(string train, string catalogName, TrueNasCatalogAppDto source, bool? isInstalled, long? activeDeployments, DateTimeOffset? deploymentRetrievedAtUtc = null, bool isDeploymentDataStale = false)
@@ -179,7 +196,7 @@ public sealed class CatalogDiscoveryService(
             LatestAppVersion = source.LatestAppVersion,
             LatestHumanVersion = source.LatestHumanVersion,
             LastUpdatedUtc = ParseDate(source.LastUpdate),
-            DateAddedUtc = ParseDate(ReadAdditionalString(source, "date_added")),
+            DateAddedUtc = ParseDate(ReadAdditionalString(source, "date_added")) ?? ParseDate(ReadNestedAdditionalString(source, "app_metadata", "date_added")) ?? ParseDate(ReadNestedAdditionalString(source, "chart_metadata", "date_added")),
             PopularityRank = ReadAdditionalInt(source, "popularity_rank"),
             IsRecommended = source.Recommended,
             IsInstalled = isInstalled,
@@ -245,6 +262,41 @@ public sealed class CatalogDiscoveryService(
 
     private static bool IsFresh(CatalogDiscoverySnapshot? snapshot, DateTimeOffset now) =>
         snapshot?.RefreshedAtUtc is not null && now - snapshot.RefreshedAtUtc.Value < CacheDuration;
+
+    private static IReadOnlyList<CatalogApp> ApplyPopularityRanks(IReadOnlyList<CatalogApp> apps)
+    {
+        var ranks = new Dictionary<CatalogAppIdentity, int>();
+        var ordered = apps.Where(app => app.ActiveDeployments is not null)
+            .OrderByDescending(app => app.ActiveDeployments)
+            .ThenBy(app => app.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        long? previousCount = null;
+        var rank = 0;
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var app = ordered[index];
+            if (previousCount != app.ActiveDeployments)
+            {
+                rank = index + 1;
+                previousCount = app.ActiveDeployments;
+            }
+
+            ranks[app.Identity] = rank;
+        }
+
+        return apps.Select(app => app.PopularityRank is null && ranks.TryGetValue(app.Identity, out var derivedRank) ? app with { PopularityRank = derivedRank } : app).ToList();
+    }
+
+    private static CatalogApp PreserveSummaryMetadata(CatalogApp app, CatalogApp? summary)
+    {
+        return summary is null
+            ? app
+            : app with
+            {
+                DateAddedUtc = app.DateAddedUtc ?? summary.DateAddedUtc,
+                PopularityRank = app.PopularityRank ?? summary.PopularityRank
+            };
+    }
 
     private static CatalogAppIdentity Normalize(CatalogAppIdentity identity) => new(identity.Train.Trim().ToLowerInvariant(), identity.Name.Trim().ToLowerInvariant());
 

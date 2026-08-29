@@ -1,0 +1,258 @@
+@namespace TrueNasCommandCenter.Components
+@inject IDockerHubDiscoveryService DockerHubDiscoveryService
+
+<section class="docker-hub-gallery" aria-label="Docker Hub custom app images">
+    <form class="catalog-filter-panel docker-search-panel" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+        <div class="docker-search-row">
+            <div class="catalog-search-field">
+                <label for="docker-search">Search public images</label>
+                <input id="docker-search" type="search" maxlength="100" @bind="_search" @bind:event="oninput" placeholder="Image or publisher, such as jellyfin or linuxserver" autocomplete="off" />
+            </div>
+            <button class="primary" type="submit" disabled="@_loading">@(_loading ? "Searching…" : "Search Docker Hub")</button>
+        </div>
+
+        <div class="catalog-filter-grid docker-filter-grid">
+            <div class="field">
+                <label for="docker-trust">Trusted content</label>
+                <select id="docker-trust" @bind="_trust" @bind:after="FiltersChangedAsync">
+                    <option value="@DockerHubTrustFilter.All">All publishers</option>
+                    <option value="@DockerHubTrustFilter.Official">Docker Official Images</option>
+                    <option value="@DockerHubTrustFilter.VerifiedPublisher">Verified Publishers</option>
+                    <option value="@DockerHubTrustFilter.OpenSource">Sponsored OSS</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="docker-category">Category</label>
+                <select id="docker-category" @bind="_category" @bind:after="FiltersChangedAsync">
+                    <option value="">All categories</option>
+                    @foreach (var option in DockerHubNativeFilters.Categories)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="docker-os">Operating system</label>
+                <select id="docker-os" @bind="_operatingSystem" @bind:after="FiltersChangedAsync">
+                    <option value="">All operating systems</option>
+                    @foreach (var option in DockerHubNativeFilters.OperatingSystems)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="docker-architecture">Architecture</label>
+                <select id="docker-architecture" @bind="_architecture" @bind:after="FiltersChangedAsync">
+                    <option value="">All architectures</option>
+                    @foreach (var option in DockerHubNativeFilters.Architectures)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="docker-sort">Sort by</label>
+                <select id="docker-sort" @bind="_sortOrder" @bind:after="FiltersChangedAsync">
+                    <option value="@DockerHubSortOrder.BestMatch">Best match</option>
+                    <option value="@DockerHubSortOrder.PullCount">Most pulled</option>
+                    <option value="@DockerHubSortOrder.RecentlyUpdated">Recently updated</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_hasSearched)
+        {
+            <div class="catalog-filter-summary">
+                <span aria-live="polite">Showing <strong>@ResultRange()</strong> of @TotalText() images</span>
+                <span>Public Docker Hub data · <strong>@RefreshText()</strong></span>
+                @if (HasFilters())
+                {
+                    <button class="small" type="button" @onclick="ClearFiltersAsync">Clear filters</button>
+                }
+            </div>
+        }
+    </form>
+
+    @if (!_hasSearched)
+    {
+        <section class="panel empty-state docker-search-empty-state">
+            <div class="catalog-state-icon docker-state-icon" aria-hidden="true">DH</div>
+            <h2>Find an image for a custom app</h2>
+            <p class="muted">Search Docker Hub, then narrow results by trusted content, category, operating system, architecture, or native sort order.</p>
+            <div class="docker-suggestion-row" aria-label="Suggested searches">
+                @foreach (var suggestion in SuggestedSearches)
+                {
+                    <button class="small" @onclick="() => UseSuggestionAsync(suggestion)">@suggestion</button>
+                }
+            </div>
+        </section>
+    }
+    else if (_loading)
+    {
+        <section class="panel catalog-loading-state" aria-label="Searching Docker Hub" aria-busy="true">
+            <span class="spinner"></span>
+            <div><strong>Searching Docker Hub…</strong><span>Public image metadata will appear here.</span></div>
+        </section>
+    }
+    else if (_snapshot is null || (_snapshot.Availability is not DockerHubAvailability.Available && _snapshot.Repositories.Count == 0))
+    {
+        <section class="panel empty-state catalog-error-state" role="alert">
+            <div class="catalog-state-icon" aria-hidden="true">!</div>
+            <h2>Docker Hub search unavailable</h2>
+            <p class="muted">@(_snapshot?.Message ?? "Docker Hub could not be searched.")</p>
+            <button class="primary" @onclick="RefreshAsync">Retry search</button>
+        </section>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_snapshot.Message))
+        {
+            <div class="notice @(_snapshot.IsStale ? "warning" : null)" role="status">@_snapshot.Message</div>
+        }
+
+        @if (_snapshot.Repositories.Count == 0)
+        {
+            <section class="panel empty-state">
+                <div class="catalog-state-icon docker-state-icon" aria-hidden="true">DH</div>
+                <h2>No matching public images</h2>
+                <p class="muted">Try a broader search or remove one of the Docker Hub filters.</p>
+                <button @onclick="ClearFiltersAsync">Clear filters</button>
+            </section>
+        }
+        else
+        {
+            <section class="catalog-card-grid" aria-label="Docker Hub image results">
+                @foreach (var repository in _snapshot.Repositories)
+                {
+                    <DockerHubRepositoryCard Repository="repository" @key="repository.Identity" />
+                }
+            </section>
+
+            @if (_snapshot.HasPreviousPage || _snapshot.HasNextPage)
+            {
+                <nav class="docker-pagination" aria-label="Docker Hub search pages">
+                    <button disabled="@(!_snapshot.HasPreviousPage || _loading)" @onclick="PreviousPageAsync">← Previous</button>
+                    <span>Page <strong>@_snapshot.Page</strong></span>
+                    <button disabled="@(!_snapshot.HasNextPage || _loading)" @onclick="NextPageAsync">Next →</button>
+                </nav>
+            }
+        }
+    }
+</section>
+
+@code {
+    private static readonly IReadOnlyList<string> SuggestedSearches = ["jellyfin", "home assistant", "nextcloud", "immich"];
+    private DockerHubSearchSnapshot? _snapshot;
+    private string _search = string.Empty;
+    private string _category = string.Empty;
+    private string _operatingSystem = string.Empty;
+    private string _architecture = string.Empty;
+    private DockerHubTrustFilter _trust;
+    private DockerHubSortOrder _sortOrder;
+    private bool _hasSearched;
+    private bool _loading;
+    private int _page = 1;
+
+    private async Task SearchAsync()
+    {
+        _page = 1;
+        await LoadAsync(false);
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync(true);
+    }
+
+    private async Task FiltersChangedAsync()
+    {
+        if (!_hasSearched || string.IsNullOrWhiteSpace(_search))
+        {
+            return;
+        }
+
+        _page = 1;
+        await LoadAsync(false);
+    }
+
+    private async Task UseSuggestionAsync(string suggestion)
+    {
+        _search = suggestion;
+        await SearchAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_snapshot?.HasPreviousPage is not true)
+        {
+            return;
+        }
+
+        _page--;
+        await LoadAsync(false);
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_snapshot?.HasNextPage is not true)
+        {
+            return;
+        }
+
+        _page++;
+        await LoadAsync(false);
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _trust = DockerHubTrustFilter.All;
+        _category = string.Empty;
+        _operatingSystem = string.Empty;
+        _architecture = string.Empty;
+        _sortOrder = DockerHubSortOrder.BestMatch;
+        _page = 1;
+        if (_hasSearched)
+        {
+            await LoadAsync(false);
+        }
+    }
+
+    private async Task LoadAsync(bool forceRefresh)
+    {
+        _hasSearched = true;
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _snapshot = new DockerHubSearchSnapshot([], 0, 1, 24, null, DockerHubAvailability.Failed, Message: "Enter an image name or publisher to search Docker Hub.");
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var query = new DockerHubSearchQuery(_search, _trust, _category, _operatingSystem, _architecture, _sortOrder, _page, 24);
+            _snapshot = await DockerHubDiscoveryService.SearchAsync(query, forceRefresh);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool HasFilters() => _trust is not DockerHubTrustFilter.All || !string.IsNullOrWhiteSpace(_category) || !string.IsNullOrWhiteSpace(_operatingSystem) || !string.IsNullOrWhiteSpace(_architecture) || _sortOrder is not DockerHubSortOrder.BestMatch;
+
+    private string ResultRange()
+    {
+        if (_snapshot is null || _snapshot.Repositories.Count == 0)
+        {
+            return "0";
+        }
+
+        var first = ((_snapshot.Page - 1) * _snapshot.PageSize) + 1;
+        return $"{first:N0}–{first + _snapshot.Repositories.Count - 1:N0}";
+    }
+
+    private string RefreshText() => _snapshot?.RetrievedAtUtc is null ? "not loaded" : _snapshot.RetrievedAtUtc.Value.ToUniversalTime().ToString("MMM d, yyyy h:mm tt 'UTC'");
+
+    private string TotalText() => _snapshot?.Total.ToString("N0") ?? "0";
+}

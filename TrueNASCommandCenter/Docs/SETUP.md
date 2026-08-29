@@ -230,6 +230,10 @@ Open **Discover** in the main navigation to browse applications published by the
 
 The gallery requires `CATALOG_READ`, which is separate from the core `APPS_READ` role. If that role is added after Command Center already connected, select **Reconnect & retry** on Discover or run **Settings → Connection → Test connection** so TrueNAS creates a session with the updated privilege. Approximate active-deployment counts are optional and come from TrueNAS public anonymous telemetry. They are cached for six hours, time out quickly, and display as unavailable without blocking the catalog when the container cannot reach the telemetry endpoint.
 
+Select **Docker Hub custom apps** on the same page to search public container images. Docker Hub search supports trusted-content, category, operating-system, architecture, most-pulled, and recently-updated filters. Repository details include recent tags and platforms; select a tag and copy the resulting `docker.io/<namespace>/<repository>:<tag>` reference into **TrueNAS → Apps → Discover Apps → Custom App**.
+
+Docker Hub discovery does not require another TrueNAS API role. The Command Center container must be allowed to make outbound HTTPS requests to `hub.docker.com`, and repository logos may load from Docker's image CDN. Results are read-only and cached briefly in memory. A public image is not a preconfigured TrueNAS app: review its documentation and explicitly configure ports, storage, environment variables, user/group IDs, and privileges before installing it.
+
 ## 6. Manage, monitor, and inspect apps
 
 Open an app from the **Apps** page to start, stop, or restart it through TrueNAS. The app list also provides a quick **Start** action for stopped or crashed apps and a **Restart** action for running apps. Lifecycle actions wait for the TrueNAS job to finish before refreshing the displayed state.
@@ -269,6 +273,8 @@ Pool cards require the additional read-only `POOL_READ` role:
 7. If only deployment counts are unavailable, catalog discovery is working correctly; allow outbound HTTPS to `telemetry.sys.truenas.net` if you want those optional counts.
 
 Catalog results are cached for 15 minutes. A failed manual refresh keeps and labels the last successful results instead of clearing the gallery.
+
+If only the **Docker Hub custom apps** source fails, no TrueNAS permission change is needed. Confirm the Command Center container has outbound DNS and HTTPS access to `hub.docker.com`, wait and retry if Docker Hub reports rate limiting, and search the container logs for the diagnostic ID displayed on the page. Docker Hub search results are cached for five minutes and repository/tag details for ten minutes.
 
 ### Enable the read-only System overview
 

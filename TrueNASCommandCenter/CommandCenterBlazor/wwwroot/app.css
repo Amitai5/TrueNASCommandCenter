@@ -4469,6 +4469,275 @@ html:not([data-theme]) .summary-grid {
     }
 }
 
+/* Docker Hub custom-app discovery */
+.discovery-source-tabs {
+    display: inline-flex;
+    max-width: 100%;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+    padding: 0.25rem;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--panel-shadow);
+}
+
+.discovery-source-tabs a {
+    min-height: 38px;
+    padding: 0.55rem 0.85rem;
+    border-radius: 7px;
+    color: var(--secondary);
+    font-size: 0.84rem;
+    font-weight: 750;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.discovery-source-tabs a:hover {
+    background: var(--surface-alt);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.discovery-source-tabs a.active {
+    background: var(--info-background);
+    color: var(--primary);
+}
+
+.docker-search-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: end;
+    margin-bottom: 0.85rem;
+}
+
+.docker-search-row .catalog-search-field {
+    margin: 0;
+}
+
+.docker-search-row label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: var(--secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.docker-search-row button {
+    min-height: 44px;
+}
+
+.docker-state-icon,
+.docker-repository-icon {
+    color: #2496ed;
+}
+
+.docker-search-empty-state {
+    min-height: 260px;
+}
+
+.docker-suggestion-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 0.9rem;
+}
+
+.docker-repository-card {
+    min-height: 320px;
+}
+
+.docker-repository-platforms {
+    align-items: center;
+    color: var(--secondary);
+    font-size: 0.72rem;
+}
+
+.docker-pagination {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1rem;
+    padding: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.docker-pagination span {
+    min-width: 90px;
+    color: var(--secondary);
+    text-align: center;
+}
+
+.docker-custom-app-warning {
+    border-left-color: var(--warning);
+    background: var(--warning-background);
+    color: var(--warning-text);
+}
+
+.docker-install-panel .eyebrow,
+.docker-tags-panel .eyebrow {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--secondary);
+    font-size: 0.67rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.docker-image-reference-controls {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.65fr) minmax(260px, 2fr) auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.docker-image-reference-field code {
+    display: flex;
+    min-height: 44px;
+    padding: 0.7rem 0.8rem;
+    align-items: center;
+    overflow-x: auto;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--input-background);
+    color: var(--heading);
+    white-space: nowrap;
+}
+
+.docker-image-reference-controls button {
+    min-height: 44px;
+}
+
+.docker-custom-app-steps {
+    display: grid;
+    gap: 0.4rem;
+    margin: 1rem 0 0;
+    padding-left: 1.25rem;
+    color: var(--secondary);
+}
+
+.docker-tag-list {
+    display: grid;
+    gap: 0;
+}
+
+.docker-tag-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.4fr) auto;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.docker-tag-row:last-child {
+    border-bottom: 0;
+}
+
+.docker-tag-row > div:first-child {
+    display: grid;
+    min-width: 0;
+    gap: 0.2rem;
+}
+
+.docker-tag-row > div:first-child span {
+    color: var(--secondary);
+    font-size: 0.74rem;
+}
+
+.docker-platform-badges {
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .docker-image-reference-controls {
+        grid-template-columns: minmax(130px, 0.6fr) minmax(220px, 1.4fr);
+    }
+
+    .docker-image-reference-controls button {
+        grid-column: 1 / -1;
+    }
+
+    .docker-tag-row {
+        grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.2fr);
+    }
+
+    .docker-tag-row button {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+}
+
+@media (max-width: 720px) {
+    .discovery-source-tabs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        overflow: visible;
+    }
+
+    .discovery-source-tabs a {
+        display: grid;
+        place-items: center;
+        text-align: center;
+        white-space: normal;
+    }
+
+    .docker-search-row,
+    .docker-image-reference-controls,
+    .docker-tag-row {
+        grid-template-columns: 1fr;
+    }
+
+    .docker-search-row button,
+    .docker-image-reference-controls button,
+    .docker-tag-row button {
+        width: 100%;
+        grid-column: auto;
+    }
+
+    .docker-pagination {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .docker-pagination span {
+        grid-column: 1 / -1;
+        grid-row: 1;
+    }
+}
+
+@media (max-width: 430px) {
+    .docker-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .docker-suggestion-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .docker-suggestion-row button {
+        width: 100%;
+    }
+
+    .docker-pagination {
+        grid-template-columns: 1fr;
+    }
+
+    .docker-pagination span {
+        grid-column: auto;
+    }
+}
+
 /* Discover-inspired shared interface system */
 .page-header h1 {
     margin-bottom: 0.28rem;

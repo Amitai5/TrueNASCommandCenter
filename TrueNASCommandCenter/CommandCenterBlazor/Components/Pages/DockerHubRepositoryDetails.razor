@@ -1,0 +1,336 @@
+@page "/discover/docker/{Namespace}/{Repository}"
+@inject IDockerHubDiscoveryService DockerHubDiscoveryService
+@inject ITrueNasServerAddressService ServerAddressService
+@inject IJSRuntime JS
+
+<PageTitle>@(_details?.Identity.DisplayName ?? "Docker Hub image") · Discover · TrueNAS Command Center</PageTitle>
+
+<div class="page catalog-details-page docker-details-page">
+    <a class="back-link" href="/discover?source=docker">← Docker Hub custom apps</a>
+
+    @if (_loading)
+    {
+        <section class="panel catalog-loading-state" aria-label="Loading Docker Hub image details" aria-busy="true">
+            <span class="spinner"></span>
+            <div><strong>Loading image details…</strong><span>Docker Hub is returning repository metadata and recent tags.</span></div>
+        </section>
+    }
+    else if (_details is null)
+    {
+        <section class="panel empty-state catalog-error-state" role="alert">
+            <div class="catalog-state-icon" aria-hidden="true">!</div>
+            <h1>Image details unavailable</h1>
+            <p class="muted">@(_snapshot?.Message ?? "This public Docker Hub image could not be found.")</p>
+            <div class="actions catalog-centered-actions">
+                <button class="primary" @onclick="RefreshAsync">Retry</button>
+                <a class="button" href="/discover?source=docker">Back to Docker Hub search</a>
+            </div>
+        </section>
+    }
+    else
+    {
+        <header class="panel catalog-detail-hero">
+            <div class="catalog-detail-icon docker-repository-icon" aria-hidden="true">
+                <span>DH</span>
+                @if (!_iconFailed && _details.LogoUrl is not null)
+                {
+                    <img src="@_details.LogoUrl" alt="" referrerpolicy="no-referrer" @onerror="HandleIconError" />
+                }
+            </div>
+            <div class="catalog-detail-intro">
+                <div class="catalog-detail-title-row">
+                    <h1>@_details.Identity.DisplayName</h1>
+                    <div class="catalog-badge-row">
+                        <span class="badge @BadgeClass(_details.Badge)">@BadgeText(_details.Badge)</span>
+                        @if (_details.IsArchived)
+                        {
+                            <span class="badge warning">Archived</span>
+                        }
+                    </div>
+                </div>
+                <p>@_details.Description</p>
+                <div class="catalog-badge-row">
+                    @foreach (var category in _details.Categories)
+                    {
+                        <span class="badge">@category</span>
+                    }
+                </div>
+                <div class="catalog-detail-meta">
+                    <span><strong>Pulls</strong> @CompactCount(_details.PullCount)</span>
+                    <span><strong>Stars</strong> @_details.StarCount.ToString("N0")</span>
+                    <span><strong>Updated</strong> @DateText(_details.UpdatedAtUtc)</span>
+                    <span><strong>Tags</strong> @_details.TotalTags.ToString("N0")</span>
+                </div>
+            </div>
+            <div class="catalog-detail-actions">
+                <a class="button primary" href="@_details.DockerHubUrl" target="_blank" rel="noopener noreferrer">View on Docker Hub ↗</a>
+                @if (_serverAddress is not null)
+                {
+                    <a class="button" href="@_serverAddress.WebUiUrl" target="_blank" rel="noopener noreferrer">Open TrueNAS ↗</a>
+                }
+                <button @onclick="RefreshAsync" disabled="@_refreshing">@(_refreshing ? "Refreshing…" : "Refresh details")</button>
+            </div>
+        </header>
+
+        <div class="notice warning docker-custom-app-warning" role="note">
+            <strong>Custom images are not preconfigured apps.</strong> Review the publisher's instructions, then set ports, storage, environment variables, user IDs, and privileges in TrueNAS yourself.
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_snapshot?.Message))
+        {
+            <div class="notice @(_snapshot.IsStale ? "warning" : null)" role="status">@_snapshot.Message</div>
+        }
+
+        <div class="catalog-detail-layout">
+            <div class="catalog-detail-main">
+                <section class="panel docker-install-panel" aria-labelledby="docker-custom-app-heading">
+                    <div class="catalog-section-heading">
+                        <div><span class="eyebrow">TrueNAS custom app</span><h2 id="docker-custom-app-heading">Copy an image reference</h2></div>
+                    </div>
+                    <div class="docker-image-reference-controls">
+                        <div class="field">
+                            <label for="docker-tag">Tag</label>
+                            <select id="docker-tag" @bind="_selectedTag">
+                                @foreach (var tag in _details.Tags)
+                                {
+                                    <option value="@tag.Name">@tag.Name</option>
+                                }
+                                @if (_details.Tags.Count == 0)
+                                {
+                                    <option value="latest">latest</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field docker-image-reference-field">
+                            <label for="docker-image-reference">Image repository</label>
+                            <code id="docker-image-reference">@ImageReference()</code>
+                        </div>
+                        <button class="primary" @onclick="CopyImageReferenceAsync">@(_copyMessage ?? "Copy image")</button>
+                    </div>
+                    <ol class="docker-custom-app-steps">
+                        <li>Open TrueNAS and choose <strong>Apps → Discover Apps → Custom App</strong>.</li>
+                        <li>Paste the image reference, then add the settings required by the image documentation.</li>
+                        <li>Review networking, mounts, permissions, and update behavior before installing.</li>
+                    </ol>
+                </section>
+
+                <section class="panel catalog-readme-panel">
+                    <div class="catalog-section-heading">
+                        <div><span class="eyebrow">Docker Hub overview</span><h2>About @_details.Identity.DisplayName</h2></div>
+                    </div>
+                    @if (string.IsNullOrWhiteSpace(_details.ReadmeText))
+                    {
+                        <p class="muted">This Docker Hub repository does not publish an overview.</p>
+                    }
+                    else
+                    {
+                        <div class="catalog-readme-text">@_details.ReadmeText</div>
+                    }
+                </section>
+
+                <section class="panel docker-tags-panel" aria-labelledby="docker-tags-heading">
+                    <div class="catalog-section-heading">
+                        <div><span class="eyebrow">Recent tags</span><h2 id="docker-tags-heading">Published image variants</h2></div>
+                        <span class="muted">Showing @_details.Tags.Count of @_details.TotalTags.ToString("N0")</span>
+                    </div>
+                    @if (_details.Tags.Count == 0)
+                    {
+                        <p class="muted">Docker Hub did not return any public image tags.</p>
+                    }
+                    else
+                    {
+                        <div class="docker-tag-list">
+                            @foreach (var tag in _details.Tags)
+                            {
+                                <article class="docker-tag-row">
+                                    <div>
+                                        <strong><code>@tag.Name</code></strong>
+                                        <span>@DateText(tag.LastPushedUtc) · @SizeText(tag.SizeBytes)</span>
+                                    </div>
+                                    <div class="catalog-badge-row docker-platform-badges">
+                                        @foreach (var platform in tag.Platforms.Take(5))
+                                        {
+                                            <span class="badge">@platform.DisplayName</span>
+                                        }
+                                        @if (tag.Platforms.Count > 5)
+                                        {
+                                            <span class="badge">+@(tag.Platforms.Count - 5)</span>
+                                        }
+                                    </div>
+                                    <button class="small" @onclick="() => SelectTag(tag.Name)">Use tag</button>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+            </div>
+
+            <aside class="catalog-detail-rail" aria-label="Docker Hub image facts">
+                <section class="panel">
+                    <h2>Repository information</h2>
+                    <dl class="catalog-fact-list">
+                        <div><dt>Namespace</dt><dd><code>@_details.Identity.Namespace</code></dd></div>
+                        <div><dt>Repository</dt><dd><code>@_details.Identity.Repository</code></dd></div>
+                        <div><dt>Publisher</dt><dd>@_details.Publisher</dd></div>
+                        <div><dt>Status</dt><dd>@TitleCase(_details.Status)</dd></div>
+                        <div><dt>Created</dt><dd>@DateText(_details.CreatedAtUtc)</dd></div>
+                        <div><dt>Last updated</dt><dd>@DateText(_details.UpdatedAtUtc)</dd></div>
+                        <div><dt>Automated build</dt><dd>@YesNo(_details.IsAutomated)</dd></div>
+                        <div><dt>Visibility</dt><dd>@(_details.IsPrivate ? "Private" : "Public")</dd></div>
+                    </dl>
+                </section>
+
+                <section class="panel">
+                    <h2>Compatibility</h2>
+                    <h3>Operating systems</h3>
+                    <div class="catalog-badge-row">
+                        @if (_details.OperatingSystems.Count == 0)
+                        {
+                            <span class="muted">Not published</span>
+                        }
+                        @foreach (var value in _details.OperatingSystems)
+                        {
+                            <span class="badge">@value</span>
+                        }
+                    </div>
+                    <h3>Architectures</h3>
+                    <div class="catalog-badge-row">
+                        @if (_details.Architectures.Count == 0)
+                        {
+                            <span class="muted">Check individual tags</span>
+                        }
+                        @foreach (var value in _details.Architectures)
+                        {
+                            <span class="badge">@value</span>
+                        }
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2>Trust &amp; review</h2>
+                    <p>@TrustDescription(_details.Badge)</p>
+                    <p class="muted">A Docker Hub badge does not replace reviewing the image documentation, update policy, privileges, mounts, or network exposure.</p>
+                    <a href="@_details.DockerHubUrl" target="_blank" rel="noopener noreferrer">Review repository on Docker Hub ↗</a>
+                </section>
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string Namespace { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Repository { get; set; } = string.Empty;
+
+    private DockerHubDetailsSnapshot? _snapshot;
+    private TrueNasCommandCenter.Domain.DockerHubRepositoryDetails? _details;
+    private TrueNasServerAddress? _serverAddress;
+    private string _selectedTag = "latest";
+    private string? _copyMessage;
+    private bool _loading = true;
+    private bool _refreshing;
+    private bool _iconFailed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync(false);
+    }
+
+    private async Task RefreshAsync()
+    {
+        _refreshing = true;
+        try
+        {
+            await LoadAsync(true);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    private async Task LoadAsync(bool forceRefresh)
+    {
+        _loading = true;
+        _iconFailed = false;
+        _copyMessage = null;
+        try
+        {
+            var identity = new DockerHubRepositoryIdentity(Uri.UnescapeDataString(Namespace), Uri.UnescapeDataString(Repository));
+            var detailsTask = DockerHubDiscoveryService.GetDetailsAsync(identity, forceRefresh);
+            var addressTask = ServerAddressService.GetAsync();
+            await Task.WhenAll(detailsTask, addressTask);
+            _snapshot = await detailsTask;
+            _details = _snapshot.Repository;
+            _serverAddress = await addressTask;
+            _selectedTag = _details?.PreferredTag ?? "latest";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task CopyImageReferenceAsync()
+    {
+        var copied = await JS.InvokeAsync<bool>("trueNasCommandCenter.copyText", ImageReference());
+        _copyMessage = copied ? "Copied" : "Copy failed";
+    }
+
+    private void SelectTag(string tag)
+    {
+        _selectedTag = tag;
+        _copyMessage = null;
+    }
+
+    private void HandleIconError()
+    {
+        _iconFailed = true;
+    }
+
+    private string ImageReference() => _details?.GetImageReference(_selectedTag) ?? string.Empty;
+
+    private static string BadgeText(DockerHubBadge badge) => badge switch
+    {
+        DockerHubBadge.Official => "Docker Official Image",
+        DockerHubBadge.VerifiedPublisher => "Verified Publisher",
+        DockerHubBadge.OpenSource => "Sponsored OSS",
+        _ => "Community image"
+    };
+
+    private static string BadgeClass(DockerHubBadge badge) => badge is DockerHubBadge.None ? string.Empty : "info";
+
+    private static string TrustDescription(DockerHubBadge badge) => badge switch
+    {
+        DockerHubBadge.Official => "Docker identifies this repository as a Docker Official Image.",
+        DockerHubBadge.VerifiedPublisher => "Docker identifies this repository as published by a Verified Publisher.",
+        DockerHubBadge.OpenSource => "Docker identifies this repository as Docker-Sponsored Open Source.",
+        _ => "This is a community image without a Docker trusted-content badge."
+    };
+
+    private static string CompactCount(long? value) => value switch
+    {
+        null => "Unavailable",
+        >= 1_000_000_000 => $"{value.Value / 1_000_000_000d:0.#}B",
+        >= 1_000_000 => $"{value.Value / 1_000_000d:0.#}M",
+        >= 1_000 => $"{value.Value / 1_000d:0.#}K",
+        _ => value.Value.ToString("N0")
+    };
+
+    private static string SizeText(long? bytes) => bytes switch
+    {
+        null => "size unavailable",
+        >= 1024L * 1024 * 1024 => $"{bytes.Value / (1024d * 1024 * 1024):0.##} GiB",
+        >= 1024L * 1024 => $"{bytes.Value / (1024d * 1024):0.##} MiB",
+        >= 1024 => $"{bytes.Value / 1024d:0.##} KiB",
+        _ => $"{bytes.Value:N0} B"
+    };
+
+    private static string DateText(DateTimeOffset? value) => value is null ? "Not published" : value.Value.ToUniversalTime().ToString("MMM d, yyyy");
+
+    private static string YesNo(bool value) => value ? "Yes" : "No";
+
+    private static string TitleCase(string value) => string.Join(' ', value.Replace('-', ' ').Replace('_', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
+}

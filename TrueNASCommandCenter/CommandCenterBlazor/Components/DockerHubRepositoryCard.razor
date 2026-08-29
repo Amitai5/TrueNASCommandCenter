@@ -1,0 +1,90 @@
+@namespace TrueNasCommandCenter.Components
+
+<article class="catalog-app-card docker-repository-card">
+    <div class="catalog-card-heading">
+        <div class="catalog-app-icon docker-repository-icon" aria-hidden="true">
+            <span>DH</span>
+            @if (!_iconFailed && Repository.LogoUrl is not null)
+            {
+                <img src="@Repository.LogoUrl" alt="" loading="lazy" referrerpolicy="no-referrer" @onerror="HandleIconError" />
+            }
+        </div>
+        <div class="catalog-card-identity">
+            <h2 title="@Repository.Identity.DisplayName">@Repository.Identity.DisplayName</h2>
+            <div class="catalog-badge-row">
+                @if (Repository.Badge is not DockerHubBadge.None)
+                {
+                    <span class="badge info">@BadgeText(Repository.Badge)</span>
+                }
+                else
+                {
+                    <span class="badge">Community</span>
+                }
+                @if (Repository.Categories.FirstOrDefault() is { } category)
+                {
+                    <span class="badge">@category</span>
+                }
+                @if (Repository.IsArchived)
+                {
+                    <span class="badge warning">Archived</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <p class="catalog-card-description">@Repository.Description</p>
+
+    <dl class="catalog-card-facts">
+        <div><dt>Pulls</dt><dd>@Repository.PullCountText</dd></div>
+        <div><dt>Last updated</dt><dd>@DateText(Repository.UpdatedAtUtc)</dd></div>
+    </dl>
+
+    <div class="catalog-card-status docker-repository-platforms">
+        <span>@PlatformText()</span>
+        <span title="Docker Hub stars">★ @CompactCount(Repository.StarCount)</span>
+    </div>
+
+    <div class="catalog-card-actions">
+        <a class="button small" href="@DetailsUrl()">Details</a>
+        <a class="button small" href="@Repository.DockerHubUrl" target="_blank" rel="noopener noreferrer">Docker Hub ↗</a>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public DockerHubRepositorySummary Repository { get; set; } = null!;
+
+    private bool _iconFailed;
+
+    private void HandleIconError()
+    {
+        _iconFailed = true;
+    }
+
+    private string DetailsUrl() => $"/discover/docker/{Uri.EscapeDataString(Repository.Identity.Namespace)}/{Uri.EscapeDataString(Repository.Identity.Repository)}";
+
+    private string PlatformText()
+    {
+        var operatingSystem = Repository.OperatingSystems.FirstOrDefault() ?? "OS not listed";
+        var architecture = Repository.Architectures.FirstOrDefault() ?? "architecture not listed";
+        return $"{operatingSystem} · {architecture}";
+    }
+
+    private static string BadgeText(DockerHubBadge badge) => badge switch
+    {
+        DockerHubBadge.Official => "Docker Official Image",
+        DockerHubBadge.VerifiedPublisher => "Verified Publisher",
+        DockerHubBadge.OpenSource => "Sponsored OSS",
+        _ => "Community"
+    };
+
+    private static string DateText(DateTimeOffset? value) => value is null ? "Not published" : value.Value.ToUniversalTime().ToString("MMM d, yyyy");
+
+    private static string CompactCount(long value) => value switch
+    {
+        >= 1_000_000_000 => $"{value / 1_000_000_000d:0.#}B",
+        >= 1_000_000 => $"{value / 1_000_000d:0.#}M",
+        >= 1_000 => $"{value / 1_000d:0.#}K",
+        _ => value.ToString("N0")
+    };
+}
