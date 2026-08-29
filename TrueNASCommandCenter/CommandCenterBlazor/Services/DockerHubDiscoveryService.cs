@@ -15,6 +15,8 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
     private const int MaximumSearchLength = 100;
     private const int MaximumPageSize = 48;
     private const int DetailsTagCount = 24;
+    private const string TrustedBadges = "official,verified_publisher";
+    private const string TargetOperatingSystem = "linux";
     private static readonly TimeSpan SearchCacheDuration = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DetailsCacheDuration = TimeSpan.FromMinutes(10);
     private static readonly Regex RepositorySegmentRegex = new("^[a-z0-9](?:[a-z0-9._-]{0,253}[a-z0-9])?$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
@@ -44,6 +46,7 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
 
             var repositories = (response.Results ?? [])
                 .Where(static item => item.Type?.Equals("image", StringComparison.OrdinalIgnoreCase) is not false)
+                .Where(IsTrustedLinuxImage)
                 .Select(MapSummary)
                 .Where(static item => item is not null)
                 .Cast<DockerHubRepositorySummary>()
@@ -109,15 +112,15 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
         var parameters = new List<KeyValuePair<string, string>>
         {
             new("custom_boosted_results", "true"),
-            new("query", normalized.Search),
             new("type", "image"),
+            new("badges", TrustedBadges),
+            new("operating_systems", TargetOperatingSystem),
             new("from", ((normalized.Page - 1) * normalized.PageSize).ToString(CultureInfo.InvariantCulture)),
             new("size", normalized.PageSize.ToString(CultureInfo.InvariantCulture))
         };
 
-        AddOptional(parameters, "badges", TrustValue(normalized.Trust));
+        AddOptional(parameters, "query", normalized.Search);
         AddOptional(parameters, "categories", normalized.Category);
-        AddOptional(parameters, "operating_systems", normalized.OperatingSystem);
         AddOptional(parameters, "architectures", normalized.Architecture);
         if (normalized.SortOrder is DockerHubSortOrder.PullCount)
         {
@@ -137,7 +140,7 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
     {
         try
         {
-            var query = new DockerHubSearchQuery(identity.DisplayName, DockerHubTrustFilter.All, string.Empty, string.Empty, string.Empty, DockerHubSortOrder.BestMatch, 1, 12);
+            var query = new DockerHubSearchQuery(identity.DisplayName, string.Empty, string.Empty, DockerHubSortOrder.BestMatch, 1, 12);
             var response = await GetJsonAsync<DockerHubSearchResponse>(CreateSearchPath(query), cancellationToken);
             return response.Results?.FirstOrDefault(item => TryGetIdentity(item, out var candidate) && candidate == identity);
         }
@@ -303,11 +306,6 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
     private static DockerHubSearchQuery Normalize(DockerHubSearchQuery query)
     {
         var search = query.Search?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            throw new ArgumentException("Enter an image name or publisher to search Docker Hub.", nameof(query));
-        }
-
         if (search.Length > MaximumSearchLength)
         {
             throw new ArgumentException($"Docker Hub searches cannot exceed {MaximumSearchLength} characters.", nameof(query));
@@ -317,7 +315,6 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
         {
             Search = search,
             Category = NormalizeFilter(query.Category, DockerHubNativeFilters.Categories, nameof(query.Category)),
-            OperatingSystem = NormalizeFilter(query.OperatingSystem, DockerHubNativeFilters.OperatingSystems, nameof(query.OperatingSystem)),
             Architecture = NormalizeFilter(query.Architecture, DockerHubNativeFilters.Architectures, nameof(query.Architecture)),
             Page = Math.Max(1, query.Page),
             PageSize = Math.Clamp(query.PageSize, 1, MaximumPageSize)
@@ -365,6 +362,16 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
 
         identity = new DockerHubRepositoryIdentity(namespaceValue.ToLowerInvariant(), repository.ToLowerInvariant());
         return true;
+    }
+
+    private static bool IsTrustedLinuxImage(DockerHubSearchRepositoryDto source)
+    {
+        var badge = source.Badge?.Trim();
+        var isTrusted = badge?.Equals("official", StringComparison.OrdinalIgnoreCase) is true || badge?.Equals("verified_publisher", StringComparison.OrdinalIgnoreCase) is true;
+        var isLinux = source.OperatingSystems?.Any(static operatingSystem =>
+            operatingSystem.Name?.Equals(TargetOperatingSystem, StringComparison.OrdinalIgnoreCase) is true ||
+            operatingSystem.Label?.Equals("Linux", StringComparison.OrdinalIgnoreCase) is true) is true;
+        return isTrusted && isLinux;
     }
 
     private static DockerHubBadge MapBadge(string? value) => value?.Trim().ToLowerInvariant() switch
@@ -419,14 +426,6 @@ public sealed class DockerHubDiscoveryService(IHttpClientFactory httpClientFacto
         : $"https://hub.docker.com/r/{Uri.EscapeDataString(identity.Namespace)}/{Uri.EscapeDataString(identity.Repository)}";
 
     private static string? NormalizeDigest(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string? TrustValue(DockerHubTrustFilter filter) => filter switch
-    {
-        DockerHubTrustFilter.Official => "official",
-        DockerHubTrustFilter.VerifiedPublisher => "verified_publisher",
-        DockerHubTrustFilter.OpenSource => "open_source",
-        _ => null
-    };
 
     private static void AddOptional(ICollection<KeyValuePair<string, string>> parameters, string name, string? value)
     {

@@ -19,15 +19,6 @@ public enum DockerHubBadge
     OpenSource
 }
 
-/// <summary>Filters Docker Hub search results by trusted-content program.</summary>
-public enum DockerHubTrustFilter
-{
-    All,
-    Official,
-    VerifiedPublisher,
-    OpenSource
-}
-
 /// <summary>Defines the Docker Hub search sort options exposed by its native search API.</summary>
 public enum DockerHubSortOrder
 {
@@ -73,13 +64,6 @@ public static class DockerHubNativeFilters
         new("web-analytics", "Web analytics")
     ]);
 
-    /// <summary>Gets the operating-system values accepted by Docker Hub image search.</summary>
-    public static IReadOnlyList<DockerHubFilterOption> OperatingSystems { get; } = Array.AsReadOnly<DockerHubFilterOption>(
-    [
-        new("linux", "Linux"),
-        new("windows", "Windows")
-    ]);
-
     /// <summary>Gets the CPU architecture values accepted by Docker Hub image search.</summary>
     public static IReadOnlyList<DockerHubFilterOption> Architectures { get; } = Array.AsReadOnly<DockerHubFilterOption>(
     [
@@ -96,9 +80,7 @@ public static class DockerHubNativeFilters
 /// <summary>Defines one bounded Docker Hub image search request.</summary>
 public sealed record DockerHubSearchQuery(
     string Search,
-    DockerHubTrustFilter Trust,
     string Category,
-    string OperatingSystem,
     string Architecture,
     DockerHubSortOrder SortOrder,
     int Page = 1,

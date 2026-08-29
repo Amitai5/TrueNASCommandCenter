@@ -16,9 +16,7 @@ public sealed class DockerHubDiscoveryTests
     {
         var query = new DockerHubSearchQuery(
             "nginx & proxy",
-            DockerHubTrustFilter.Official,
             "web-servers",
-            "linux",
             "amd64",
             DockerHubSortOrder.PullCount,
             2,
@@ -28,12 +26,26 @@ public sealed class DockerHubDiscoveryTests
 
         StringAssert.Contains(path, "query=nginx%20%26%20proxy");
         StringAssert.Contains(path, "type=image");
-        StringAssert.Contains(path, "badges=official");
+        StringAssert.Contains(path, "badges=official%2Cverified_publisher");
         StringAssert.Contains(path, "categories=web-servers");
         StringAssert.Contains(path, "operating_systems=linux");
         StringAssert.Contains(path, "architectures=amd64");
         StringAssert.Contains(path, "from=24");
         StringAssert.Contains(path, "size=24");
+        StringAssert.Contains(path, "sort=pull_count");
+        StringAssert.Contains(path, "order=desc");
+    }
+
+    [TestMethod]
+    public void CreateSearchPath_EmptySearch_CreatesHotAppsQuery()
+    {
+        var query = new DockerHubSearchQuery(string.Empty, string.Empty, string.Empty, DockerHubSortOrder.PullCount);
+
+        var path = DockerHubDiscoveryService.CreateSearchPath(query);
+
+        Assert.IsFalse(path.Contains("query=", StringComparison.Ordinal));
+        StringAssert.Contains(path, "badges=official%2Cverified_publisher");
+        StringAssert.Contains(path, "operating_systems=linux");
         StringAssert.Contains(path, "sort=pull_count");
         StringAssert.Contains(path, "order=desc");
     }
@@ -80,6 +92,19 @@ public sealed class DockerHubDiscoveryTests
 
         Assert.AreSame(first, second);
         Assert.AreEqual(1, handler.Calls);
+    }
+
+    [TestMethod]
+    public async Task SearchAsync_UntrustedOrNonLinuxResults_ReturnsOnlyTrustedLinuxImages()
+    {
+        var handler = new RoutingHttpHandler(_ => JsonResponse(MixedSearchJson));
+        var service = CreateService(handler);
+
+        var snapshot = await service.SearchAsync(new DockerHubSearchQuery(string.Empty, string.Empty, string.Empty, DockerHubSortOrder.PullCount));
+
+        Assert.HasCount(1, snapshot.Repositories);
+        Assert.AreEqual("verified/example", snapshot.Repositories[0].Identity.QualifiedName);
+        Assert.AreEqual(DockerHubBadge.VerifiedPublisher, snapshot.Repositories[0].Badge);
     }
 
     [TestMethod]
@@ -138,7 +163,7 @@ public sealed class DockerHubDiscoveryTests
         new FixedTimeProvider(TestNow),
         NullLogger<DockerHubDiscoveryService>.Instance);
 
-    private static DockerHubSearchQuery DefaultQuery() => new("nginx", DockerHubTrustFilter.All, string.Empty, string.Empty, string.Empty, DockerHubSortOrder.BestMatch);
+    private static DockerHubSearchQuery DefaultQuery() => new("nginx", string.Empty, string.Empty, DockerHubSortOrder.BestMatch);
 
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
     {
@@ -166,6 +191,41 @@ public sealed class DockerHubDiscoveryTests
               "logo_url": { "large": "https://djeqr6to3dedg.cloudfront.net/nginx.png" },
               "categories": [{ "slug": "web-servers", "name": "Web Servers" }],
               "archived": false
+            }
+          ]
+        }
+        """;
+
+    private const string MixedSearchJson = """
+        {
+          "total": 3,
+          "results": [
+            {
+              "id": "verified/example",
+              "name": "example",
+              "type": "image",
+              "publisher": { "name": "Verified" },
+              "short_description": "Trusted Linux image",
+              "badge": "verified_publisher",
+              "operating_systems": [{ "name": "linux", "label": "Linux" }]
+            },
+            {
+              "id": "community/example",
+              "name": "example",
+              "type": "image",
+              "publisher": { "name": "Community" },
+              "short_description": "Untrusted Linux image",
+              "badge": "none",
+              "operating_systems": [{ "name": "linux", "label": "Linux" }]
+            },
+            {
+              "id": "library/windows",
+              "name": "windows",
+              "type": "image",
+              "publisher": { "name": "Docker" },
+              "short_description": "Official Windows image",
+              "badge": "official",
+              "operating_systems": [{ "name": "windows", "label": "Windows" }]
             }
           ]
         }

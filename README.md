@@ -17,7 +17,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Conservative Any Version, Minor + Patch, and Patch-only version scopes
 - Catalog upgrades and image-only refreshes
 - Read-only **Discover Apps** gallery for both the native TrueNAS catalog and public Docker Hub images, with source-specific search and filters, detailed metadata, and safe installation handoffs
-- Docker Hub custom-app discovery with trusted-content, category, operating-system, architecture, pull-count, and recently-updated filters; recent tags produce copy-ready `docker.io` image references for TrueNAS
+- Docker Hub custom-app discovery with a one-click Hot apps view, Linux-only Docker Official Image and Verified Publisher results, category and architecture filters, and copy-ready `docker.io` image references for TrueNAS
 - Optional approximate active-deployment counts from TrueNAS public anonymous telemetry; catalog browsing remains available when telemetry is unavailable
 - Start, stop, and restart controls backed by TrueNAS jobs
 - Five-field cron scheduling with IANA timezones
