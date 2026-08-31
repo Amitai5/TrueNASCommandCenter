@@ -5420,3 +5420,454 @@ th {
         animation-iteration-count: 1 !important;
     }
 }
+
+/* Data protection and drive health centers */
+.protection-page,
+.drive-health-page {
+    display: grid;
+    gap: 1rem;
+}
+
+.protection-page > *,
+.drive-health-page > * {
+    min-width: 0;
+}
+
+.capability-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--border);
+    box-shadow: var(--panel-shadow);
+}
+
+.capability-chip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 68px;
+    padding: 0.75rem 0.9rem;
+    background: var(--surface);
+}
+
+.capability-chip > div {
+    display: grid;
+    min-width: 0;
+    gap: 0.1rem;
+}
+
+.capability-chip span:not(.status-dot) {
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.capability-chip code {
+    grid-column: 2;
+    justify-self: start;
+    padding: 0.24rem 0.42rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-alt);
+    color: var(--secondary);
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+.capability-chip.unavailable {
+    background: var(--notice-warning-background);
+}
+
+.health-clear {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.2rem 0;
+}
+
+.health-clear p {
+    margin: 0.15rem 0 0;
+}
+
+.health-warning-list {
+    display: grid;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+}
+
+.health-warning-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.75rem;
+    padding: 0.85rem 0.95rem;
+}
+
+.health-warning-item + .health-warning-item {
+    border-top: 1px solid var(--border);
+}
+
+.health-warning-item p {
+    margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
+    color: var(--secondary);
+}
+
+.health-warning-item code,
+.health-warning-target {
+    max-width: 260px;
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-align: right;
+}
+
+.protection-toolbar {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px);
+    gap: 0.75rem;
+    margin: 1rem 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.protection-toolbar .field,
+.protection-toolbar input,
+.protection-toolbar select {
+    width: 100%;
+    min-width: 0;
+}
+
+.dataset-tree-name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding-left: calc(var(--tree-depth) * 1.05rem);
+}
+
+.dataset-tree-branch {
+    width: 0.8rem;
+    height: 0.7rem;
+    margin-right: 0.35rem;
+    border-bottom: 1px solid var(--input-border);
+    border-left: 1px solid var(--input-border);
+}
+
+.dataset-tree-name strong,
+.task-route strong {
+    overflow-wrap: anywhere;
+}
+
+.coverage-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+tr.row-warning td {
+    background: color-mix(in srgb, var(--warning-background) 42%, var(--surface));
+}
+
+.protection-task-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+
+.protection-task-card,
+.pool-health-card,
+.health-mobile-card {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+}
+
+.protection-task-card h3,
+.pool-health-card h3 {
+    margin: 0.45rem 0;
+    overflow-wrap: anywhere;
+}
+
+.protection-task-card .row,
+.health-mobile-card .row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.task-route {
+    display: grid;
+    gap: 0.15rem;
+    min-height: 44px;
+    margin: 0 0 0.8rem;
+    color: var(--secondary);
+}
+
+.inline-error {
+    margin: 0.75rem 0 0;
+    padding: 0.55rem 0.65rem;
+    border-left: 3px solid var(--danger);
+    border-radius: 4px;
+    background: var(--notice-danger-background);
+    color: var(--danger-text);
+    overflow-wrap: anywhere;
+}
+
+.data-observed {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: right;
+}
+
+.pool-health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 0.85rem;
+}
+
+.pool-health-card .panel-heading-row {
+    margin-bottom: 0.75rem;
+}
+
+.pool-health-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    margin-bottom: 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--border);
+}
+
+.pool-health-metrics > div {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.65rem;
+    background: var(--surface);
+}
+
+.pool-health-metrics span {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.scan-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.85rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.scan-status > div {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.scan-status.running {
+    border-color: var(--primary);
+    background: var(--info-background);
+}
+
+.scan-status.danger {
+    border-color: var(--danger-border);
+    background: var(--notice-danger-background);
+}
+
+.scan-progress {
+    margin-top: 0.5rem;
+}
+
+.vdev-details {
+    margin-top: 0.8rem;
+    border-top: 1px solid var(--border);
+}
+
+.vdev-details summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.8rem 0 0;
+    color: var(--link);
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.vdev-details summary span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.vdev-list {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    margin-top: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--border);
+}
+
+.vdev-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.7rem 0.6rem calc(0.7rem + var(--vdev-depth) * 0.8rem);
+    background: var(--surface);
+}
+
+.vdev-row > div {
+    display: grid;
+    min-width: 0;
+}
+
+.vdev-row > div span,
+.vdev-row code {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.temperature-value {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 0.25rem 0.48rem;
+    border-radius: 999px;
+    background: var(--badge-background);
+    color: var(--badge-text);
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.temperature-value.success {
+    background: var(--success-background);
+    color: var(--success-text);
+}
+
+.temperature-value.warning {
+    background: var(--warning-background);
+    color: var(--warning-text);
+}
+
+.temperature-value.danger {
+    background: var(--danger-background);
+    color: var(--danger-text);
+}
+
+.health-mobile-list {
+    display: none;
+}
+
+.health-mobile-card.warning-card {
+    border-color: var(--warning);
+    background: var(--notice-warning-background);
+}
+
+@media (max-width: 1180px) {
+    .protection-task-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .capability-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pool-health-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .protection-summary,
+    .drive-health-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .capability-strip,
+    .protection-task-grid,
+    .protection-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .capability-chip {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .capability-chip code {
+        grid-column: 2;
+        justify-self: start;
+    }
+
+    .health-warning-item {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .health-warning-item code,
+    .health-warning-target {
+        grid-column: 2;
+        max-width: none;
+        text-align: left;
+    }
+
+    .health-desktop-table {
+        display: none;
+    }
+
+    .health-mobile-list {
+        display: grid;
+        gap: 0.7rem;
+    }
+
+    .pool-health-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pool-health-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .vdev-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .vdev-row code {
+        grid-column: 1 / -1;
+    }
+
+    .data-observed {
+        text-align: left;
+    }
+}
+
+@media (max-width: 430px) {
+    .protection-summary,
+    .drive-health-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .protection-task-card,
+    .pool-health-card,
+    .health-mobile-card {
+        padding: 0.85rem;
+    }
+}

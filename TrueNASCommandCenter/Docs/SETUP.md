@@ -55,6 +55,8 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Co
    - Optionally, `POOL_READ` for storage-pool health and capacity
    - Optionally, `ALERT_LIST_READ` for native TrueNAS alerts
    - Optionally, `SYSTEM_UPDATE_READ` for TrueNAS operating-system update availability
+   - Optionally, `DATASET_READ`, `SNAPSHOT_READ`, `SNAPSHOT_TASK_READ`, `REPLICATION_TASK_READ`, and `CLOUD_SYNC_READ` for the Data Protection Center
+   - Optionally, `DISK_READ` and `REPORTING_READ` for drive identity and temperature; Drive Health also reuses `POOL_READ` and `ALERT_LIST_READ`
    - Optionally, `READONLY_ADMIN` for host identity, hardware, load, and uptime
 6. Leave **Web Shell Access** disabled and save the privilege.
 
@@ -290,6 +292,31 @@ The **System** page combines independent TrueNAS capabilities. Add only the read
 
 The page never dismisses alerts, installs operating-system updates, changes pool state, or exposes the system serial number. One denied capability does not hide the other panels.
 
+### Enable the Data Protection Center
+
+The **Data protection** page is read-only and loads each source independently:
+
+1. Add `DATASET_READ` for the dataset tree.
+2. Add `SNAPSHOT_READ` for snapshot counts and newest snapshot age.
+3. Add `SNAPSHOT_TASK_READ` for periodic snapshot coverage, state, and schedules.
+4. Add `REPLICATION_TASK_READ` for replication coverage, source/target, last success, and next run.
+5. Add `CLOUD_SYNC_READ` for cloud-sync coverage, local path, last success, and next run.
+6. Save the privilege and run **Settings → Connection → Test connection** to reauthenticate before refreshing the page.
+
+Pool-root and known internal datasets remain visible but do not create unprotected warnings. A user dataset is protected when an enabled periodic snapshot task covers it, an enabled outbound replication task includes it, or an enabled outbound cloud-sync path points into it. Installation and task changes remain in TrueNAS.
+
+### Enable Drive & Pool Health
+
+The **Drive health** page also keeps each source independent:
+
+1. Add `POOL_READ` for pool state, vdev topology, ZFS error counts, and scrub/resilver progress.
+2. Add `DISK_READ` for device name, model, serial, capacity, bus/type, rotation rate, SMART configuration, and pool membership.
+3. Add `REPORTING_READ` for current temperature and device-reported critical thresholds. TrueNAS caches these reads for up to five minutes.
+4. Add `ALERT_LIST_READ` for active SMART, temperature, disk, pool, ZFS, scrub, and resilver warnings.
+5. Save the privilege, run **Test connection**, then select **Refresh health**.
+
+The page never starts a SMART test, scrub, or resilver and never changes disk or pool configuration.
+
 ### Enable live resource statistics
 
 Live CPU, memory, network, and block-I/O data uses the required `APPS_READ` role and needs no separate switch:
@@ -320,7 +347,7 @@ At tablet and phone widths, the desktop sidebar becomes a compact sticky header 
 
 Logs are bounded to 500 lines in browser memory and are never persisted. Use **Copy all** for ISO-8601 plain text or **Fullscreen** for a focused console. Optional GitHub enrichment is disabled by default and only queries canonical public `github.com` sources.
 
-The sidebar order is **Dashboard**, **Inbox**, **Apps**, **Discover**, **System**, **Monitoring**, **History**, and **Settings**. The Dashboard contains server-wide status, current app and Kuma alerts, favorite apps, the latest update run, the next scheduled run, pool health, and data-freshness timestamps. **Inbox** adds a durable, filterable operations feed with acknowledgement, resolution, event history, related-view links, and push-delivery state. **System** contains native TrueNAS alerts, OS update availability, host details, and pool health. The Apps page remains focused on app inventory and app-specific actions. All operator-facing timestamps use a 12-hour clock with AM/PM. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
+The sidebar order is **Dashboard**, **Inbox**, **Apps**, **Discover**, **System**, **Data protection**, **Drive health**, **Monitoring**, **History**, and **Settings**. The Dashboard contains server-wide status, current app and Kuma alerts, favorite apps, the latest update run, the next scheduled run, pool health, and data-freshness timestamps. **Inbox** adds a durable, filterable operations feed with acknowledgement, resolution, event history, related-view links, and push-delivery state. **System** contains native TrueNAS alerts, OS update availability, host details, and pool health. **Data protection** focuses on datasets and backup-task coverage; **Drive health** focuses on physical storage and scans. The Apps page remains focused on app inventory and app-specific actions. All operator-facing timestamps use a 12-hour clock with AM/PM. Use the persistent **Theme** control at the bottom of the sidebar—or in the mobile navigation—to switch between the higher-contrast light theme and dark theme.
 
 Configure separate **Local Web UI URL** and **Remote Web UI URL** values under the app's **Settings** page when it is available through different addresses. Local manager hosts such as `truenas.local`, localhost, and private IP addresses use the local route. Generated local links default to `http://truenas.local`; the global **Local TrueNAS Web UI host** setting can override that origin. Public manager domains use only the explicitly configured remote route, and the manager does not guess subdomains.
 

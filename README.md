@@ -28,6 +28,8 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Read-only Uptime Kuma integration with imported monitor state, response time, uptime windows, certificate status, and explicit app mapping
 - At-a-glance TrueNAS server identity with resolved IP, one-click copy, and direct TrueNAS Web UI access
 - Read-only System page with native TrueNAS alerts, host identity and uptime, OS update availability, and independently permissioned panels
+- Read-only **Data Protection Center** with a dataset tree, snapshot coverage and newest age, replication/cloud-sync state, last success, next run, and unprotected-dataset warnings
+- Read-only **Drive & Pool Health** with disk temperatures, SMART-related warnings, model/serial/capacity, pool and vdev membership, scrub/resilver progress, and ZFS error counts
 - Optional storage-pool health and capacity cards when the service account has `POOL_READ`
 - Operations dashboard with current app and Kuma outages, latest update-run status, schedule, server identity, storage health, and data freshness
 - Durable **Operations Inbox** combining TrueNAS alerts and jobs, pool scrubs/resilvers, app update failures, Uptime Kuma outages, and notification failures with acknowledgement, resolution, filters, deep links, and deduplicated push alerts
@@ -55,7 +57,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - TrueNAS Community Edition / SCALE 25.10 or later
 - A configured TrueNAS Apps storage pool
-- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; add `CATALOG_READ` for Discover, and optionally add `POOL_READ`, `ALERT_LIST_READ`, `SYSTEM_UPDATE_READ`, or the broader `READONLY_ADMIN` for System-page and Operations Inbox visibility
+- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; add `CATALOG_READ` for Discover. Optional read-only centers name their required roles inline: Data Protection uses `DATASET_READ`, `SNAPSHOT_READ`, `SNAPSHOT_TASK_READ`, `REPLICATION_TASK_READ`, and `CLOUD_SYNC_READ`; Drive Health uses `POOL_READ`, `DISK_READ`, `REPORTING_READ`, and `ALERT_LIST_READ`.
 - A trusted LAN/VPN, or an authenticated reverse proxy in front of the web UI
 
 The application does not include its own user accounts or RBAC. Do not expose it directly to an untrusted network.
@@ -226,13 +228,15 @@ The **Continue** button on the connection step remains disabled until **Test con
 
 The Dashboard keeps server-wide operational information separate from the app inventory. It surfaces current app and Uptime Kuma outages, the latest check/update result, the next scheduled run, TrueNAS identity and IP, storage-pool status, and freshness timestamps. Operator-facing timestamps use a 12-hour clock with AM/PM.
 
-Five optional or automatic views become available after the initial connection succeeds:
+Seven optional or automatic views become available after the initial connection succeeds:
 
 1. **TrueNAS IP and Web UI actions** — set `TRUENAS_WEBSOCKET_URL` to the certificate-covered TrueNAS hostname and map that hostname to the current TrueNAS IP with `extra_hosts` in the complete YAML. The manager resolves the hostname automatically, shows the address in the server status strip and desktop sidebar, and enables **Copy IP** and **Open TrueNAS**. There is no second IP setting to maintain.
 2. **Storage-pool health** — edit the custom privilege assigned to the service-account group and add the optional `POOL_READ` role. Return to the Dashboard and select **Refresh pools**. Without `POOL_READ`, app management continues normally and only the pool cards remain unavailable.
 3. **Native TrueNAS system health** — add `ALERT_LIST_READ` for active/dismissed alerts and `SYSTEM_UPDATE_READ` for OS update availability. The broader read-only `READONLY_ADMIN` role additionally enables hostname, version, hardware, load, boot time, and uptime. Open **System**; missing roles affect only their own panel, and the page never dismisses alerts or installs OS updates.
 4. **Live app resources** — `APPS_READ`, already required for discovery, also permits the shared `app.stats` stream. No additional setting is needed. After a successful connection, CPU and memory appear on the Apps page after the first sample; open an app's details page for network and block-I/O values. Samples remain in memory and are never added to history or backups.
 5. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in the password-protected full recovery backup.
+6. **Data Protection Center** — add `DATASET_READ` and `SNAPSHOT_READ` for the dataset tree and newest snapshot age; add `SNAPSHOT_TASK_READ`, `REPLICATION_TASK_READ`, and `CLOUD_SYNC_READ` for coverage, state, last-success, and next-run details. The page marks user datasets with no enabled snapshot, outbound replication, or outbound cloud-sync path as unprotected. Every source remains independent and read-only.
+7. **Drive & Pool Health** — add `POOL_READ` for topology, error counters, and scrub/resilver progress; `DISK_READ` for drive identity; `REPORTING_READ` for cached temperatures and critical thresholds; and `ALERT_LIST_READ` for active SMART/storage warnings. Missing roles affect only their source card.
 
 The **Operations Inbox** refreshes automatically every minute and can also be refreshed on demand. It combines native TrueNAS alerts (`ALERT_LIST_READ`), pool scrub/resilver activity (`POOL_READ`), recent TrueNAS jobs visible to the authenticated account, local app-update and notification failures, and imported Uptime Kuma outages. Scoped accounts can see jobs owned by their current API session; TrueNAS exposes jobs from other sessions only to a Full Admin account. Full Admin is optional and broader than the recommended least-privilege profile, so grant it only when cross-session job visibility is worth that access.
 
@@ -244,7 +248,7 @@ Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fiel
 
 The app-details page prioritizes operations. A large live-log workspace sits beside a bounded access-and-workloads column, followed by full-width overview cards for application metadata, Uptime Kuma, updates and recovery, safety, and recent history. This shared page flow keeps secondary cards from extending beside empty content. On smaller screens, every section stacks into one column without horizontal overflow.
 
-The primary navigation is ordered **Dashboard**, **Inbox**, **Apps**, **Discover**, **System**, **Monitoring**, **History**, and **Settings**. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
+The primary navigation is ordered **Dashboard**, **Inbox**, **Apps**, **Discover**, **System**, **Data protection**, **Drive health**, **Monitoring**, **History**, and **Settings**. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
 
 The Apps page can star frequently used apps, assign a custom group under each app's **Settings**, and filter by favorites, group, or ungrouped apps. It also shows current CPU and memory at a glance. The details page adds live CPU, memory, network, and block-I/O metrics alongside the current route, ports, health, workloads, versions, lifecycle controls, source information, and live logs. Resource values come from TrueNAS's shared statistics stream and are not persisted.
 

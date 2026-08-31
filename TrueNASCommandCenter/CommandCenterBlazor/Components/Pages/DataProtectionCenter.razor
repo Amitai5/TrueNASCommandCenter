@@ -1,0 +1,253 @@
+@page "/protection"
+@inject IDataProtectionCenterService ProtectionService
+
+<PageTitle>Data Protection · TrueNAS Command Center</PageTitle>
+
+<div class="page protection-page">
+    <header class="page-header">
+        <div>
+            <h1>Data Protection</h1>
+            <p class="subtitle">Snapshot coverage, replication, cloud sync, and unprotected datasets in one read-only view.</p>
+        </div>
+        <button class="primary" disabled="@_loading" @onclick="RefreshAsync">
+            @if (_loading)
+            {
+                <span class="spinner"></span>
+            }
+            Refresh protection
+        </button>
+    </header>
+
+    @if (_loading && _overview is null)
+    {
+        <div class="panel empty-state state-loading"><span class="spinner"></span><strong>Loading data-protection coverage…</strong></div>
+    }
+    else if (_overview is not null)
+    {
+        <section class="summary-grid protection-summary" aria-label="Data protection summary">
+            <a class="summary-item summary-link" href="#dataset-coverage"><strong>@_overview.ProtectedDatasetCount / @_overview.EligibleDatasetCount</strong><span>Datasets protected</span></a>
+            <a class="summary-item summary-link" href="#protection-warnings"><strong>@_overview.UnprotectedDatasetCount</strong><span>Unprotected</span></a>
+            <a class="summary-item summary-link" href="#protection-tasks"><strong>@_overview.Tasks.Count(task => task.IsEnabled)</strong><span>Enabled tasks</span></a>
+            <a class="summary-item summary-link" href="#protection-tasks"><strong>@_overview.FailedTaskCount</strong><span>Failed tasks</span></a>
+        </section>
+
+        <section class="capability-strip" aria-label="Data source permissions">
+            @foreach (var source in _overview.Sources)
+            {
+                <div class="capability-chip @(source.IsAvailable ? "available" : "unavailable")"><span class="status-dot @(source.IsAvailable ? "success" : "warning")"></span><div><strong>@source.Name</strong><span>@(source.IsAvailable ? "Available" : source.Error)</span></div><code>@source.RequiredRole</code></div>
+            }
+        </section>
+
+        <section class="panel protection-warning-panel" id="protection-warnings">
+            <div class="panel-heading-row">
+                <div><h2>Coverage warnings</h2><p class="muted">User datasets without an enabled protection path and tasks reporting failures.</p></div>
+                <span class="badge @(_overview.Warnings.Count == 0 ? "success" : "warning")">@(_overview.Warnings.Count == 0 ? "All clear" : $"{_overview.Warnings.Count} active")</span>
+            </div>
+            @if (_overview.Warnings.Count == 0)
+            {
+                <div class="health-clear"><span class="status-dot success"></span><div><strong>No protection warnings</strong><p class="muted">Every eligible dataset has an enabled snapshot, replication, or cloud-sync path.</p></div></div>
+            }
+            else
+            {
+                <div class="health-warning-list">
+                    @foreach (var warning in _overview.Warnings.Take(20))
+                    {
+                        <article class="health-warning-item">
+                            <span class="status-dot @warning.Severity"></span>
+                            <div><strong>@warning.Title</strong><p>@warning.Detail</p></div>
+                            @if (!string.IsNullOrWhiteSpace(warning.Dataset))
+                            {
+                                <code>@warning.Dataset</code>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel" id="dataset-coverage">
+            <div class="panel-heading-row">
+                <div><h2>Dataset coverage</h2><p class="muted">The tree mirrors dataset paths. System and pool-root datasets remain visible but do not generate unprotected warnings.</p></div>
+                <span class="badge info">@FilteredDatasets().Count shown</span>
+            </div>
+            <div class="panel-toolbar protection-toolbar">
+                <div class="field">
+                    <label class="visually-hidden" for="dataset-search">Search datasets</label>
+                    <input id="dataset-search" type="search" placeholder="Search datasets" autocomplete="off" @bind="_datasetSearch" @bind:event="oninput" />
+                </div>
+                <div class="field">
+                    <label class="visually-hidden" for="coverage-filter">Filter coverage</label>
+                    <select id="coverage-filter" @bind="_coverageFilter">
+                        <option value="all">All datasets</option>
+                        <option value="unprotected">Unprotected</option>
+                        <option value="protected">Protected</option>
+                        <option value="system">System / pool root</option>
+                    </select>
+                </div>
+            </div>
+
+            @if (FilteredDatasets().Count == 0)
+            {
+                <div class="empty-state compact"><h3>No matching datasets</h3><p>Change the filter or add <code>DATASET_READ</code> if dataset access is unavailable.</p></div>
+            }
+            else
+            {
+                <div class="table-wrap health-desktop-table">
+                    <table>
+                        <thead><tr><th>Dataset</th><th>Protection</th><th>Snapshots</th><th>Newest snapshot</th><th>State</th></tr></thead>
+                        <tbody>
+                            @foreach (var dataset in FilteredDatasets())
+                            {
+                                <tr class="@(dataset.IsUnprotected ? "row-warning" : null)">
+                                    <td><div class="dataset-tree-name" style="@DatasetIndent(dataset)"><span class="dataset-tree-branch" aria-hidden="true"></span><strong>@DatasetLeaf(dataset.Name)</strong></div><span class="app-meta">@dataset.Name · @dataset.Type</span></td>
+                                    <td><div class="coverage-badges">@if (dataset.HasSnapshotTask) { <span class="badge info">Snapshot</span> } @if (dataset.HasReplicationTask) { <span class="badge info">Replication</span> } @if (dataset.HasCloudSyncTask) { <span class="badge info">Cloud</span> } @if (!dataset.IsProtected) { <span class="muted">None</span> }</div></td>
+                                    <td><strong>@dataset.SnapshotCount</strong></td>
+                                    <td><strong>@FormatAge(dataset.NewestSnapshotUtc)</strong><span class="app-meta">@FormatDate(dataset.NewestSnapshotUtc)</span></td>
+                                    <td><span class="badge @CoverageClass(dataset)">@CoverageText(dataset)</span>@if (dataset.IsLocked) { <span class="app-meta">Locked</span> }</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="health-mobile-list">
+                    @foreach (var dataset in FilteredDatasets())
+                    {
+                        <article class="health-mobile-card @(dataset.IsUnprotected ? "warning-card" : null)">
+                            <div class="row"><div><strong>@dataset.Name</strong><span class="app-meta">@dataset.Type</span></div><span class="badge @CoverageClass(dataset)">@CoverageText(dataset)</span></div>
+                            <div class="coverage-badges">@if (dataset.HasSnapshotTask) { <span class="badge info">Snapshot</span> } @if (dataset.HasReplicationTask) { <span class="badge info">Replication</span> } @if (dataset.HasCloudSyncTask) { <span class="badge info">Cloud</span> }</div>
+                            <dl class="details-list compact-details"><dt>Snapshots</dt><dd>@dataset.SnapshotCount</dd><dt>Newest</dt><dd>@FormatAge(dataset.NewestSnapshotUtc)</dd><dt>Locked</dt><dd>@(dataset.IsLocked ? "Yes" : "No")</dd></dl>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel" id="protection-tasks">
+            <div class="panel-heading-row"><div><h2>Protection tasks</h2><p class="muted">Last success and next run for periodic snapshots, replication, and cloud sync.</p></div><span class="badge info">@_overview.Tasks.Count total</span></div>
+            @if (_overview.Tasks.Count == 0)
+            {
+                <div class="empty-state compact"><h3>No tasks visible</h3><p>Configure protection in TrueNAS or add the task read roles shown above.</p></div>
+            }
+            else
+            {
+                <div class="protection-task-grid">
+                    @foreach (var task in _overview.Tasks)
+                    {
+                        <article class="protection-task-card">
+                            <div class="row"><span class="eyebrow">@TaskKind(task.Kind)</span><span class="badge @TaskStateClass(task)">@TaskStateText(task)</span></div>
+                            <h3>@task.Name</h3>
+                            <p class="task-route"><strong>@task.Source</strong>@if (!string.IsNullOrWhiteSpace(task.Destination)) { <span>→ @task.Destination</span> }</p>
+                            @if (task.ProgressPercent is { } progress && task.State == "RUNNING")
+                            {
+                                <div class="pool-capacity-track" role="progressbar" aria-label="@task.Name progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(progress)"><span style="width:@(progress.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                            }
+                            <dl class="details-list compact-details"><dt>Last success</dt><dd>@FormatDate(task.LastSuccessUtc)</dd><dt>Next run</dt><dd>@FormatDate(task.NextRunUtc, "Manual / event driven")</dd><dt>Schedule</dt><dd><code>@task.Schedule</code></dd></dl>
+                            @if (!string.IsNullOrWhiteSpace(task.Error))
+                            {
+                                <p class="inline-error">@task.Error</p>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <p class="data-observed">Observed @FormatDate(_overview.ObservedAtUtc) · Read-only; configuration stays in TrueNAS.</p>
+    }
+</div>
+
+@code {
+    private DataProtectionCenterOverview? _overview;
+    private bool _loading;
+    private string _datasetSearch = string.Empty;
+    private string _coverageFilter = "all";
+
+    protected override Task OnInitializedAsync() => RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        try
+        {
+            _overview = await ProtectionService.GetAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private IReadOnlyList<DatasetProtectionStatus> FilteredDatasets()
+    {
+        if (_overview is null)
+        {
+            return [];
+        }
+
+        return _overview.Datasets.Where(dataset =>
+            (string.IsNullOrWhiteSpace(_datasetSearch) || dataset.Name.Contains(_datasetSearch, StringComparison.OrdinalIgnoreCase)) &&
+            (_coverageFilter switch
+            {
+                "unprotected" => dataset.IsUnprotected,
+                "protected" => dataset.IsWarningEligible && dataset.IsProtected,
+                "system" => !dataset.IsWarningEligible,
+                _ => true
+            })).ToList();
+    }
+
+    private string FormatDate(DateTimeOffset? value, string fallback = "Never")
+    {
+        if (value is null || _overview is null)
+        {
+            return fallback;
+        }
+
+        try
+        {
+            var zone = TimeZoneInfo.FindSystemTimeZoneById(_overview.TimeZoneId);
+            return $"{TimeZoneInfo.ConvertTime(value.Value, zone):MMM d, yyyy h:mm tt} {zone.Id}";
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return $"{value.Value.UtcDateTime:MMM d, yyyy h:mm tt} UTC";
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return $"{value.Value.UtcDateTime:MMM d, yyyy h:mm tt} UTC";
+        }
+    }
+
+    private string FormatAge(DateTimeOffset? value)
+    {
+        if (value is null || _overview is null)
+        {
+            return "Never";
+        }
+
+        var age = _overview.ObservedAtUtc - value.Value;
+        if (age < TimeSpan.Zero)
+        {
+            return "Just now";
+        }
+
+        if (age.TotalMinutes < 60)
+        {
+            return $"{Math.Max(1, Math.Floor(age.TotalMinutes)):0} min ago";
+        }
+
+        if (age.TotalHours < 24)
+        {
+            return $"{Math.Floor(age.TotalHours):0} hr ago";
+        }
+
+        return $"{Math.Floor(age.TotalDays):0} days ago";
+    }
+
+    private static string DatasetIndent(DatasetProtectionStatus dataset) => $"--tree-depth:{Math.Min(dataset.Depth, 8)}";
+    private static string DatasetLeaf(string name) => name[(name.LastIndexOf('/') + 1)..];
+    private static string CoverageClass(DatasetProtectionStatus dataset) => dataset.IsSystemDataset || !dataset.IsWarningEligible ? "info" : dataset.IsProtected ? "success" : "warning";
+    private static string CoverageText(DatasetProtectionStatus dataset) => dataset.IsSystemDataset ? "System" : !dataset.IsWarningEligible ? "Pool root" : dataset.IsProtected ? "Protected" : "Unprotected";
+    private static string TaskKind(DataProtectionTaskKind kind) => kind switch { DataProtectionTaskKind.Snapshot => "Snapshot", DataProtectionTaskKind.Replication => "Replication", _ => "Cloud sync" };
+    private static string TaskStateText(DataProtectionTaskStatus task) => task.IsEnabled ? task.State : "Disabled";
+    private static string TaskStateClass(DataProtectionTaskStatus task) => !task.IsEnabled ? "info" : task.State is "SUCCESS" or "FINISHED" or "COMPLETE" or "COMPLETED" ? "success" : task.State == "RUNNING" ? "info" : task.State is "FAILED" or "ERROR" or "ABORTED" ? "danger" : "warning";
+}

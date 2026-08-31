@@ -126,6 +126,9 @@ public sealed record TrueNasPoolDto
 
     [JsonPropertyName("scan")]
     public TrueNasPoolScanDto? Scan { get; init; }
+
+    [JsonPropertyName("topology")]
+    public TrueNasPoolTopologyDto? Topology { get; init; }
 }
 
 /// <summary>Represents the current or most recent scrub or resilver reported for a pool.</summary>

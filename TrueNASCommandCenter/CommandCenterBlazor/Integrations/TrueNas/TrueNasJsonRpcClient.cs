@@ -20,7 +20,7 @@ public sealed class TrueNasJsonRpcClient(
     SettingsService settingsService,
     IDbContextFactory<AppDbContext> dbFactory,
     TimeProvider timeProvider,
-    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasCatalogClient, ITrueNasSystemClient, IAsyncDisposable
+    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasCatalogClient, ITrueNasSystemClient, ITrueNasDataProtectionClient, ITrueNasDriveHealthClient, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -144,6 +144,57 @@ public sealed class TrueNasJsonRpcClient(
     /// <inheritdoc />
     public Task<IReadOnlyList<TrueNasPoolDto>> QueryPoolsAsync(CancellationToken cancellationToken = default) =>
         CallAsync<IReadOnlyList<TrueNasPoolDto>>("pool.query", [Array.Empty<object>(), new { }], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasDatasetDto>> QueryDatasetsAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasDatasetDto>>(
+            "pool.dataset.query",
+            [Array.Empty<object>(), new { extra = new { flat = true, retrieve_children = true, properties = Array.Empty<string>(), retrieve_user_props = false } }],
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasSnapshotDto>> QuerySnapshotsAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasSnapshotDto>>(
+            "pool.snapshot.query",
+            [Array.Empty<object>(), new { extra = new { properties = new[] { "creation" }, retention = false }, select = new[] { "id", "name", "dataset", "snapshot_name", "properties" } }],
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasSnapshotTaskDto>> QuerySnapshotTasksAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasSnapshotTaskDto>>("pool.snapshottask.query", [Array.Empty<object>(), new { order_by = new[] { "dataset" } }], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasReplicationTaskDto>> QueryReplicationTasksAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasReplicationTaskDto>>("replication.query", [Array.Empty<object>(), new { order_by = new[] { "name" } }], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasCloudSyncTaskDto>> QueryCloudSyncTasksAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasCloudSyncTaskDto>>("cloudsync.query", [Array.Empty<object>(), new { order_by = new[] { "description" } }], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasJobDto>> ListProtectionJobsAsync(int limit = 500, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 1000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Job query limit must be between 1 and 1000.");
+        }
+
+        return CallAsync<IReadOnlyList<TrueNasJobDto>>(
+            "core.get_jobs",
+            [Array.Empty<object>(), new { order_by = new[] { "-id" }, limit }],
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasDiskDto>> QueryDisksAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasDiskDto>>("disk.query", [Array.Empty<object>(), new { order_by = new[] { "name" } }], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<Dictionary<string, JsonElement>> GetDiskTemperaturesAsync(IReadOnlyList<string> diskNames, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(diskNames);
+        return CallAsync<Dictionary<string, JsonElement>>("disk.temperatures", [diskNames, true], cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<TrueNasJobDto>> ListJobsAsync(int limit = 200, CancellationToken cancellationToken = default)

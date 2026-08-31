@@ -185,6 +185,14 @@ x-portals:
                 <p>Open <strong>System</strong> for native TrueNAS alerts, OS update availability, host identity and uptime, and pool health. Every panel is read-only and remains independently optional.</p>
             </article>
             <article>
+                <h3>Data Protection Center</h3>
+                <p>Open <strong>Data protection</strong> for the dataset tree, snapshot coverage and age, replication/cloud-sync state, next runs, and unprotected-dataset warnings. Add <code>DATASET_READ</code>, <code>SNAPSHOT_READ</code>, <code>SNAPSHOT_TASK_READ</code>, <code>REPLICATION_TASK_READ</code>, and <code>CLOUD_SYNC_READ</code> for the complete view.</p>
+            </article>
+            <article>
+                <h3>Drive &amp; Pool Health</h3>
+                <p>Open <strong>Drive health</strong> for pool/vdev membership, scrub and resilver progress, ZFS errors, disk model/serial/capacity, temperatures, and SMART-related warnings. Add <code>POOL_READ</code>, <code>DISK_READ</code>, <code>REPORTING_READ</code>, and <code>ALERT_LIST_READ</code>.</p>
+            </article>
+            <article>
                 <h3>Operations Inbox</h3>
                 <p>Open <strong>Inbox</strong> for one durable feed of TrueNAS alerts and jobs, pool scans, app update failures, Uptime Kuma outages, and notification failures. Acknowledge or resolve items, filter the feed, open the related view, and review push-delivery and event history. Scoped accounts see their current API-session jobs; cross-session jobs require an optional Full Admin account.</p>
             </article>
@@ -235,7 +243,7 @@ x-portals:
             </details>
             <details>
                 <summary>Missing app permissions</summary>
-                <p>Verify the service account's group is attached to a custom privilege containing <code>APPS_READ</code> and <code>APPS_WRITE</code>. Discover separately requires <code>CATALOG_READ</code>. System and Inbox explain which optional read role each unavailable source needs: <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, <code>SYSTEM_UPDATE_READ</code>, or the broader <code>READONLY_ADMIN</code>. Scoped accounts see jobs created by their own API session; jobs from every session require an optional Full Admin account. After changing roles, run <strong>Settings → Connection → Test connection</strong> or <strong>Discover → Reconnect &amp; retry</strong>. Do not edit built-in TrueNAS privileges.</p>
+                <p>Verify the service account's group is attached to a custom privilege containing <code>APPS_READ</code> and <code>APPS_WRITE</code>. Discover separately requires <code>CATALOG_READ</code>. System, Data protection, Drive health, and Inbox show the exact optional read role beside every unavailable source. After changing roles, run <strong>Settings → Connection → Test connection</strong> so the WebSocket reauthenticates. Scoped accounts see jobs created by their own API session; jobs from every session require an optional Full Admin account. Do not edit built-in TrueNAS privileges.</p>
             </details>
             <details>
                 <summary>Certificate validation error</summary>

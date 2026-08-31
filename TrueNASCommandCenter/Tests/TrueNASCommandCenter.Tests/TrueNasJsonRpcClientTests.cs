@@ -557,7 +557,7 @@ public sealed class TrueNasJsonRpcClientTests
             Assert.AreEqual("pool.query", request.GetProperty("method").GetString());
             transport.Respond(request.GetProperty("id").GetInt64(), new[]
             {
-                new { name = "tank", status = "ONLINE", healthy = true, warning = false, size = 1_000L, allocated = 400L, free = 600L, fragmentation = "4%", scan = new { function = "SCRUB", state = "SCANNING", start_time = "2026-08-30T17:00:00Z", end_time = (object?)null, percentage = 35.5, errors = 0, total_secs_left = 900 } }
+                new { name = "tank", status = "ONLINE", healthy = true, warning = false, size = 1_000L, allocated = 400L, free = 600L, fragmentation = "4%", scan = new { function = "SCRUB", state = "SCANNING", start_time = "2026-08-30T17:00:00Z", end_time = (object?)null, percentage = 35.5, errors = 0, total_secs_left = 900 }, topology = new { data = new[] { new { name = "sda", type = "DISK", status = "ONLINE", disk = "sda", stats = new { read_errors = 1L, write_errors = 0L, checksum_errors = 0L }, children = Array.Empty<object>() } }, log = Array.Empty<object>(), cache = Array.Empty<object>(), spare = Array.Empty<object>(), special = Array.Empty<object>(), dedup = Array.Empty<object>() } }
             });
             return Task.CompletedTask;
         });
@@ -574,6 +574,67 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.AreEqual("4%", pool.Fragmentation);
         Assert.AreEqual("SCRUB", pool.Scan!.Function);
         Assert.AreEqual(35.5, pool.Scan.Percentage);
+        Assert.HasCount(1, pool.Topology!.Data);
+        Assert.AreEqual("sda", pool.Topology.Data[0].Disk);
+        Assert.AreEqual(1L, pool.Topology.Data[0].Stats!.ReadErrors);
+    }
+
+    /// <summary>Verifies the data-protection client calls the five focused TrueNAS query methods.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task DataProtectionQueries_SendExpectedRpcMethods()
+    {
+        var methods = new List<string>();
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            methods.Add(request.GetProperty("method").GetString()!);
+            transport.Respond(request.GetProperty("id").GetInt64(), Array.Empty<object>());
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        await client.QueryDatasetsAsync();
+        await client.QuerySnapshotsAsync();
+        await client.QuerySnapshotTasksAsync();
+        await client.QueryReplicationTasksAsync();
+        await client.QueryCloudSyncTasksAsync();
+
+        CollectionAssert.AreEqual(new[] { "pool.dataset.query", "pool.snapshot.query", "pool.snapshottask.query", "replication.query", "cloudsync.query" }, methods);
+    }
+
+    /// <summary>Verifies disk identity and temperature requests use the expected methods and include thresholds.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task DriveHealthQueries_SendDiskNamesAndRequestThresholds()
+    {
+        JsonElement? temperatureParameters = null;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            var method = request.GetProperty("method").GetString();
+            if (method == "disk.query")
+            {
+                transport.Respond(request.GetProperty("id").GetInt64(), Array.Empty<object>());
+            }
+            else if (method == "disk.temperatures")
+            {
+                temperatureParameters = request.GetProperty("params").Clone();
+                transport.Respond(request.GetProperty("id").GetInt64(), new { sda = new { temperature = 37, critical = 70 } });
+            }
+
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var disks = await client.QueryDisksAsync();
+        var temperatures = await client.GetDiskTemperaturesAsync(["sda"]);
+
+        Assert.IsEmpty(disks);
+        Assert.IsNotNull(temperatureParameters);
+        Assert.AreEqual("sda", temperatureParameters.Value[0][0].GetString());
+        Assert.IsTrue(temperatureParameters.Value[1].GetBoolean());
+        Assert.AreEqual(37, temperatures["sda"].GetProperty("temperature").GetInt32());
     }
 
     [TestMethod]

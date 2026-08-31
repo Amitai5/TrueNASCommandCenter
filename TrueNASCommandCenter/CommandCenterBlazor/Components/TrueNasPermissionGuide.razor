@@ -23,6 +23,16 @@
             <div class="permission-role-list"><code>POOL_READ</code><code>ALERT_LIST_READ</code><code>SYSTEM_UPDATE_READ</code></div>
             <p><code>READONLY_ADMIN</code> adds broader host details and all read roles; use it only when that wider access is acceptable.</p>
         </article>
+        <article class="permission-card optional">
+            <span class="permission-label">Data Protection Center</span>
+            <div class="permission-role-list"><code>DATASET_READ</code><code>SNAPSHOT_READ</code><code>SNAPSHOT_TASK_READ</code><code>REPLICATION_TASK_READ</code><code>CLOUD_SYNC_READ</code></div>
+            <p>Dataset coverage, newest snapshot age, replication and cloud-sync state, schedules, and unprotected warnings.</p>
+        </article>
+        <article class="permission-card optional">
+            <span class="permission-label">Drive &amp; Pool Health</span>
+            <div class="permission-role-list"><code>POOL_READ</code><code>DISK_READ</code><code>REPORTING_READ</code><code>ALERT_LIST_READ</code></div>
+            <p>Pool topology and scans, disk identity and membership, cached temperature, ZFS errors, and SMART-related alerts.</p>
+        </article>
     </div>
 
     <p class="permission-note"><strong>Changed a privilege?</strong> Run <strong>Test connection</strong> or use <strong>Reconnect &amp; retry</strong> on Discover so the new TrueNAS session receives it.</p>

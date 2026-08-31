@@ -1,0 +1,202 @@
+@page "/storage-health"
+@inject IDrivePoolHealthService DrivePoolHealthService
+
+<PageTitle>Drive & Pool Health · TrueNAS Command Center</PageTitle>
+
+<div class="page drive-health-page">
+    <header class="page-header">
+        <div><h1>Drive & Pool Health</h1><p class="subtitle">Disk temperatures, SMART warnings, pool topology, error counters, scrubs, and resilvers.</p></div>
+        <button class="primary" disabled="@_loading" @onclick="RefreshAsync">@if (_loading) { <span class="spinner"></span> } Refresh health</button>
+    </header>
+
+    @if (_loading && _overview is null)
+    {
+        <div class="panel empty-state state-loading"><span class="spinner"></span><strong>Loading drive and pool health…</strong></div>
+    }
+    else if (_overview is not null)
+    {
+        <section class="summary-grid drive-health-summary" aria-label="Drive and pool health summary">
+            <a class="summary-item summary-link" href="#pool-health"><strong>@_overview.HealthyPoolCount / @_overview.Pools.Count</strong><span>Healthy pools</span></a>
+            <a class="summary-item summary-link" href="#drive-health"><strong>@_overview.Drives.Count</strong><span>Drives</span></a>
+            <a class="summary-item summary-link" href="#storage-warnings"><strong>@_overview.WarningDriveCount</strong><span>Drives need review</span></a>
+            <a class="summary-item summary-link" href="#pool-health"><strong>@_overview.ActiveScanCount</strong><span>Active scans</span></a>
+        </section>
+
+        <section class="capability-strip" aria-label="Drive health source permissions">
+            @foreach (var source in _overview.Sources)
+            {
+                <div class="capability-chip @(source.IsAvailable ? "available" : "unavailable")"><span class="status-dot @(source.IsAvailable ? "success" : "warning")"></span><div><strong>@source.Name</strong><span>@(source.IsAvailable ? "Available" : source.Error)</span></div><code>@source.RequiredRole</code></div>
+            }
+        </section>
+
+        <section class="panel" id="storage-warnings">
+            <div class="panel-heading-row"><div><h2>Storage warnings</h2><p class="muted">Active TrueNAS alerts related to disks, SMART, temperature, ZFS, scrubs, or resilvers.</p></div><span class="badge @(_overview.Warnings.Count == 0 ? "success" : "warning")">@(_overview.Warnings.Count == 0 ? "All clear" : $"{_overview.Warnings.Count} active")</span></div>
+            @if (_overview.Warnings.Count == 0)
+            {
+                <div class="health-clear"><span class="status-dot success"></span><div><strong>No active storage warnings</strong><p class="muted">TrueNAS did not report active drive, SMART, or pool warnings.</p></div></div>
+            }
+            else
+            {
+                <div class="health-warning-list">
+                    @foreach (var warning in _overview.Warnings)
+                    {
+                        <article class="health-warning-item"><span class="status-dot @SeverityClass(warning.Severity)"></span><div><strong>@warning.Title</strong><p>@warning.Detail</p></div><span class="health-warning-target">@string.Join(" · ", new[] { warning.PoolName, warning.DiskName }.Where(value => !string.IsNullOrWhiteSpace(value)))</span></article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel" id="pool-health">
+            <div class="panel-heading-row"><div><h2>Pools & vdevs</h2><p class="muted">Current pool state, scan progress, topology, and ZFS error counts.</p></div><span class="badge info">@_overview.Pools.Count pools</span></div>
+            @if (_overview.Pools.Count == 0)
+            {
+                <div class="empty-state compact"><h3>No pools visible</h3><p>Add <code>POOL_READ</code> or reconnect to TrueNAS.</p></div>
+            }
+            else
+            {
+                <div class="pool-health-grid">
+                    @foreach (var pool in _overview.Pools)
+                    {
+                        <article class="pool-health-card">
+                            <div class="panel-heading-row"><div><span class="eyebrow">Storage pool</span><h3>@pool.Name</h3></div><span class="badge @PoolStateClass(pool)">@pool.Status</span></div>
+                            <div class="pool-health-metrics"><div><span>Used</span><strong>@FormatBytes(pool.AllocatedBytes)</strong></div><div><span>Vdev errors</span><strong>@pool.TotalVdevErrors</strong></div><div><span>Scan errors</span><strong>@pool.ScanErrors</strong></div></div>
+                            @if (pool.SizeBytes is > 0 && pool.AllocatedBytes is not null)
+                            {
+                                var used = Math.Clamp((double)pool.AllocatedBytes.Value / pool.SizeBytes.Value * 100, 0, 100);
+                                <div class="pool-capacity-track" role="progressbar" aria-label="@pool.Name capacity" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(used)"><span style="width:@(used.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                                <p class="app-meta">@used.ToString("0.#")% of @FormatBytes(pool.SizeBytes)</p>
+                            }
+                            <div class="scan-status @ScanClass(pool)">
+                                <div><span class="eyebrow">@pool.ScanFunction</span><strong>@ScanText(pool)</strong></div>
+                                @if (pool.IsScanRunning && pool.ScanPercentage is { } scanProgress)
+                                {
+                                    <strong>@scanProgress.ToString("0.#")%</strong>
+                                }
+                            </div>
+                            @if (pool.IsScanRunning && pool.ScanPercentage is { } progress)
+                            {
+                                <div class="pool-capacity-track scan-progress" role="progressbar" aria-label="@pool.Name scan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(progress)"><span style="width:@(progress.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(pool.StatusDetail))
+                            {
+                                <p class="inline-error">@pool.StatusDetail</p>
+                            }
+                            <details class="vdev-details">
+                                <summary>View topology <span>@pool.Vdevs.Count entries</span></summary>
+                                @if (pool.Vdevs.Count == 0)
+                                {
+                                    <p class="muted">No topology entries were returned.</p>
+                                }
+                                else
+                                {
+                                    <div class="vdev-list">
+                                        @foreach (var vdev in pool.Vdevs)
+                                        {
+                                            <div class="vdev-row" style="@VdevIndent(vdev)"><div><strong>@vdev.Name</strong><span>@vdev.Group · @vdev.Type</span></div><span class="badge @VdevStateClass(vdev)">@vdev.Status</span><code>R @vdev.ReadErrors · W @vdev.WriteErrors · C @vdev.ChecksumErrors</code></div>
+                                        }
+                                    </div>
+                                }
+                            </details>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel" id="drive-health">
+            <div class="panel-heading-row"><div><h2>Drives</h2><p class="muted">Identity, pool membership, temperature, SMART state, and vdev error counters.</p></div><span class="badge info">@FilteredDrives().Count shown</span></div>
+            <div class="panel-toolbar protection-toolbar">
+                <div class="field"><label class="visually-hidden" for="drive-search">Search drives</label><input id="drive-search" type="search" placeholder="Search name, model, serial, pool, or vdev" autocomplete="off" @bind="_driveSearch" @bind:event="oninput" /></div>
+                <div class="field"><label class="visually-hidden" for="drive-filter">Filter drive state</label><select id="drive-filter" @bind="_driveFilter"><option value="all">All drives</option><option value="attention">Needs review</option><option value="hot">Warm / hot</option><option value="errors">With errors</option><option value="smart-off">SMART disabled</option></select></div>
+            </div>
+            @if (FilteredDrives().Count == 0)
+            {
+                <div class="empty-state compact"><h3>No matching drives</h3><p>Change the filter or add <code>DISK_READ</code> if drive identity is unavailable.</p></div>
+            }
+            else
+            {
+                <div class="table-wrap health-desktop-table">
+                    <table><thead><tr><th>Drive</th><th>Pool / vdev</th><th>Temperature</th><th>SMART</th><th>Errors R / W / C</th><th>Warnings</th></tr></thead>
+                        <tbody>
+                            @foreach (var drive in FilteredDrives())
+                            {
+                                <tr class="@(DriveNeedsAttention(drive) ? "row-warning" : null)"><td><strong>@drive.Name</strong><span class="app-meta">@(drive.Model ?? "Unknown model") · @FormatBytes(drive.CapacityBytes)</span><span class="app-meta">Serial @(drive.Serial ?? "—")</span></td><td><strong>@(drive.PoolName ?? "Unassigned")</strong><span class="app-meta">@string.Join(" · ", new[] { drive.VdevGroup, drive.VdevName }.Where(value => !string.IsNullOrWhiteSpace(value)))</span></td><td><span class="temperature-value @drive.TemperatureState">@TemperatureText(drive)</span><span class="app-meta">Critical @CriticalTemperatureText(drive)</span></td><td><span class="badge @(drive.IsSmartEnabled ? "success" : "warning")">@(drive.IsSmartEnabled ? "Enabled" : "Disabled")</span></td><td><code>@drive.ReadErrors / @drive.WriteErrors / @drive.ChecksumErrors</code></td><td><span class="badge @(drive.WarningCount == 0 ? "success" : "danger")">@drive.WarningCount</span></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="health-mobile-list">
+                    @foreach (var drive in FilteredDrives())
+                    {
+                        <article class="health-mobile-card @(DriveNeedsAttention(drive) ? "warning-card" : null)"><div class="row"><div><strong>@drive.Name</strong><span class="app-meta">@(drive.Model ?? "Unknown model")</span></div><span class="temperature-value @drive.TemperatureState">@TemperatureText(drive)</span></div><dl class="details-list compact-details"><dt>Serial</dt><dd>@(drive.Serial ?? "—")</dd><dt>Capacity</dt><dd>@FormatBytes(drive.CapacityBytes)</dd><dt>Pool</dt><dd>@(drive.PoolName ?? "Unassigned")</dd><dt>Vdev</dt><dd>@(drive.VdevName ?? "—")</dd><dt>SMART</dt><dd>@(drive.IsSmartEnabled ? "Enabled" : "Disabled")</dd><dt>Errors R / W / C</dt><dd>@drive.ReadErrors / @drive.WriteErrors / @drive.ChecksumErrors</dd><dt>Warnings</dt><dd>@drive.WarningCount</dd></dl></article>
+                    }
+                </div>
+            }
+        </section>
+
+        <p class="data-observed">Observed @FormatDate(_overview.ObservedAtUtc) · Temperatures may be cached by TrueNAS for up to five minutes.</p>
+    }
+</div>
+
+@code {
+    private DrivePoolHealthOverview? _overview;
+    private bool _loading;
+    private string _driveSearch = string.Empty;
+    private string _driveFilter = "all";
+
+    protected override Task OnInitializedAsync() => RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        try
+        {
+            _overview = await DrivePoolHealthService.GetAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private IReadOnlyList<DriveHealthDetail> FilteredDrives()
+    {
+        if (_overview is null)
+        {
+            return [];
+        }
+
+        return _overview.Drives.Where(drive => MatchesSearch(drive) && (_driveFilter switch { "attention" => DriveNeedsAttention(drive), "hot" => drive.TemperatureState is "warning" or "danger", "errors" => drive.TotalErrors > 0, "smart-off" => !drive.IsSmartEnabled, _ => true })).ToList();
+    }
+
+    private bool MatchesSearch(DriveHealthDetail drive) => string.IsNullOrWhiteSpace(_driveSearch) || new[] { drive.Name, drive.Model, drive.Serial, drive.PoolName, drive.VdevName }.Where(value => !string.IsNullOrWhiteSpace(value)).Any(value => value!.Contains(_driveSearch, StringComparison.OrdinalIgnoreCase));
+    private static bool DriveNeedsAttention(DriveHealthDetail drive) => drive.WarningCount > 0 || drive.TotalErrors > 0 || !drive.IsSmartEnabled || drive.TemperatureState is "warning" or "danger";
+    private static string PoolStateClass(PoolHealthDetail pool) => pool.IsHealthy && !pool.HasWarning && pool.TotalVdevErrors == 0 ? "success" : "danger";
+    private static string VdevStateClass(PoolVdevHealth vdev) => vdev.Status == "ONLINE" && vdev.TotalErrors == 0 ? "success" : "danger";
+    private static string ScanClass(PoolHealthDetail pool) => pool.IsScanRunning ? "running" : pool.ScanErrors > 0 ? "danger" : "idle";
+    private static string ScanText(PoolHealthDetail pool) => pool.IsScanRunning ? $"{pool.ScanState.ToLowerInvariant()} in progress" : pool.ScanState == "FINISHED" ? $"Last {pool.ScanFunction.ToLowerInvariant()} finished" : "No scan in progress";
+    private static string VdevIndent(PoolVdevHealth vdev) => $"--vdev-depth:{Math.Min(vdev.Depth, 6)}";
+    private static string TemperatureText(DriveHealthDetail drive) => drive.TemperatureCelsius is null ? "Unavailable" : $"{drive.TemperatureCelsius:0.#} °C";
+    private static string CriticalTemperatureText(DriveHealthDetail drive) => drive.CriticalTemperatureCelsius is null ? "not reported" : $"{drive.CriticalTemperatureCelsius:0.#} °C";
+    private static string SeverityClass(string severity) => severity is "EMERGENCY" or "ALERT" or "CRITICAL" or "ERROR" ? "danger" : "warning";
+    private static string FormatDate(DateTimeOffset value) => $"{value.ToLocalTime():MMM d, yyyy h:mm tt}";
+
+    private static string FormatBytes(long? bytes)
+    {
+        if (bytes is null)
+        {
+            return "—";
+        }
+
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+        var value = (double)bytes.Value;
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.#} {units[unit]}";
+    }
+}
