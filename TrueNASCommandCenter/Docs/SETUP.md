@@ -56,7 +56,7 @@ The username is case-sensitive. You will enter this exact username in TrueNAS Co
    - Optionally, `ALERT_LIST_READ` for native TrueNAS alerts
    - Optionally, `SYSTEM_UPDATE_READ` for TrueNAS operating-system update availability
    - Optionally, `DATASET_READ`, `SNAPSHOT_READ`, `SNAPSHOT_TASK_READ`, `REPLICATION_TASK_READ`, and `CLOUD_SYNC_READ` for the Data Protection Center
-   - Optionally, `DISK_READ` and `REPORTING_READ` for drive identity and temperature; Drive Health also reuses `POOL_READ` and `ALERT_LIST_READ`
+   - Optionally, `REPORTING_READ` for System performance history/realtime data and drive temperature; Drive Health also uses `DISK_READ`, `POOL_READ`, and `ALERT_LIST_READ`
    - Optionally, `READONLY_ADMIN` for host identity, hardware, load, and uptime
 6. Leave **Web Shell Access** disabled and save the privilege.
 
@@ -316,6 +316,14 @@ The **Drive health** page also keeps each source independent:
 5. Save the privilege, run **Test connection**, then select **Refresh health**.
 
 The page never starts a SMART test, scrub, or resilver and never changes disk or pool configuration.
+
+### Enable System performance
+
+1. Add `REPORTING_READ` to the API account privilege.
+2. Save the privilege, open **Settings → Connection**, and run **Test connection**. The result should mark **System performance** as **Available**.
+3. Open **System**. The live strip updates from `reporting.realtime`; use **1 hour**, **24 hours**, **7 days**, or **30 days** to query TrueNAS's Netdata-backed history.
+
+The Command Center requests realtime CPU, memory, network, disk-I/O, ZFS ARC, CPU-temperature, and pool activity. Historical charts cover CPU, available memory, load, CPU temperature, network throughput, disk I/O, and ZFS ARC size. Historical retention is controlled by TrueNAS; a chart explains when that host has no samples for the selected range. Realtime samples are kept only in memory.
 
 ### Enable live resource statistics
 

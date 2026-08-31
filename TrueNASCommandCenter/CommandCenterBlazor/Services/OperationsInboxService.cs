@@ -101,6 +101,10 @@ public sealed class OperationsInboxService(
         {
             itemsQuery = itemsQuery.Where(item => item.Status == query.Status);
         }
+        else if (!query.IncludeResolved)
+        {
+            itemsQuery = itemsQuery.Where(item => item.Status != OperationsInboxStatus.Resolved);
+        }
 
         if (query.Source is not null)
         {

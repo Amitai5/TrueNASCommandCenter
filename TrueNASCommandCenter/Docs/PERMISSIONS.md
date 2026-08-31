@@ -30,7 +30,7 @@ For app management and the Discover gallery, grant:
 | `REPLICATION_TASK_READ` | Optional | Replication coverage, state, source/target, and schedule | Replication cards and coverage are unavailable |
 | `CLOUD_SYNC_READ` | Optional | Cloud-sync coverage, state, local path, and schedule | Cloud-sync cards and coverage are unavailable |
 | `DISK_READ` | Optional | Disk model, serial, capacity, bus, type, rotation, and SMART configuration | Drive inventory is unavailable |
-| `REPORTING_READ` | Optional | Cached disk temperature and device-reported critical thresholds | Drive inventory remains visible without temperatures |
+| `REPORTING_READ` | Optional | System realtime host/pool activity and history for CPU, memory, load, network, disk I/O, ZFS ARC, and CPU temperature; cached drive temperature and critical thresholds | Performance charts and drive temperatures are unavailable |
 | `READONLY_ADMIN` | Optional and broad | Host identity, TrueNAS version, CPU, memory, load, boot time, and uptime; TrueNAS expands it to the available read-only roles | Host details remain limited; use the focused roles above when broad read access is unnecessary |
 
 The Operations Inbox reuses these permissions: `ALERT_LIST_READ` supplies native alerts and `POOL_READ` supplies pool scrub/resilver activity. Local update failures, notification failures, and Uptime Kuma outages need no additional TrueNAS role. The authenticated `core.get_jobs` call returns jobs owned by the current API session for a scoped account. Seeing jobs owned by every TrueNAS session requires a **Full Admin account**, not an additional focused role. Full Admin is optional and substantially broader than the profiles below.
@@ -140,6 +140,8 @@ The browser console only confirms that the Blazor user interface is connected to
 - [`pool.dataset.query`](https://api.truenas.com/v25.10.0/api_methods_pool.dataset.query.html) requires `DATASET_READ`, and [`pool.snapshot.query`](https://api.truenas.com/v25.10.0/api_methods_pool.snapshot.query.html) requires `SNAPSHOT_READ`.
 - [`pool.snapshottask.query`](https://api.truenas.com/v25.10.0/api_methods_pool.snapshottask.query.html), [`replication.query`](https://api.truenas.com/v25.10.0/api_methods_replication.query.html), and [`cloudsync.query`](https://api.truenas.com/v25.10.0/api_methods_cloudsync.query.html) require `SNAPSHOT_TASK_READ`, `REPLICATION_TASK_READ`, and `CLOUD_SYNC_READ` respectively.
 - [`disk.query`](https://api.truenas.com/v25.10.0/api_methods_disk.query.html) requires `DISK_READ`; [`disk.temperatures`](https://api.truenas.com/v25.10/api_methods_disk.temperatures.html) requires `REPORTING_READ` and may return cached values.
+- [`reporting.realtime`](https://api.truenas.com/v25.10.0/api_events_reporting.realtime.html) and [`reporting.netdata_get_data`](https://api.truenas.com/v25.10/api_methods_reporting.netdata_get_data.html) require `REPORTING_READ` for current and historical System performance.
+- [`auth.me`](https://api.truenas.com/v25.10/api_methods_auth.me.html) returns the effective roles shown by **Test connection** when `auth.login_ex` omits role details.
 - [`system.info`](https://api.truenas.com/v25.10.0/api_methods_system.info.html) requires `READONLY_ADMIN`.
 - [`core.get_jobs`](https://api.truenas.com/v25.10.0/api_methods_core.get_jobs.html) returns only jobs owned by the authenticated session unless that account is Full Admin.
 - The [TrueNAS role reference](https://api.truenas.com/v25.10/rbac.html) documents role composition and the breadth of `READONLY_ADMIN`.

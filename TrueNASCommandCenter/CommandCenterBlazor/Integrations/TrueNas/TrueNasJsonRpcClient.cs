@@ -20,7 +20,7 @@ public sealed class TrueNasJsonRpcClient(
     SettingsService settingsService,
     IDbContextFactory<AppDbContext> dbFactory,
     TimeProvider timeProvider,
-    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasCatalogClient, ITrueNasSystemClient, ITrueNasDataProtectionClient, ITrueNasDriveHealthClient, IAsyncDisposable
+    ILogger<TrueNasJsonRpcClient> logger) : ITrueNasClient, ITrueNasCatalogClient, ITrueNasSystemClient, ITrueNasPerformanceClient, ITrueNasDataProtectionClient, ITrueNasDriveHealthClient, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -54,6 +54,8 @@ public sealed class TrueNasJsonRpcClient(
             await ResetConnectionAsync();
             stage = "connect-and-authenticate";
             await EnsureConnectedAsync(cancellationToken, diagnosticId);
+            stage = "auth.me";
+            await TryRefreshRolesFromSessionAsync(cancellationToken, diagnosticId);
             stage = "core.ping";
             var pong = await SendRequestAsync<string>("core.ping", [], cancellationToken, diagnosticId: diagnosticId);
             if (!string.Equals(pong, "pong", StringComparison.OrdinalIgnoreCase))
@@ -212,6 +214,30 @@ public sealed class TrueNasJsonRpcClient(
         return CallAsync<IReadOnlyList<TrueNasJobDto>>(
             "core.get_jobs",
             [Array.Empty<object>(), new { order_by = new[] { "-id" }, limit }],
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasPerformanceGraphDto>> ListPerformanceGraphsAsync(CancellationToken cancellationToken = default) =>
+        CallAsync<IReadOnlyList<TrueNasPerformanceGraphDto>>("reporting.netdata_graphs", [Array.Empty<object>(), new { }], cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasPerformanceDataDto>> GetPerformanceDataAsync(IReadOnlyList<TrueNasPerformanceGraphRequestDto> graphs, DateTimeOffset startUtc, DateTimeOffset endUtc, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(graphs);
+        if (graphs.Count == 0)
+        {
+            throw new ArgumentException("At least one TrueNAS reporting graph is required.", nameof(graphs));
+        }
+
+        if (endUtc <= startUtc)
+        {
+            throw new ArgumentException("The performance range end must be later than its start.", nameof(endUtc));
+        }
+
+        return CallAsync<IReadOnlyList<TrueNasPerformanceDataDto>>(
+            "reporting.netdata_get_data",
+            [graphs, new { start = startUtc.ToUnixTimeSeconds(), end = endUtc.ToUnixTimeSeconds(), aggregate = false }],
             cancellationToken);
     }
 
@@ -435,6 +461,66 @@ public sealed class TrueNasJsonRpcClient(
                 catch (Exception exception)
                 {
                     logger.LogDebug(exception, "Unable to unsubscribe the TrueNAS app statistics stream {Subscription}", subscriptionToken);
+                }
+            }
+
+            channel.Writer.TryComplete();
+        }
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<TrueNasRealtimePerformanceDto> WatchSystemPerformanceAsync(int intervalSeconds = 5, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (intervalSeconds < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(intervalSeconds), intervalSeconds, "The TrueNAS performance interval must be at least two seconds.");
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var eventName = $"reporting.realtime:{JsonSerializer.Serialize(new { interval = intervalSeconds }, JsonOptions)}";
+        var channel = Channel.CreateBounded<JsonElement>(new BoundedChannelOptions(4)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+            SingleWriter = true
+        });
+        if (!subscriptions.TryAdd(eventName, channel))
+        {
+            throw new InvalidOperationException("A TrueNAS system performance stream is already active.");
+        }
+
+        string? subscriptionToken = null;
+        try
+        {
+            var result = await SendRequestAsync<JsonElement>("core.subscribe", [eventName], cancellationToken);
+            subscriptionToken = result.ValueKind == JsonValueKind.String ? result.GetString() : result.ToString();
+            if (!string.IsNullOrWhiteSpace(subscriptionToken))
+            {
+                subscriptions[subscriptionToken] = channel;
+            }
+
+            await foreach (var payload in channel.Reader.ReadAllAsync(cancellationToken))
+            {
+                var statistics = payload.Deserialize<TrueNasRealtimePerformanceDto>(JsonOptions);
+                if (statistics is not null)
+                {
+                    yield return statistics;
+                }
+            }
+        }
+        finally
+        {
+            subscriptions.TryRemove(eventName, out _);
+            if (!string.IsNullOrWhiteSpace(subscriptionToken))
+            {
+                subscriptions.TryRemove(subscriptionToken, out _);
+                try
+                {
+                    _ = await SendRequestAsync<JsonElement>("core.unsubscribe", [subscriptionToken], CancellationToken.None);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogDebug(exception, "Unable to unsubscribe the TrueNAS system performance stream {Subscription}", subscriptionToken);
                 }
             }
 
@@ -837,6 +923,25 @@ public sealed class TrueNasJsonRpcClient(
                         roles.Contains("READONLY_ADMIN") ||
                         roles.Contains("SHARING_ADMIN");
         hasWriteAccess = roles.Contains("APPS_WRITE") || roles.Contains("FULL_ADMIN");
+    }
+
+    private async Task TryRefreshRolesFromSessionAsync(CancellationToken cancellationToken, string diagnosticId)
+    {
+        if (rolesDetected)
+        {
+            return;
+        }
+
+        try
+        {
+            var session = await SendRequestAsync<JsonElement>("auth.me", [], cancellationToken, diagnosticId: diagnosticId);
+            ReadRoles(session);
+            logger.LogInformation("TrueNAS connection test {DiagnosticId} loaded {AvailableRoleCount} effective roles from auth.me", diagnosticId, availableRoles.Count);
+        }
+        catch (TrueNasClientException exception)
+        {
+            logger.LogWarning(exception, "TrueNAS connection test {DiagnosticId} could not read effective roles from auth.me", diagnosticId);
+        }
     }
 
     private static void CollectRoleStrings(JsonElement element, ISet<string> roles)

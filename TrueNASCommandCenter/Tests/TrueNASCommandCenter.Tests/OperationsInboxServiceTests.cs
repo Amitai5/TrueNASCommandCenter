@@ -216,6 +216,35 @@ public sealed class OperationsInboxServiceTests
         Assert.AreEqual("Pool issue", snapshot.Items[0].Summary);
     }
 
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task GetSnapshotAsync_ActiveOnly_ExcludesResolvedHistory()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var now = new DateTimeOffset(2026, 8, 30, 18, 0, 0, TimeSpan.Zero);
+        var client = new FakeOperationsSystemClient
+        {
+            Alerts = [new TrueNasAlertDto { Uuid = "resolved-alert", Level = "WARNING", Text = "Recovered issue", CreatedAt = now }]
+        };
+        await using var provider = CreateProvider(database, new FakeWebPushSender(), now);
+        var service = CreateService(database, client, provider, now);
+        await service.RefreshAsync();
+        client.Alerts = [];
+        await service.RefreshAsync();
+        client.Alerts = [new TrueNasAlertDto { Uuid = "active-alert", Level = "ERROR", Text = "Active issue", CreatedAt = now }];
+        await service.RefreshAsync();
+
+        var active = await service.GetSnapshotAsync(new OperationsInboxQuery(IncludeResolved: false));
+        var all = await service.GetSnapshotAsync(new OperationsInboxQuery());
+
+        Assert.HasCount(1, active.Items);
+        Assert.AreEqual("Active issue", active.Items[0].Summary);
+        Assert.IsFalse(active.Items.Any(item => item.Status == OperationsInboxStatus.Resolved));
+        Assert.HasCount(2, all.Items);
+        Assert.AreEqual(1, active.ResolvedCount);
+    }
+
     private static async Task SeedLocalSourcesAsync(TestDatabase database, DateTime now)
     {
         await using var db = await database.CreateDbContextAsync();

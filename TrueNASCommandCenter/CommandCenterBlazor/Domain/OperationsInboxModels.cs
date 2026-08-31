@@ -7,7 +7,8 @@ public sealed record OperationsInboxQuery(
     OperationsInboxSource? Source = null,
     OperationsInboxSeverity? Severity = null,
     DateTime? SinceUtc = null,
-    int Limit = 250);
+    int Limit = 250,
+    bool IncludeResolved = true);
 
 /// <summary>Contains inbox items and counts for the current query.</summary>
 public sealed record OperationsInboxSnapshot(

@@ -24,6 +24,11 @@
             <p><code>READONLY_ADMIN</code> adds broader host details and all read roles; use it only when that wider access is acceptable.</p>
         </article>
         <article class="permission-card optional">
+            <span class="permission-label">System performance</span>
+            <div class="permission-role-list"><code>REPORTING_READ</code></div>
+            <p>Realtime host and pool activity plus historical CPU, memory, load, network, disk I/O, ZFS ARC, and temperatures.</p>
+        </article>
+        <article class="permission-card optional">
             <span class="permission-label">Data Protection Center</span>
             <div class="permission-role-list"><code>DATASET_READ</code><code>SNAPSHOT_READ</code><code>SNAPSHOT_TASK_READ</code><code>REPLICATION_TASK_READ</code><code>CLOUD_SYNC_READ</code></div>
             <p>Dataset coverage, newest snapshot age, replication and cloud-sync state, schedules, and unprotected warnings.</p>

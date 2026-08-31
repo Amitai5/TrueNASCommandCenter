@@ -104,7 +104,7 @@
                             <span class="permission-label">Connection test</span>
                             <h3>Available API permissions</h3>
                         </div>
-                        <span class="badge success">@(connectionResult.AvailableRoles.Count == 1 ? "1 role" : $"{connectionResult.AvailableRoles.Count} roles")</span>
+                        <span class="badge @(connectionResult.AvailableRoles.Count == 0 ? "warning" : "success")">@(connectionResult.AvailableRoles.Count == 0 ? "Role details unavailable" : connectionResult.AvailableRoles.Count == 1 ? "1 role" : $"{connectionResult.AvailableRoles.Count} roles")</span>
                     </div>
 
                     @if (connectionResult.AvailableRoles.Count > 0)
@@ -119,8 +119,27 @@
                     }
                     else
                     {
-                        <p class="connection-permission-unavailable">The connection and installed-app discovery succeeded, but TrueNAS did not return role details for this API session.</p>
+                        <p class="connection-permission-unavailable">The connection succeeded, but TrueNAS did not expose effective roles through <code>auth.me</code>. The feature checks below show what the account must grant.</p>
                     }
+
+                    <div class="connection-capability-grid" aria-label="TrueNAS feature permission checks">
+                        @foreach (var capability in ConnectionCapabilities(connectionResult))
+                        {
+                            <article>
+                                <div class="connection-capability-heading">
+                                    <strong>@capability.Title</strong>
+                                    <span class="badge @CapabilityClass(capability.IsAvailable)">@CapabilityText(capability.IsAvailable)</span>
+                                </div>
+                                <p>@capability.Description</p>
+                                <div class="permission-role-list">
+                                    @foreach (var role in capability.Roles)
+                                    {
+                                        <code>@role</code>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    </div>
                 </div>
             }
         </section>
@@ -1007,6 +1026,27 @@
         }
     }
 
+    private static IReadOnlyList<ConnectionCapability> ConnectionCapabilities(ConnectionTestResult result) =>
+    [
+        CreateCapability(result, "App management", "Inventory, logs, lifecycle actions, updates, and rollback.", "APPS_READ", "APPS_WRITE"),
+        CreateCapability(result, "Discover gallery", "TrueNAS catalog browsing and app details.", "CATALOG_READ"),
+        CreateCapability(result, "System performance", "Realtime and historical host performance charts.", "REPORTING_READ"),
+        CreateCapability(result, "System health", "Pools, native alerts, and TrueNAS update status.", "POOL_READ", "ALERT_LIST_READ", "SYSTEM_UPDATE_READ")
+    ];
+
+    private static ConnectionCapability CreateCapability(ConnectionTestResult result, string title, string description, params string[] roles)
+    {
+        bool? isAvailable = result.AvailableRoles.Count == 0 ? null : roles.All(role => HasEffectiveRole(result.AvailableRoles, role));
+        return new ConnectionCapability(title, description, roles, isAvailable);
+    }
+
+    private static bool HasEffectiveRole(IReadOnlyList<string> availableRoles, string requiredRole) =>
+        availableRoles.Contains("FULL_ADMIN", StringComparer.OrdinalIgnoreCase) ||
+        availableRoles.Contains(requiredRole, StringComparer.OrdinalIgnoreCase) ||
+        (requiredRole.EndsWith("_READ", StringComparison.OrdinalIgnoreCase) && availableRoles.Contains("READONLY_ADMIN", StringComparer.OrdinalIgnoreCase));
+
+    private static string CapabilityText(bool? isAvailable) => isAvailable switch { true => "Available", false => "Missing", null => "Not reported" };
+    private static string CapabilityClass(bool? isAvailable) => isAvailable switch { true => "success", false => "danger", null => "warning" };
     private string TabClass(string tab) => _tab == tab ? "active" : string.Empty;
     private string FormatDate(DateTime? value) =>
         DisplayTimeFormatter.Format(value, _record?.TimeZoneId);
@@ -1029,4 +1069,6 @@
 
         _pushCallback?.Dispose();
     }
+
+    private sealed record ConnectionCapability(string Title, string Description, IReadOnlyList<string> Roles, bool? IsAvailable);
 }

@@ -1,0 +1,131 @@
+@using System.Globalization
+
+<article class="performance-chart-card">
+    <div class="performance-chart-heading">
+        <h3>@Chart.Title</h3>
+        @if (LatestValue() is { } latest)
+        {
+            <strong>@FormatValue(latest)</strong>
+        }
+    </div>
+
+    @if (!AllPoints().Any())
+    {
+        <div class="performance-chart-empty">No samples returned for this range.</div>
+    }
+    else
+    {
+        <svg class="performance-chart" viewBox="0 0 600 190" role="img" aria-label="@Chart.Title history" preserveAspectRatio="none">
+            <line class="performance-grid-line" x1="12" y1="20" x2="588" y2="20"></line>
+            <line class="performance-grid-line" x1="12" y1="92" x2="588" y2="92"></line>
+            <line class="performance-grid-line" x1="12" y1="164" x2="588" y2="164"></line>
+            @for (var index = 0; index < Chart.Series.Count; index++)
+            {
+                var series = Chart.Series[index];
+                @if (series.Points.Count > 0)
+                {
+                    <polyline class="performance-series performance-series-@(index % 4)" points="@BuildPoints(series.Points)"></polyline>
+                }
+            }
+        </svg>
+        <div class="performance-chart-axis"><span>@FormatTime(StartUtc)</span><span>@FormatTime(EndUtc)</span></div>
+        <div class="performance-chart-legend">
+            @for (var index = 0; index < Chart.Series.Count; index++)
+            {
+                var series = Chart.Series[index];
+                <span><i class="performance-legend-swatch performance-series-@(index % 4)"></i>@series.Label@if (series.Points.LastOrDefault() is { } point) { <strong>@FormatValue(point.Value)</strong> }</span>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public required SystemPerformanceChart Chart { get; set; }
+
+    [Parameter]
+    public DateTimeOffset StartUtc { get; set; }
+
+    [Parameter]
+    public DateTimeOffset EndUtc { get; set; }
+
+    [Parameter]
+    public string? TimeZoneId { get; set; }
+
+    private IEnumerable<SystemPerformancePoint> AllPoints() => Chart.Series.SelectMany(series => series.Points);
+
+    private double? LatestValue() => Chart.Series.SelectMany(series => series.Points).OrderByDescending(point => point.TimestampUtc).Select(point => (double?)point.Value).FirstOrDefault();
+
+    private string BuildPoints(IReadOnlyList<SystemPerformancePoint> points)
+    {
+        const double left = 12;
+        const double right = 588;
+        const double top = 20;
+        const double bottom = 164;
+        var allPoints = AllPoints().ToList();
+        var minimum = allPoints.Min(point => point.Value);
+        var maximum = allPoints.Max(point => point.Value);
+        if (Chart.Unit is SystemPerformanceUnit.Percent)
+        {
+            minimum = 0;
+            maximum = 100;
+        }
+        else if (Math.Abs(maximum - minimum) < 0.0001)
+        {
+            minimum = Math.Min(0, minimum);
+            maximum = Math.Max(1, maximum * 1.1);
+        }
+
+        var start = StartUtc == default ? allPoints.Min(point => point.TimestampUtc) : StartUtc;
+        var end = EndUtc == default ? allPoints.Max(point => point.TimestampUtc) : EndUtc;
+        var duration = Math.Max(1, (end - start).TotalSeconds);
+        return string.Join(' ', points.Select(point =>
+        {
+            var x = left + Math.Clamp((point.TimestampUtc - start).TotalSeconds / duration, 0, 1) * (right - left);
+            var ratio = (point.Value - minimum) / Math.Max(0.0001, maximum - minimum);
+            var y = bottom - Math.Clamp(ratio, 0, 1) * (bottom - top);
+            return $"{x.ToString("0.##", CultureInfo.InvariantCulture)},{y.ToString("0.##", CultureInfo.InvariantCulture)}";
+        }));
+    }
+
+    private string FormatValue(double value) => Chart.Unit switch
+    {
+        SystemPerformanceUnit.Percent => $"{value:0.#}%",
+        SystemPerformanceUnit.Bytes => FormatBytes(value),
+        SystemPerformanceUnit.BytesPerSecond => $"{FormatBytes(value)}/s",
+        SystemPerformanceUnit.Celsius => $"{value:0.#} °C",
+        _ => value.ToString("0.##", CultureInfo.CurrentCulture)
+    };
+
+    private string FormatTime(DateTimeOffset value)
+    {
+        if (value == default)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var timeZone = string.IsNullOrWhiteSpace(TimeZoneId) ? TimeZoneInfo.Utc : TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);
+            return TimeZoneInfo.ConvertTime(value, timeZone).ToString("MMM d, h:mm tt", CultureInfo.CurrentCulture);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return value.UtcDateTime.ToString("MMM d, h:mm tt 'UTC'", CultureInfo.CurrentCulture);
+        }
+    }
+
+    private static string FormatBytes(double value)
+    {
+        var units = new[] { "B", "KiB", "MiB", "GiB", "TiB" };
+        var normalized = Math.Max(0, value);
+        var index = 0;
+        while (normalized >= 1024 && index < units.Length - 1)
+        {
+            normalized /= 1024;
+            index++;
+        }
+
+        return $"{normalized:0.#} {units[index]}";
+    }
+}

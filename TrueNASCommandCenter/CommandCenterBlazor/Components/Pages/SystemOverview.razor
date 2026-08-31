@@ -1,5 +1,8 @@
 @page "/system"
 @inject ITrueNasSystemOverviewService SystemOverviewService
+@inject ITrueNasPerformanceService PerformanceService
+@inject ISystemPerformanceMonitor PerformanceMonitor
+@implements IDisposable
 
 <PageTitle>System · TrueNAS Command Center</PageTitle>
 
@@ -46,6 +49,83 @@
                 <strong>@UpdateSummary()</strong>
                 <span>TrueNAS update</span>
             </a>
+        </section>
+
+        <section class="panel system-performance-panel" id="system-performance" aria-labelledby="system-performance-heading">
+            <div class="performance-panel-header">
+                <div>
+                    <div class="performance-title-row">
+                        <h2 id="system-performance-heading">Performance</h2>
+                        <span class="badge @(PerformanceMonitor.Current is null ? "warning" : "success")">@(PerformanceMonitor.Current is null ? "Waiting for live data" : "Live")</span>
+                    </div>
+                    <p class="muted">Current host activity and TrueNAS reporting history.</p>
+                </div>
+                <div class="performance-range-selector" role="group" aria-label="Performance history range">
+                    <button type="button" class="@PerformanceRangeClass(SystemPerformanceRange.OneHour)" aria-pressed="@(_performanceRange == SystemPerformanceRange.OneHour)" @onclick="() => SelectPerformanceRangeAsync(SystemPerformanceRange.OneHour)">1 hour</button>
+                    <button type="button" class="@PerformanceRangeClass(SystemPerformanceRange.TwentyFourHours)" aria-pressed="@(_performanceRange == SystemPerformanceRange.TwentyFourHours)" @onclick="() => SelectPerformanceRangeAsync(SystemPerformanceRange.TwentyFourHours)">24 hours</button>
+                    <button type="button" class="@PerformanceRangeClass(SystemPerformanceRange.SevenDays)" aria-pressed="@(_performanceRange == SystemPerformanceRange.SevenDays)" @onclick="() => SelectPerformanceRangeAsync(SystemPerformanceRange.SevenDays)">7 days</button>
+                    <button type="button" class="@PerformanceRangeClass(SystemPerformanceRange.ThirtyDays)" aria-pressed="@(_performanceRange == SystemPerformanceRange.ThirtyDays)" @onclick="() => SelectPerformanceRangeAsync(SystemPerformanceRange.ThirtyDays)">30 days</button>
+                </div>
+            </div>
+
+            @if (_performanceHistory?.RequiresReportingRead == true)
+            {
+                <div class="optional-feature-state">
+                    <strong>Performance reporting needs permission.</strong>
+                    <span>Add <code>REPORTING_READ</code>, save the API key, and run Test connection.</span>
+                    <a href="/settings">Connection settings</a>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_performanceHistory?.Error))
+            {
+                <div class="optional-feature-state warning"><strong>Performance history is unavailable.</strong><span>@_performanceHistory.Error</span></div>
+            }
+            else
+            {
+                <div class="performance-live-grid" aria-label="Live TrueNAS performance">
+                    <article><span>CPU</span><strong>@FormatPercent(PerformanceMonitor.Current?.CpuUsagePercent)</strong><small>@FormatTemperature(PerformanceMonitor.Current?.CpuTemperatureCelsius)</small></article>
+                    <article><span>Memory</span><strong>@FormatPercent(PerformanceMonitor.Current?.MemoryUsedPercent)</strong><small>@MemorySummary()</small></article>
+                    <article><span>Load</span><strong>@FormatNumber(PerformanceMonitor.Current?.LoadOneMinute ?? _overview.Host.Information?.LoadAverageOneMinute)</strong><small>1-minute average</small></article>
+                    <article><span>Network</span><strong>@FormatRate(PerformanceMonitor.Current?.NetworkReceiveBytesPerSecond)</strong><small>Down · @FormatRate(PerformanceMonitor.Current?.NetworkSendBytesPerSecond) up</small></article>
+                    <article><span>Disk I/O</span><strong>@FormatRate(PerformanceMonitor.Current?.DiskReadBytesPerSecond)</strong><small>Read · @FormatRate(PerformanceMonitor.Current?.DiskWriteBytesPerSecond) write</small></article>
+                    <article><span>ZFS ARC</span><strong>@FormatBytes(PerformanceMonitor.Current?.ArcSizeBytes)</strong><small>@FormatPercent(PerformanceMonitor.Current?.ArcHitPercent) hit ratio</small></article>
+                </div>
+
+                @if (_performanceLoading && _performanceHistory is null)
+                {
+                    <div class="performance-history-loading"><span class="spinner"></span><span>Loading performance history…</span></div>
+                }
+                else if (_performanceHistory is { } history)
+                {
+                    <div class="performance-chart-grid" aria-busy="@_performanceLoading">
+                        @foreach (var chart in history.Charts)
+                        {
+                            <PerformanceChart Chart="chart" StartUtc="history.StartUtc" EndUtc="history.EndUtc" TimeZoneId="@_overview.Host.Information?.TimeZoneId" />
+                        }
+                    </div>
+                }
+
+                @if (PerformanceMonitor.Current?.Pools.Count > 0)
+                {
+                    <div class="performance-pool-activity">
+                        <div><strong>Pool activity</strong><span>Current read, write, and utilization reported by TrueNAS.</span></div>
+                        <div class="performance-pool-list">
+                            @foreach (var pool in PerformanceMonitor.Current.Pools)
+                            {
+                                <article><strong>@pool.Name</strong><span>↓ @FormatRate(pool.ReadBytesPerSecond)</span><span>↑ @FormatRate(pool.WriteBytesPerSecond)</span><span>@(pool.BusyPercent is null ? "Busy —" : $"Busy {pool.BusyPercent:0.#}%")</span></article>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="performance-status-row">
+                    <span>@(PerformanceMonitor.Current is null ? PerformanceMonitor.LastError ?? "Waiting for the first realtime sample." : $"Live sample {FormatDate(PerformanceMonitor.Current.ObservedAtUtc)}")</span>
+                    @if (_performanceLoading)
+                    {
+                        <span><span class="spinner"></span> Updating history</span>
+                    }
+                </div>
+            }
         </section>
 
         <div class="system-overview-grid">
@@ -305,8 +385,15 @@
     private string? _message;
     private bool _messageIsError;
     private bool _loading = true;
+    private bool _performanceLoading;
+    private SystemPerformanceRange _performanceRange = SystemPerformanceRange.OneHour;
+    private SystemPerformanceHistory? _performanceHistory;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        PerformanceMonitor.Updated += HandlePerformanceUpdated;
+        await LoadAsync();
+    }
 
     private async Task RefreshAsync()
     {
@@ -331,9 +418,38 @@
 
     private async Task LoadAsync()
     {
-        _overview = await SystemOverviewService.GetAsync();
+        var overviewTask = SystemOverviewService.GetAsync();
+        var performanceTask = LoadPerformanceAsync();
+        _overview = await overviewTask;
+        await performanceTask;
         _loading = false;
     }
+
+    private async Task LoadPerformanceAsync()
+    {
+        _performanceLoading = true;
+        try
+        {
+            _performanceHistory = await PerformanceService.GetHistoryAsync(_performanceRange);
+        }
+        finally
+        {
+            _performanceLoading = false;
+        }
+    }
+
+    private async Task SelectPerformanceRangeAsync(SystemPerformanceRange range)
+    {
+        if (_performanceRange == range && _performanceHistory is not null)
+        {
+            return;
+        }
+
+        _performanceRange = range;
+        await LoadPerformanceAsync();
+    }
+
+    private void HandlePerformanceUpdated() => _ = InvokeAsync(StateHasChanged);
 
     private List<TrueNasSystemAlert> FilteredAlerts()
     {
@@ -380,6 +496,11 @@
     private static string SeverityClass(string severity) => severity switch { "EMERGENCY" or "ALERT" or "CRITICAL" or "ERROR" => "danger", "WARNING" => "warning", "NOTICE" or "INFO" => "info", _ => string.Empty };
     private static int SeverityPriority(string severity) => severity switch { "EMERGENCY" => 0, "ALERT" => 1, "CRITICAL" => 2, "ERROR" => 3, "WARNING" => 4, "NOTICE" => 5, "INFO" => 6, "DEBUG" => 7, _ => 8 };
     private static string FormatNumber(double? value) => value?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "—";
+    private static string FormatPercent(double? value) => value is null ? "—" : $"{value:0.#}%";
+    private static string FormatTemperature(double? value) => value is null ? "Temperature —" : $"{value:0.#} °C";
+    private string MemorySummary() => PerformanceMonitor.Current is not { MemoryUsedBytes: { } used } current ? "Used memory" : current.MemoryTotalBytes is { } total ? $"{FormatBytes(used)} of {FormatBytes(total)}" : $"{FormatBytes(used)} used";
+    private static string FormatRate(double? bytesPerSecond) => bytesPerSecond is null ? "—" : $"{FormatBytes((long)Math.Clamp(bytesPerSecond.Value, 0, long.MaxValue))}/s";
+    private string PerformanceRangeClass(SystemPerformanceRange range) => _performanceRange == range ? "active" : string.Empty;
     private static bool Contains(string value, string term) => value.Contains(term, StringComparison.OrdinalIgnoreCase);
 
     private static string FormatBytes(long? bytes)
@@ -399,5 +520,11 @@
         }
 
         return $"{value:0.#} {units[unitIndex]}";
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        PerformanceMonitor.Updated -= HandlePerformanceUpdated;
     }
 }

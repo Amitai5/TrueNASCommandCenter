@@ -45,11 +45,11 @@
             <div>
                 <label for="inbox-status">State</label>
                 <select id="inbox-status" @bind="_statusFilter" @bind:after="LoadAsync">
-                    <option value="">All states</option>
-                    @foreach (var status in Enum.GetValues<OperationsInboxStatus>())
-                    {
-                        <option value="@status">@status</option>
-                    }
+                    <option value="active">Active only</option>
+                    <option value="Open">Open</option>
+                    <option value="Acknowledged">Acknowledged</option>
+                    <option value="Resolved">Resolved history</option>
+                    <option value="all">All states</option>
                 </select>
             </div>
             <div>
@@ -95,7 +95,7 @@
     <div class="operations-inbox-layout">
         <section class="panel operations-inbox-feed" aria-label="Operations feed">
             <div class="panel-heading-row">
-                <div><h2>Activity feed</h2><p>Newest unresolved items appear first.</p></div>
+                <div><h2>Activity feed</h2><p>Active issues are shown by default; resolved history stays available from the State filter.</p></div>
                 <span class="badge">@(_snapshot?.Items.Count ?? 0)</span>
             </div>
 
@@ -202,7 +202,7 @@
     private IReadOnlyList<OperationsInboxHistoryRecord> _history = [];
     private List<string> _warnings = [];
     private string? _search;
-    private string? _statusFilter;
+    private string _statusFilter = "active";
     private string? _sourceFilter;
     private string? _severityFilter;
     private string _timeRange = "7d";
@@ -245,7 +245,8 @@
             Enum.TryParse<OperationsInboxStatus>(_statusFilter, out var status) ? status : null,
             Enum.TryParse<OperationsInboxSource>(_sourceFilter, out var source) ? source : null,
             Enum.TryParse<OperationsInboxSeverity>(_severityFilter, out var severity) ? severity : null,
-            SinceUtc());
+            SinceUtc(),
+            IncludeResolved: string.Equals(_statusFilter, "all", StringComparison.OrdinalIgnoreCase));
         _snapshot = await InboxService.GetSnapshotAsync(query);
         _selectedItem = selectedId is null ? _snapshot.Items.FirstOrDefault() : _snapshot.Items.FirstOrDefault(item => item.Id == selectedId) ?? _snapshot.Items.FirstOrDefault();
         _history = _selectedItem is null ? [] : await InboxService.GetHistoryAsync(_selectedItem.Id);
@@ -298,7 +299,7 @@
     private async Task ClearFiltersAsync()
     {
         _search = null;
-        _statusFilter = null;
+        _statusFilter = "active";
         _sourceFilter = null;
         _severityFilter = null;
         _timeRange = "7d";

@@ -227,6 +227,41 @@ public sealed class TrueNasJsonRpcClientTests
     }
 
     [TestMethod]
+    [TestCategory("Regression")]
+    public async Task ConnectionTest_LoginOmitsRoles_LoadsEffectiveRolesFromAuthMe()
+    {
+        var setup = await TestClientFactory.CreateAsync();
+        setup.Transport.OnSend = request =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "auth.login_ex":
+                    setup.Transport.Respond(id, new { response_type = "SUCCESS", user_info = (object?)null });
+                    break;
+                case "auth.me":
+                    setup.Transport.Respond(id, new { pw_name = "service", privilege = new { roles = new[] { "REPORTING_READ", "APPS_WRITE", "APPS_READ" } } });
+                    break;
+                case "core.ping":
+                    setup.Transport.Respond(id, "pong");
+                    break;
+                case "app.query":
+                    setup.Transport.Respond(id, Array.Empty<object>());
+                    break;
+            }
+
+            return Task.CompletedTask;
+        };
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var result = await client.TestConnectionAsync();
+
+        Assert.IsTrue(result.Success);
+        CollectionAssert.AreEqual(new[] { "APPS_READ", "APPS_WRITE", "REPORTING_READ" }, result.AvailableRoles.ToArray());
+    }
+
+    [TestMethod]
     public async Task ConnectionTest_WithFullAdminRole_ReportsAppReadAndWriteAccess()
     {
         var setup = await TestClientFactory.CreateAsync();
@@ -865,6 +900,117 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.AreEqual(1024L, received.Networks[0].ReceiveBytes);
         Assert.AreEqual(8192L, received.BlockIo.WriteBytes);
         Assert.AreEqual("stats-subscription", unsubscribed);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task PerformanceHistory_SendsGraphsAndUtcRange()
+    {
+        JsonElement? capturedParameters = null;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            if (request.GetProperty("method").GetString() == "reporting.netdata_get_data")
+            {
+                capturedParameters = request.GetProperty("params").Clone();
+                transport.Respond(id, Array.Empty<object>());
+            }
+
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+        var start = new DateTimeOffset(2026, 8, 31, 18, 0, 0, TimeSpan.Zero);
+        var end = start.AddHours(1);
+
+        var result = await client.GetPerformanceDataAsync([new TrueNasPerformanceGraphRequestDto("cpu"), new TrueNasPerformanceGraphRequestDto("interface", "eno1")], start, end);
+
+        Assert.IsEmpty(result);
+        Assert.IsNotNull(capturedParameters);
+        Assert.AreEqual("cpu", capturedParameters.Value[0][0].GetProperty("name").GetString());
+        Assert.AreEqual("eno1", capturedParameters.Value[0][1].GetProperty("identifier").GetString());
+        Assert.AreEqual(start.ToUnixTimeSeconds(), capturedParameters.Value[1].GetProperty("start").GetInt64());
+        Assert.AreEqual(end.ToUnixTimeSeconds(), capturedParameters.Value[1].GetProperty("end").GetInt64());
+        Assert.IsFalse(capturedParameters.Value[1].GetProperty("aggregate").GetBoolean());
+    }
+
+    /// <summary>Verifies reporting graph discovery uses the query contract and reads all host-specific identifiers.</summary>
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task ListPerformanceGraphs_UsesQueryContractAndDeserializesIdentifiers()
+    {
+        JsonElement? capturedParameters = null;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("reporting.netdata_graphs", request.GetProperty("method").GetString());
+            capturedParameters = request.GetProperty("params").Clone();
+            transport.Respond(request.GetProperty("id").GetInt64(), new[]
+            {
+                new { name = "interface", title = "Network interfaces", vertical_label = "bytes/s", identifiers = new[] { "eno1", "eno2" } }
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var graphs = await client.ListPerformanceGraphsAsync();
+
+        Assert.IsNotNull(capturedParameters);
+        Assert.AreEqual(2, capturedParameters.Value.GetArrayLength());
+        Assert.AreEqual(0, capturedParameters.Value[0].GetArrayLength());
+        Assert.AreEqual(JsonValueKind.Object, capturedParameters.Value[1].ValueKind);
+        Assert.HasCount(1, graphs);
+        CollectionAssert.AreEqual(new[] { "eno1", "eno2" }, graphs[0].Identifiers?.ToArray());
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task WatchSystemPerformance_RoutesRealtimeEventAndUnsubscribes()
+    {
+        string? eventName = null;
+        string? unsubscribed = null;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "core.subscribe":
+                    eventName = request.GetProperty("params")[0].GetString();
+                    transport.Respond(id, "performance-subscription");
+                    transport.Push(new
+                    {
+                        jsonrpc = "2.0",
+                        method = "collection_update",
+                        @params = new
+                        {
+                            collection = eventName,
+                            fields = new { cpu = new { cpu = new { usage = 22 } }, memory = new { physical_memory_total = 1000, physical_memory_available = 400 } }
+                        }
+                    });
+                    break;
+                case "core.unsubscribe":
+                    unsubscribed = request.GetProperty("params")[0].GetString();
+                    transport.Respond(id, true);
+                    break;
+            }
+
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+        TrueNasRealtimePerformanceDto? received = null;
+
+        await foreach (var sample in client.WatchSystemPerformanceAsync())
+        {
+            received = sample;
+            break;
+        }
+
+        Assert.IsNotNull(received);
+        StringAssert.StartsWith(eventName ?? string.Empty, "reporting.realtime:");
+        StringAssert.Contains(eventName ?? string.Empty, "\"interval\":5");
+        Assert.AreEqual(22, received.Cpu.GetProperty("cpu").GetProperty("usage").GetDouble());
+        Assert.AreEqual("performance-subscription", unsubscribed);
     }
 
     private static FakeWebSocketTransport TransportReturning(string appId)
