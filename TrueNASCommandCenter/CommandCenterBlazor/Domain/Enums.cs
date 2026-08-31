@@ -70,7 +70,62 @@ public enum NotificationEventType
     RollbackOccurred,
     AutomaticUpdateSucceeded,
     ScheduledCheckFailed,
-    TrueNasConnectionFailed
+    TrueNasConnectionFailed,
+    OperationsInboxIncident
+}
+
+public enum OperationsInboxSource
+{
+    TrueNas,
+    Storage,
+    Apps,
+    UptimeKuma,
+    Notifications
+}
+
+public enum OperationsInboxKind
+{
+    TrueNasAlert,
+    TrueNasJob,
+    PoolScrub,
+    PoolResilver,
+    AppUpdateFailure,
+    UptimeKumaOutage,
+    NotificationFailure
+}
+
+public enum OperationsInboxStatus
+{
+    Open,
+    Acknowledged,
+    Resolved
+}
+
+public enum OperationsInboxSeverity
+{
+    Info,
+    Warning,
+    Error,
+    Critical
+}
+
+public enum OperationsInboxHistoryAction
+{
+    Detected,
+    Acknowledged,
+    Resolved,
+    Reopened,
+    PushDelivered,
+    PushFailed
+}
+
+public enum OperationsInboxPushState
+{
+    NotRequested,
+    Pending,
+    Delivered,
+    Failed,
+    NoSubscription
 }
 
 public enum AppLifecycleAction

@@ -145,6 +145,20 @@ public sealed class TrueNasJsonRpcClient(
     public Task<IReadOnlyList<TrueNasPoolDto>> QueryPoolsAsync(CancellationToken cancellationToken = default) =>
         CallAsync<IReadOnlyList<TrueNasPoolDto>>("pool.query", [Array.Empty<object>(), new { }], cancellationToken);
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<TrueNasJobDto>> ListJobsAsync(int limit = 200, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 1000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Job query limit must be between 1 and 1000.");
+        }
+
+        return CallAsync<IReadOnlyList<TrueNasJobDto>>(
+            "core.get_jobs",
+            [Array.Empty<object>(), new { order_by = new[] { "-id" }, limit }],
+            cancellationToken);
+    }
+
     public Task<TrueNasAppDto> GetAppAsync(string appId, CancellationToken cancellationToken = default) =>
         CallAsync<TrueNasAppDto>(
             "app.get_instance",

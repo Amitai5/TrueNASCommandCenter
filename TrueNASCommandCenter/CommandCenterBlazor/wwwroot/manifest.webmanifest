@@ -47,6 +47,11 @@
       "url": "/"
     },
     {
+      "name": "Operations Inbox",
+      "short_name": "Inbox",
+      "url": "/inbox"
+    },
+    {
       "name": "Applications",
       "short_name": "Apps",
       "url": "/apps"

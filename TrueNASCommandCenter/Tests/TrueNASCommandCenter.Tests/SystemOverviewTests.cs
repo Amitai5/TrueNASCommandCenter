@@ -211,6 +211,7 @@ public sealed class SystemOverviewTests
         public Exception? AlertException { get; init; }
         public IReadOnlyList<TrueNasPoolDto> Pools { get; init; } = [];
         public Exception? PoolException { get; init; }
+        public IReadOnlyList<TrueNasJobDto> Jobs { get; init; } = [];
         public IReadOnlyList<TrueNasAppStatsDto> Statistics { get; init; } = [];
 
         public Task<TrueNasSystemInfoDto> GetSystemInfoAsync(CancellationToken cancellationToken = default) =>
@@ -224,6 +225,8 @@ public sealed class SystemOverviewTests
 
         public Task<IReadOnlyList<TrueNasPoolDto>> QueryPoolsAsync(CancellationToken cancellationToken = default) =>
             PoolException is null ? Task.FromResult(Pools) : Task.FromException<IReadOnlyList<TrueNasPoolDto>>(PoolException);
+
+        public Task<IReadOnlyList<TrueNasJobDto>> ListJobsAsync(int limit = 200, CancellationToken cancellationToken = default) => Task.FromResult(Jobs);
 
         public async IAsyncEnumerable<IReadOnlyList<TrueNasAppStatsDto>> WatchAppStatsAsync(int intervalSeconds = 5, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {

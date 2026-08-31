@@ -185,6 +185,10 @@ x-portals:
                 <p>Open <strong>System</strong> for native TrueNAS alerts, OS update availability, host identity and uptime, and pool health. Every panel is read-only and remains independently optional.</p>
             </article>
             <article>
+                <h3>Operations Inbox</h3>
+                <p>Open <strong>Inbox</strong> for one durable feed of TrueNAS alerts and jobs, pool scans, app update failures, Uptime Kuma outages, and notification failures. Acknowledge or resolve items, filter the feed, open the related view, and review push-delivery and event history. Scoped accounts see their current API-session jobs; cross-session jobs require an optional Full Admin account.</p>
+            </article>
+            <article>
                 <h3>Favorites and groups</h3>
                 <p>Star an app from the list, assign a custom group under its <strong>Settings</strong>, and use the dashboard filter to focus on favorites or one group.</p>
             </article>
@@ -231,7 +235,7 @@ x-portals:
             </details>
             <details>
                 <summary>Missing app permissions</summary>
-                <p>Verify the service account's group is attached to a custom privilege containing <code>APPS_READ</code> and <code>APPS_WRITE</code>. Discover separately requires <code>CATALOG_READ</code>. The System page explains which optional read role each unavailable panel needs: <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, <code>SYSTEM_UPDATE_READ</code>, or the broader <code>READONLY_ADMIN</code>. After changing roles, run <strong>Settings → Connection → Test connection</strong> or <strong>Discover → Reconnect &amp; retry</strong>. Do not edit built-in TrueNAS privileges.</p>
+                <p>Verify the service account's group is attached to a custom privilege containing <code>APPS_READ</code> and <code>APPS_WRITE</code>. Discover separately requires <code>CATALOG_READ</code>. System and Inbox explain which optional read role each unavailable source needs: <code>POOL_READ</code>, <code>ALERT_LIST_READ</code>, <code>SYSTEM_UPDATE_READ</code>, or the broader <code>READONLY_ADMIN</code>. Scoped accounts see jobs created by their own API session; jobs from every session require an optional Full Admin account. After changing roles, run <strong>Settings → Connection → Test connection</strong> or <strong>Discover → Reconnect &amp; retry</strong>. Do not edit built-in TrueNAS privileges.</p>
             </details>
             <details>
                 <summary>Certificate validation error</summary>

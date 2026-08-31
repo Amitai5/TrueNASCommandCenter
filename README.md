@@ -30,6 +30,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 - Read-only System page with native TrueNAS alerts, host identity and uptime, OS update availability, and independently permissioned panels
 - Optional storage-pool health and capacity cards when the service account has `POOL_READ`
 - Operations dashboard with current app and Kuma outages, latest update-run status, schedule, server identity, storage health, and data freshness
+- Durable **Operations Inbox** combining TrueNAS alerts and jobs, pool scrubs/resilvers, app update failures, Uptime Kuma outages, and notification failures with acknowledgement, resolution, filters, deep links, and deduplicated push alerts
 - Live per-app CPU, memory, network, and block-I/O metrics imported from TrueNAS
 - Favorites and custom app groups with dashboard filtering and portable backup support
 - Prominent published ports, route-aware local/remote Web UI links, and formatted on-demand live container logs with copy and fullscreen controls
@@ -54,7 +55,7 @@ TrueNAS remains the lifecycle authority. The manager uses the TrueNAS JSON-RPC 2
 
 - TrueNAS Community Edition / SCALE 25.10 or later
 - A configured TrueNAS Apps storage pool
-- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; add `CATALOG_READ` for Discover, and optionally add `POOL_READ`, `ALERT_LIST_READ`, `SYSTEM_UPDATE_READ`, or the broader `READONLY_ADMIN` for System-page visibility
+- A service account and user-linked API key with `APPS_READ` and `APPS_WRITE`; add `CATALOG_READ` for Discover, and optionally add `POOL_READ`, `ALERT_LIST_READ`, `SYSTEM_UPDATE_READ`, or the broader `READONLY_ADMIN` for System-page and Operations Inbox visibility
 - A trusted LAN/VPN, or an authenticated reverse proxy in front of the web UI
 
 The application does not include its own user accounts or RBAC. Do not expose it directly to an untrusted network.
@@ -119,7 +120,7 @@ Open `http://<truenas-address>:2600`. Custom apps installed from YAML might not 
 
 ### Install on a phone, tablet, or desktop
 
-Open the manager through an HTTPS address, then choose **Install app** in the desktop sidebar or mobile header. Chrome and Edge show the native install prompt. Samsung Internet may instead show its install icon in the address bar; if it does not, open the Samsung Internet menu and choose **Add page to → Home screen**, then confirm **Install on Apps screen**. The Command Center now shows browser-specific instructions and live checks for HTTPS, the app manifest, and the service worker whenever a browser does not expose its native prompt. On iPhone and iPad, open the browser Share menu and choose **Add to Home Screen**. The installed app opens in its own window and includes shortcuts to Dashboard, Apps, and Monitoring.
+Open the manager through an HTTPS address, then choose **Install app** in the desktop sidebar or mobile header. Chrome and Edge show the native install prompt. Samsung Internet may instead show its install icon in the address bar; if it does not, open the Samsung Internet menu and choose **Add page to → Home screen**, then confirm **Install on Apps screen**. The Command Center now shows browser-specific instructions and live checks for HTTPS, the app manifest, and the service worker whenever a browser does not expose its native prompt. On iPhone and iPad, open the browser Share menu and choose **Add to Home Screen**. The installed app opens in its own window and includes shortcuts to Dashboard, Inbox, Apps, and Monitoring.
 
 Browser security rules do not permit manifest-based installation from plain `http://truenas.local` or a private IP, including on Samsung Galaxy devices. Use an authenticated HTTPS reverse proxy for an installable production address; `http://localhost` and `http://127.0.0.1` remain valid for local development. Also open the address in a full browser rather than an embedded browser inside another app. The service worker caches only the branded offline screen and static icon assets. Live TrueNAS status, logs, Uptime Kuma reports, and management actions always require a working connection to the Command Center server.
 
@@ -127,7 +128,7 @@ Browser security rules do not permit manifest-based installation from plain `htt
 
 Open **Settings → Notifications → Browser push** from each phone, tablet, or computer that should receive alerts, give the device an optional name, and select **Enable on this device**. Permission is requested only from that explicit click. Use **Send test push** before relying on the device, and use **Forget** to retire a device you no longer control.
 
-Push requires the same secure context as PWA installation. On iPhone and iPad, first add the Command Center to the Home Screen and enable push from the installed app. The Command Center container must also be able to make outbound HTTPS requests to the push-service host returned by each browser. Each browser subscription is stored locally in `/data`; the VAPID private key is encrypted at rest. Browser-vendor push services receive an authenticated, payload-free wake-up—not app names, TrueNAS addresses, or error details. The device displays a generic alert and opens the Dashboard for details. Push is sent for attention events such as app downtime, failed recovery, manual approval, blocked or failed updates, rollback, scheduled-check failure, and TrueNAS connection failure. Per-app downtime delivery still follows that app's configured downtime action.
+Push requires the same secure context as PWA installation. On iPhone and iPad, first add the Command Center to the Home Screen and enable push from the installed app. The Command Center container must also be able to make outbound HTTPS requests to the push-service host returned by each browser. Each browser subscription is stored locally in `/data`; the VAPID private key is encrypted at rest. Browser-vendor push services receive an authenticated, payload-free wake-up—not app names, TrueNAS addresses, or error details. The device displays a generic alert and opens the Operations Inbox for details. Push is sent for attention events such as app downtime, failed recovery, manual approval, blocked or failed updates, rollback, scheduled-check failure, TrueNAS connection failure, and new warning-or-higher Operations Inbox incidents. Per-app downtime delivery still follows that app's configured downtime action. Notification-delivery failures appear in the inbox but do not trigger another push, preventing a recursive failure loop.
 
 This configuration uses the current TrueNAS Web UI address, `10.0.0.21`. If that address changes, update the complete YAML's `extra_hosts` value before redeploying. Prefer a DHCP reservation or static address. If your certificate uses a different hostname, replace `truenas.local` in both `extra_hosts` and `TRUENAS_WEBSOCKET_URL`.
 
@@ -233,6 +234,8 @@ Five optional or automatic views become available after the initial connection s
 4. **Live app resources** — `APPS_READ`, already required for discovery, also permits the shared `app.stats` stream. No additional setting is needed. After a successful connection, CPU and memory appear on the Apps page after the first sample; open an app's details page for network and block-I/O values. Samples remain in memory and are never added to history or backups.
 5. **Favorites and groups** — select the star beside an app to favorite it. Open **App settings → Organization** to assign a group such as `Media`, `Infrastructure`, or `Home automation`, then use the Apps-page filter to show favorites, one group, or ungrouped apps. Favorites and groups are included in the password-protected full recovery backup.
 
+The **Operations Inbox** refreshes automatically every minute and can also be refreshed on demand. It combines native TrueNAS alerts (`ALERT_LIST_READ`), pool scrub/resilver activity (`POOL_READ`), recent TrueNAS jobs visible to the authenticated account, local app-update and notification failures, and imported Uptime Kuma outages. Scoped accounts can see jobs owned by their current API session; TrueNAS exposes jobs from other sessions only to a Full Admin account. Full Admin is optional and broader than the recommended least-privilege profile, so grant it only when cross-session job visibility is worth that access.
+
 See [Manage, monitor, and inspect apps](TrueNASCommandCenter/Docs/SETUP.md#6-manage-monitor-and-inspect-apps) for detailed TrueNAS navigation, validation steps, and troubleshooting.
 
 ## App access, logs, and configuration backups
@@ -241,7 +244,7 @@ Each app policy has separate **Local Web UI URL** and **Remote Web UI URL** fiel
 
 The app-details page prioritizes operations. A large live-log workspace sits beside a bounded access-and-workloads column, followed by full-width overview cards for application metadata, Uptime Kuma, updates and recovery, safety, and recent history. This shared page flow keeps secondary cards from extending beside empty content. On smaller screens, every section stacks into one column without horizontal overflow.
 
-The primary navigation is ordered **Dashboard**, **Apps**, **System**, **Monitoring**, **History**, and **Settings**. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
+The primary navigation is ordered **Dashboard**, **Inbox**, **Apps**, **Discover**, **System**, **Monitoring**, **History**, and **Settings**. The system-aware light and dark themes use the same information hierarchy, with a persistent manual toggle and stronger light-theme borders, text contrast, inputs, badges, and active navigation states.
 
 The Apps page can star frequently used apps, assign a custom group under each app's **Settings**, and filter by favorites, group, or ungrouped apps. It also shows current CPU and memory at a glance. The details page adds live CPU, memory, network, and block-I/O metrics alongside the current route, ports, health, workloads, versions, lifecycle controls, source information, and live logs. Resource values come from TrueNAS's shared statistics stream and are not persisted.
 

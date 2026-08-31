@@ -1,0 +1,366 @@
+@page "/inbox"
+@inject IOperationsInboxService InboxService
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject TimeProvider TimeProvider
+
+<PageTitle>Operations Inbox · TrueNAS Command Center</PageTitle>
+
+<div class="page operations-inbox-page">
+    <header class="page-header">
+        <div>
+            <h1>Operations Inbox</h1>
+            <p class="subtitle">Alerts, jobs, storage activity, app failures, and monitor outages in one place.</p>
+        </div>
+        <div class="actions">
+            <button type="button" disabled="@_refreshing" @onclick="RefreshAsync">@(_refreshing ? "Refreshing…" : "Refresh inbox")</button>
+        </div>
+    </header>
+
+    @if (_warnings.Count > 0)
+    {
+        <div class="notice warning inbox-source-warning" role="status">
+            <strong>Some sources could not be refreshed.</strong>
+            <ul>
+                @foreach (var warning in _warnings)
+                {
+                    <li>@warning</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <section class="summary-grid operations-inbox-summary" aria-label="Inbox summary">
+        <div class="summary-item"><strong>@(_snapshot?.OpenCount ?? 0)</strong><span>Open</span></div>
+        <div class="summary-item"><strong>@(_snapshot?.CriticalCount ?? 0)</strong><span>Critical</span></div>
+        <div class="summary-item"><strong>@(_snapshot?.AcknowledgedCount ?? 0)</strong><span>Acknowledged</span></div>
+        <div class="summary-item"><strong>@(_snapshot?.ResolvedCount ?? 0)</strong><span>Resolved</span></div>
+    </section>
+
+    <section class="panel filter-panel operations-inbox-filters" aria-label="Inbox filters">
+        <div class="filters">
+            <div class="inbox-search-filter">
+                <label for="inbox-search">Search</label>
+                <input id="inbox-search" type="search" placeholder="Search title, details, or reference" autocomplete="off" @bind="_search" @bind:event="oninput" @bind:after="LoadAsync" />
+            </div>
+            <div>
+                <label for="inbox-status">State</label>
+                <select id="inbox-status" @bind="_statusFilter" @bind:after="LoadAsync">
+                    <option value="">All states</option>
+                    @foreach (var status in Enum.GetValues<OperationsInboxStatus>())
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="inbox-severity">Severity</label>
+                <select id="inbox-severity" @bind="_severityFilter" @bind:after="LoadAsync">
+                    <option value="">All severities</option>
+                    @foreach (var severity in Enum.GetValues<OperationsInboxSeverity>().Reverse())
+                    {
+                        <option value="@severity">@severity</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="inbox-source">Source</label>
+                <select id="inbox-source" @bind="_sourceFilter" @bind:after="LoadAsync">
+                    <option value="">All sources</option>
+                    @foreach (var source in Enum.GetValues<OperationsInboxSource>())
+                    {
+                        <option value="@source">@SourceText(source)</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="inbox-range">Time range</label>
+                <select id="inbox-range" @bind="_timeRange" @bind:after="LoadAsync">
+                    <option value="24h">Last 24 hours</option>
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="all">All time</option>
+                </select>
+            </div>
+            <button type="button" class="inbox-clear-filters" @onclick="ClearFiltersAsync">Clear</button>
+        </div>
+        <div class="inbox-filter-meta">
+            <span>Showing @(_snapshot?.Items.Count ?? 0) item@((_snapshot?.Items.Count ?? 0) == 1 ? string.Empty : "s")</span>
+            @if (_snapshot?.LastObservedUtc is not null)
+            {
+                <span>Last refreshed @FormatDate(_snapshot.LastObservedUtc.Value)</span>
+            }
+        </div>
+    </section>
+
+    <div class="operations-inbox-layout">
+        <section class="panel operations-inbox-feed" aria-label="Operations feed">
+            <div class="panel-heading-row">
+                <div><h2>Activity feed</h2><p>Newest unresolved items appear first.</p></div>
+                <span class="badge">@(_snapshot?.Items.Count ?? 0)</span>
+            </div>
+
+            @if (_loading)
+            {
+                <div class="inbox-empty"><span class="state-icon" aria-hidden="true"><NavIcon Name="inbox" /></span><h3>Loading operations</h3><p>Collecting the latest available state.</p></div>
+            }
+            else if (_snapshot?.Items.Count == 0)
+            {
+                <div class="inbox-empty"><span class="state-icon" aria-hidden="true"><NavIcon Name="inbox" /></span><h3>No matching operations</h3><p>Everything is clear for the current filters.</p></div>
+            }
+            else
+            {
+                <div class="inbox-item-list">
+                    @foreach (var item in _snapshot!.Items)
+                    {
+                        <button type="button" class="inbox-feed-item @(item.Id == _selectedItem?.Id ? "selected" : string.Empty)" @onclick="() => SelectItemAsync(item)">
+                            <span class="inbox-severity-marker @SeverityClass(item.Severity)" aria-label="@item.Severity severity"></span>
+                            <span class="inbox-feed-main">
+                                <span class="inbox-feed-title-row"><strong>@item.Title</strong><span class="badge @StatusClass(item.Status)">@StatusText(item)</span></span>
+                                <span class="inbox-feed-summary">@item.Summary</span>
+                                <span class="inbox-feed-meta"><span>@SourceText(item.Source)</span><span>@KindText(item.Kind)</span><span>@FormatDate(item.OccurredUtc)</span></span>
+                                @if (item.ProgressPercent is not null)
+                                {
+                                    <span class="inbox-progress"><span style="width: @ProgressWidth(item.ProgressPercent.Value)"></span></span>
+                                }
+                            </span>
+                        </button>
+                    }
+                </div>
+            }
+        </section>
+
+        <aside class="panel operations-inbox-detail" aria-label="Selected operation details">
+            @if (_selectedItem is null)
+            {
+                <div class="inbox-empty"><span class="state-icon" aria-hidden="true"><NavIcon Name="inbox" /></span><h3>Select an item</h3><p>Choose an operation to review its state and history.</p></div>
+            }
+            else
+            {
+                <div class="inbox-detail-heading">
+                    <div>
+                        <span class="eyebrow">@SourceText(_selectedItem.Source) · @KindText(_selectedItem.Kind)</span>
+                        <h2>@_selectedItem.Title</h2>
+                    </div>
+                    <span class="badge @SeverityClass(_selectedItem.Severity)">@_selectedItem.Severity</span>
+                </div>
+
+                <p class="inbox-detail-summary">@_selectedItem.Summary</p>
+                @if (!string.IsNullOrWhiteSpace(_selectedItem.Details))
+                {
+                    <pre class="inbox-detail-text">@_selectedItem.Details</pre>
+                }
+
+                <dl class="inbox-detail-grid">
+                    <div><dt>State</dt><dd><span class="badge @StatusClass(_selectedItem.Status)">@StatusText(_selectedItem)</span></dd></div>
+                    <div><dt>Occurred</dt><dd>@FormatDate(_selectedItem.OccurredUtc)</dd></div>
+                    <div><dt>Source state</dt><dd>@(_selectedItem.IsSourceActive ? "Active" : "No longer active")</dd></div>
+                    <div><dt>Push</dt><dd>@PushText(_selectedItem)</dd></div>
+                    @if (!string.IsNullOrWhiteSpace(_selectedItem.SourceReference))
+                    {
+                        <div><dt>Reference</dt><dd>@_selectedItem.SourceReference</dd></div>
+                    }
+                    <div><dt>Occurrences</dt><dd>@_selectedItem.OccurrenceCount</dd></div>
+                </dl>
+
+                @if (!string.IsNullOrWhiteSpace(_selectedItem.PushError))
+                {
+                    <div class="notice warning inbox-push-error">@_selectedItem.PushError</div>
+                }
+
+                <div class="inbox-detail-actions">
+                    <button type="button" disabled="@(_selectedItem.Status != OperationsInboxStatus.Open || _actionBusy)" @onclick="AcknowledgeAsync">Acknowledge</button>
+                    <button type="button" disabled="@(_selectedItem.Status == OperationsInboxStatus.Resolved || _actionBusy)" @onclick="ResolveAsync">Resolve</button>
+                    <a class="button-link" href="@_selectedItem.DeepLink">Open related view ↗</a>
+                </div>
+
+                <div class="inbox-history">
+                    <h3>Event history</h3>
+                    @if (_history.Count == 0)
+                    {
+                        <p class="muted">No state changes recorded.</p>
+                    }
+                    else
+                    {
+                        <ol>
+                            @foreach (var entry in _history)
+                            {
+                                <li><span class="inbox-history-marker"></span><div><strong>@HistoryText(entry.Action)</strong><span>@entry.Message</span><small>@entry.Actor · @FormatDate(entry.TimestampUtc)</small></div></li>
+                            }
+                        </ol>
+                    }
+                </div>
+            }
+        </aside>
+    </div>
+
+    <p class="muted operations-inbox-permission-note">TrueNAS job visibility follows the API account. A Full Admin account is required to see jobs owned by other sessions; all other available sources continue loading if job access is limited.</p>
+</div>
+
+@code {
+    private OperationsInboxSnapshot? _snapshot;
+    private OperationsInboxItem? _selectedItem;
+    private IReadOnlyList<OperationsInboxHistoryRecord> _history = [];
+    private List<string> _warnings = [];
+    private string? _search;
+    private string? _statusFilter;
+    private string? _sourceFilter;
+    private string? _severityFilter;
+    private string _timeRange = "7d";
+    private string? _timeZoneId;
+    private bool _loading = true;
+    private bool _refreshing;
+    private bool _actionBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            _timeZoneId = (await db.Settings.AsNoTracking().SingleAsync(item => item.Id == 1)).TimeZoneId;
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _refreshing = true;
+        try
+        {
+            var result = await InboxService.RefreshAsync();
+            _warnings = result.Warnings.ToList();
+            await LoadAsync();
+        }
+        finally
+        {
+            _loading = false;
+            _refreshing = false;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var selectedId = _selectedItem?.Id;
+        var query = new OperationsInboxQuery(
+            _search,
+            Enum.TryParse<OperationsInboxStatus>(_statusFilter, out var status) ? status : null,
+            Enum.TryParse<OperationsInboxSource>(_sourceFilter, out var source) ? source : null,
+            Enum.TryParse<OperationsInboxSeverity>(_severityFilter, out var severity) ? severity : null,
+            SinceUtc());
+        _snapshot = await InboxService.GetSnapshotAsync(query);
+        _selectedItem = selectedId is null ? _snapshot.Items.FirstOrDefault() : _snapshot.Items.FirstOrDefault(item => item.Id == selectedId) ?? _snapshot.Items.FirstOrDefault();
+        _history = _selectedItem is null ? [] : await InboxService.GetHistoryAsync(_selectedItem.Id);
+    }
+
+    private async Task SelectItemAsync(OperationsInboxItem item)
+    {
+        _selectedItem = item;
+        _history = await InboxService.GetHistoryAsync(item.Id);
+    }
+
+    private async Task AcknowledgeAsync()
+    {
+        if (_selectedItem is null)
+        {
+            return;
+        }
+
+        _actionBusy = true;
+        try
+        {
+            await InboxService.AcknowledgeAsync(_selectedItem.Id);
+            await LoadAsync();
+        }
+        finally
+        {
+            _actionBusy = false;
+        }
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (_selectedItem is null)
+        {
+            return;
+        }
+
+        _actionBusy = true;
+        try
+        {
+            await InboxService.ResolveAsync(_selectedItem.Id);
+            await LoadAsync();
+        }
+        finally
+        {
+            _actionBusy = false;
+        }
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _search = null;
+        _statusFilter = null;
+        _sourceFilter = null;
+        _severityFilter = null;
+        _timeRange = "7d";
+        await LoadAsync();
+    }
+
+    private DateTime? SinceUtc() => _timeRange switch
+    {
+        "24h" => TimeProvider.GetUtcNow().UtcDateTime.AddHours(-24),
+        "7d" => TimeProvider.GetUtcNow().UtcDateTime.AddDays(-7),
+        "30d" => TimeProvider.GetUtcNow().UtcDateTime.AddDays(-30),
+        _ => null
+    };
+
+    private string FormatDate(DateTime value) => DisplayTimeFormatter.Format(value, _timeZoneId);
+    private static string ProgressWidth(double value) => $"{Math.Clamp(value, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+    private static string StatusText(OperationsInboxItem item) => item.Status == OperationsInboxStatus.Resolved && item.IsSourceActive ? "Resolved · source active" : item.Status.ToString();
+    private static string PushText(OperationsInboxItem item) => item.PushState switch
+    {
+        OperationsInboxPushState.NotRequested => item.Severity < OperationsInboxSeverity.Warning || item.Source == OperationsInboxSource.Notifications ? "Not required" : "Not sent",
+        OperationsInboxPushState.NoSubscription => "No subscribed device",
+        OperationsInboxPushState.Pending => "Sending",
+        OperationsInboxPushState.Delivered => "Delivered",
+        OperationsInboxPushState.Failed => "Failed",
+        _ => item.PushState.ToString()
+    };
+    private static string SourceText(OperationsInboxSource source) => source switch
+    {
+        OperationsInboxSource.TrueNas => "TrueNAS",
+        OperationsInboxSource.UptimeKuma => "Uptime Kuma",
+        _ => source.ToString()
+    };
+    private static string KindText(OperationsInboxKind kind) => kind switch
+    {
+        OperationsInboxKind.TrueNasAlert => "System alert",
+        OperationsInboxKind.TrueNasJob => "TrueNAS job",
+        OperationsInboxKind.PoolScrub => "Pool scrub",
+        OperationsInboxKind.PoolResilver => "Pool resilver",
+        OperationsInboxKind.AppUpdateFailure => "App update",
+        OperationsInboxKind.UptimeKumaOutage => "Monitor outage",
+        OperationsInboxKind.NotificationFailure => "Notification",
+        _ => kind.ToString()
+    };
+    private static string HistoryText(OperationsInboxHistoryAction action) => action switch
+    {
+        OperationsInboxHistoryAction.PushDelivered => "Push delivered",
+        OperationsInboxHistoryAction.PushFailed => "Push failed",
+        _ => action.ToString()
+    };
+    private static string StatusClass(OperationsInboxStatus status) => status switch
+    {
+        OperationsInboxStatus.Open => "danger",
+        OperationsInboxStatus.Acknowledged => "warning",
+        OperationsInboxStatus.Resolved => "success",
+        _ => string.Empty
+    };
+    private static string SeverityClass(OperationsInboxSeverity severity) => severity switch
+    {
+        OperationsInboxSeverity.Critical => "danger",
+        OperationsInboxSeverity.Error => "danger",
+        OperationsInboxSeverity.Warning => "warning",
+        OperationsInboxSeverity.Info => "info",
+        _ => string.Empty
+    };
+}

@@ -57,6 +57,7 @@ builder.Services.AddSingleton<IStoragePoolOverviewService, StoragePoolOverviewSe
 builder.Services.AddSingleton<ITrueNasSystemOverviewService, TrueNasSystemOverviewService>();
 builder.Services.AddScoped<DashboardOverviewService>();
 builder.Services.AddScoped<DashboardRefreshService>();
+builder.Services.AddSingleton<IOperationsInboxService, OperationsInboxService>();
 builder.Services.AddSingleton<AppResourceMonitorService>();
 builder.Services.AddSingleton<IAppResourceMonitor>(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddSingleton<RunLock>();
@@ -113,6 +114,7 @@ builder.Services.AddHttpClient("uptime-kuma-insecure", client => client.Timeout 
     });
 builder.Services.AddHostedService<RunSchedulerBackgroundService>();
 builder.Services.AddHostedService<UptimeKumaSyncBackgroundService>();
+builder.Services.AddHostedService<OperationsInboxBackgroundService>();
 builder.Services.AddHostedService(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddHealthChecks()
     .AddCheck("live", static () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), ["live"])

@@ -401,6 +401,139 @@ namespace TrueNasCommandCenter.Data.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("TrueNasCommandCenter.Domain.OperationsInboxHistoryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("InboxItemId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InboxItemId", "TimestampUtc");
+
+                    b.ToTable("OperationsInboxHistory");
+                });
+
+            modelBuilder.Entity("TrueNasCommandCenter.Domain.OperationsInboxItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("AcknowledgedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CorrelationGroup")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeepLink")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(4096)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsSourceActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastObservedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OccurrenceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("ProgressPercent")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime?>("PushAttemptedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PushError")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PushState")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelatedAppId")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceReference")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fingerprint")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "Severity", "OccurredUtc");
+
+                    b.ToTable("OperationsInboxItems");
+                });
+
             modelBuilder.Entity("TrueNasCommandCenter.Domain.SettingsRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -728,6 +861,17 @@ namespace TrueNasCommandCenter.Data.Migrations
                     b.ToTable("UpdateAttempts");
                 });
 
+            modelBuilder.Entity("TrueNasCommandCenter.Domain.OperationsInboxHistoryRecord", b =>
+                {
+                    b.HasOne("TrueNasCommandCenter.Domain.OperationsInboxItem", "InboxItem")
+                        .WithMany("History")
+                        .HasForeignKey("InboxItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InboxItem");
+                });
+
             modelBuilder.Entity("TrueNasCommandCenter.Domain.UptimeKumaMonitorRecord", b =>
                 {
                     b.HasOne("TrueNasCommandCenter.Domain.AppRecord", "App")
@@ -847,6 +991,11 @@ namespace TrueNasCommandCenter.Data.Migrations
                     b.Navigation("Ports");
 
                     b.Navigation("UptimeKumaMonitors");
+                });
+
+            modelBuilder.Entity("TrueNasCommandCenter.Domain.OperationsInboxItem", b =>
+                {
+                    b.Navigation("History");
                 });
 
             modelBuilder.Entity("TrueNasCommandCenter.Domain.UpdateRun", b =>

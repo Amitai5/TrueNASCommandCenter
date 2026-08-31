@@ -123,6 +123,75 @@ public sealed record TrueNasPoolDto
 
     [JsonPropertyName("fragmentation")]
     public string? Fragmentation { get; init; }
+
+    [JsonPropertyName("scan")]
+    public TrueNasPoolScanDto? Scan { get; init; }
+}
+
+/// <summary>Represents the current or most recent scrub or resilver reported for a pool.</summary>
+public sealed record TrueNasPoolScanDto
+{
+    [JsonPropertyName("function")]
+    public string Function { get; init; } = string.Empty;
+
+    [JsonPropertyName("state")]
+    public string State { get; init; } = string.Empty;
+
+    [JsonPropertyName("start_time")]
+    public JsonElement StartTime { get; init; }
+
+    [JsonPropertyName("end_time")]
+    public JsonElement EndTime { get; init; }
+
+    [JsonPropertyName("percentage")]
+    public double? Percentage { get; init; }
+
+    [JsonPropertyName("errors")]
+    public int Errors { get; init; }
+
+    [JsonPropertyName("total_secs_left")]
+    public long? TotalSecondsLeft { get; init; }
+}
+
+/// <summary>Represents one job visible to the authenticated TrueNAS API session.</summary>
+public sealed record TrueNasJobDto
+{
+    [JsonPropertyName("id")]
+    public long Id { get; init; }
+
+    [JsonPropertyName("method")]
+    public string Method { get; init; } = string.Empty;
+
+    [JsonPropertyName("arguments")]
+    public JsonElement Arguments { get; init; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+
+    [JsonPropertyName("progress")]
+    public TrueNasJobProgressDto? Progress { get; init; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; init; }
+
+    [JsonPropertyName("state")]
+    public string State { get; init; } = "WAITING";
+
+    [JsonPropertyName("time_started")]
+    public JsonElement TimeStarted { get; init; }
+
+    [JsonPropertyName("time_finished")]
+    public JsonElement TimeFinished { get; init; }
+}
+
+/// <summary>Contains current progress for a TrueNAS job.</summary>
+public sealed record TrueNasJobProgressDto
+{
+    [JsonPropertyName("percent")]
+    public double? Percent { get; init; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
 }
 
 public sealed record TrueNasMailMessage(string Subject, string Text, IReadOnlyList<string> Recipients);

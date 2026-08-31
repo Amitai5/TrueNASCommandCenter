@@ -26,6 +26,8 @@ For app management and the Discover gallery, grant:
 | `SYSTEM_UPDATE_READ` | Optional | TrueNAS operating-system update status | The OS update panel shows an unavailable state |
 | `READONLY_ADMIN` | Optional and broad | Host identity, TrueNAS version, CPU, memory, load, boot time, and uptime; TrueNAS expands it to the available read-only roles | Host details remain limited; use the focused roles above when broad read access is unnecessary |
 
+The Operations Inbox reuses these permissions: `ALERT_LIST_READ` supplies native alerts and `POOL_READ` supplies pool scrub/resilver activity. Local update failures, notification failures, and Uptime Kuma outages need no additional TrueNAS role. The authenticated `core.get_jobs` call returns jobs owned by the current API session for a scoped account. Seeing jobs owned by every TrueNAS session requires a **Full Admin account**, not an additional focused role. Full Admin is optional and substantially broader than the profiles below.
+
 TrueNAS systems enforcing a STIG profile do not permit write roles. Such a connection can provide read-only visibility but cannot perform lifecycle or update actions.
 
 ## Recommended privilege profiles
@@ -80,6 +82,7 @@ On current TrueNAS role definitions, `READONLY_ADMIN` includes the read roles ne
 - Generic webhooks and browser push contact their configured external services.
 - Favorites, groups, policies, schedules, history, and recovery backups are local Command Center data.
 - TrueNAS-native email uses the authenticated middleware connection and the mail service already configured in TrueNAS; the supported deployment does not require adding another role to this privilege.
+- Operations Inbox acknowledgement, resolution state, local app-update failures, Uptime Kuma outages, and notification failures are local Command Center data.
 
 ## Apply a role change
 
@@ -108,4 +111,5 @@ The browser console only confirms that the Blazor user interface is connected to
 - [`update.status`](https://api.truenas.com/v25.04.2/api_events_update.status.html) requires `SYSTEM_UPDATE_READ`.
 - [`pool.query`](https://api.truenas.com/v25.10/api_methods_pool.query.html) requires `POOL_READ`.
 - [`system.info`](https://api.truenas.com/v25.10.0/api_methods_system.info.html) requires `READONLY_ADMIN`.
+- [`core.get_jobs`](https://api.truenas.com/v25.10.0/api_methods_core.get_jobs.html) returns only jobs owned by the authenticated session unless that account is Full Admin.
 - The [TrueNAS role reference](https://api.truenas.com/v25.10/rbac.html) documents role composition and the breadth of `READONLY_ADMIN`.

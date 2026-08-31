@@ -23,6 +23,12 @@ public interface ITrueNasSystemClient
     /// <returns>The storage pools visible to the authenticated account.</returns>
     Task<IReadOnlyList<TrueNasPoolDto>> QueryPoolsAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Returns recent jobs visible to the authenticated TrueNAS API session.</summary>
+    /// <param name="limit">The maximum number of jobs to return, newest first.</param>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The recent jobs visible to the current session.</returns>
+    Task<IReadOnlyList<TrueNasJobDto>> ListJobsAsync(int limit = 200, CancellationToken cancellationToken = default);
+
     /// <summary>Streams current CPU, memory, network, and block-I/O statistics for installed applications.</summary>
     /// <param name="intervalSeconds">The interval between TrueNAS updates, with a minimum of two seconds.</param>
     /// <param name="cancellationToken">A token that stops the stream.</param>

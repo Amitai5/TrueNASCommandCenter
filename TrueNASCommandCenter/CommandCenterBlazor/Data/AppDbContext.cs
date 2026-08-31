@@ -18,6 +18,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<GitHubRepositoryCache> GitHubRepositories => Set<GitHubRepositoryCache>();
     public DbSet<UptimeKumaMonitorRecord> UptimeKumaMonitors => Set<UptimeKumaMonitorRecord>();
     public DbSet<WebPushSubscriptionRecord> WebPushSubscriptions => Set<WebPushSubscriptionRecord>();
+    public DbSet<OperationsInboxItem> OperationsInboxItems => Set<OperationsInboxItem>();
+    public DbSet<OperationsInboxHistoryRecord> OperationsInboxHistory => Set<OperationsInboxHistoryRecord>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -94,6 +96,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<SettingsRecord>()
             .Property(settings => settings.SmtpSecurity)
             .HasConversion<string>();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .Property(item => item.Source)
+            .HasConversion<string>();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .Property(item => item.Kind)
+            .HasConversion<string>();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .Property(item => item.Severity)
+            .HasConversion<string>();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .Property(item => item.Status)
+            .HasConversion<string>();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .Property(item => item.PushState)
+            .HasConversion<string>();
+        modelBuilder.Entity<OperationsInboxHistoryRecord>()
+            .Property(history => history.Action)
+            .HasConversion<string>();
 
         modelBuilder.Entity<UpdateAttempt>()
             .HasOne(attempt => attempt.Run)
@@ -125,6 +145,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .WithMany(app => app.UptimeKumaMonitors)
             .HasForeignKey(monitor => monitor.AppId)
             .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<OperationsInboxHistoryRecord>()
+            .HasOne(history => history.InboxItem)
+            .WithMany(item => item.History)
+            .HasForeignKey(history => history.InboxItemId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<NotificationRecord>()
             .HasIndex(notification => new
@@ -148,5 +173,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<WebPushSubscriptionRecord>()
             .HasIndex(subscription => subscription.Endpoint)
             .IsUnique();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .HasIndex(item => item.Fingerprint)
+            .IsUnique();
+        modelBuilder.Entity<OperationsInboxItem>()
+            .HasIndex(item => new { item.Status, item.Severity, item.OccurredUtc });
+        modelBuilder.Entity<OperationsInboxHistoryRecord>()
+            .HasIndex(history => new { history.InboxItemId, history.TimestampUtc });
     }
 }

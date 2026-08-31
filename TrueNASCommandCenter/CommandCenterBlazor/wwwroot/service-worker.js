@@ -67,12 +67,12 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
     event.waitUntil(self.registration.showNotification("TrueNAS Command Center needs attention", {
-        body: "Open the dashboard to review the latest app or system alert.",
+        body: "Open the Operations Inbox to review the latest incident.",
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag: "truenas-command-center-alert",
         renotify: true,
-        data: { url: "/" }
+        data: { url: "/inbox" }
     }));
 });
 

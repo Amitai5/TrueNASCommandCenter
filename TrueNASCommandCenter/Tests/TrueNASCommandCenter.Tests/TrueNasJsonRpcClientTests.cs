@@ -557,7 +557,7 @@ public sealed class TrueNasJsonRpcClientTests
             Assert.AreEqual("pool.query", request.GetProperty("method").GetString());
             transport.Respond(request.GetProperty("id").GetInt64(), new[]
             {
-                new { name = "tank", status = "ONLINE", healthy = true, warning = false, size = 1_000L, allocated = 400L, free = 600L, fragmentation = "4%" }
+                new { name = "tank", status = "ONLINE", healthy = true, warning = false, size = 1_000L, allocated = 400L, free = 600L, fragmentation = "4%", scan = new { function = "SCRUB", state = "SCANNING", start_time = "2026-08-30T17:00:00Z", end_time = (object?)null, percentage = 35.5, errors = 0, total_secs_left = 900 } }
             });
             return Task.CompletedTask;
         });
@@ -572,6 +572,37 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.IsTrue(pool.Healthy);
         Assert.AreEqual(400L, pool.Allocated);
         Assert.AreEqual("4%", pool.Fragmentation);
+        Assert.AreEqual("SCRUB", pool.Scan!.Function);
+        Assert.AreEqual(35.5, pool.Scan.Percentage);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task ListJobs_RequestsNewestJobsAndDeserializesProgress()
+    {
+        JsonElement? capturedParameters = null;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("core.get_jobs", request.GetProperty("method").GetString());
+            capturedParameters = request.GetProperty("params").Clone();
+            transport.Respond(request.GetProperty("id").GetInt64(), new[]
+            {
+                new { id = 91L, method = "app.upgrade", arguments = new[] { "plex" }, description = "Upgrade Plex", progress = new { percent = 64.0, description = "Pulling images" }, error = (string?)null, state = "RUNNING", time_started = "2026-08-30T17:00:00Z", time_finished = (object?)null }
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var jobs = await client.ListJobsAsync(75);
+
+        Assert.HasCount(1, jobs);
+        Assert.AreEqual(91L, jobs[0].Id);
+        Assert.AreEqual("RUNNING", jobs[0].State);
+        Assert.AreEqual(64.0, jobs[0].Progress!.Percent);
+        Assert.IsNotNull(capturedParameters);
+        Assert.AreEqual("-id", capturedParameters.Value[1].GetProperty("order_by")[0].GetString());
+        Assert.AreEqual(75, capturedParameters.Value[1].GetProperty("limit").GetInt32());
     }
 
     /// <summary>Verifies that app statistics events route to the stream and release their subscription.</summary>

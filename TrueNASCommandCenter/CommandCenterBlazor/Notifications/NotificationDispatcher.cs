@@ -43,12 +43,12 @@ public sealed class NotificationDispatcher(
             }
         }
 
-        if (settings.EmailEnabled)
+        if (ShouldSendExternalProvider(notification.EventType) && settings.EmailEnabled)
         {
             await DeliverAsync(notification, NotificationProvider.Email, emailSender.SendAsync, cancellationToken);
         }
 
-        if (settings.WebhookEnabled)
+        if (ShouldSendExternalProvider(notification.EventType) && settings.WebhookEnabled)
         {
             await DeliverAsync(notification, NotificationProvider.Webhook, webhookSender.SendAsync, cancellationToken);
         }
@@ -109,6 +109,7 @@ public sealed class NotificationDispatcher(
             NotificationEventType.AutomaticUpdateSucceeded => settings.NotifyAutomaticSuccess,
             NotificationEventType.ScheduledCheckFailed => settings.NotifyScheduledCheckFailure,
             NotificationEventType.TrueNasConnectionFailed => settings.NotifyConnectionFailure,
+            NotificationEventType.OperationsInboxIncident => true,
             _ => false
         };
 
@@ -120,7 +121,11 @@ public sealed class NotificationDispatcher(
             NotificationEventType.AutomaticUpdateBlocked or
             NotificationEventType.RollbackOccurred or
             NotificationEventType.ScheduledCheckFailed or
-            NotificationEventType.TrueNasConnectionFailed;
+            NotificationEventType.TrueNasConnectionFailed or
+            NotificationEventType.OperationsInboxIncident;
+
+    private static bool ShouldSendExternalProvider(NotificationEventType eventType) =>
+        eventType != NotificationEventType.OperationsInboxIncident;
 
     private static string? Sanitize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Length <= 1024 ? value : value[..1024];

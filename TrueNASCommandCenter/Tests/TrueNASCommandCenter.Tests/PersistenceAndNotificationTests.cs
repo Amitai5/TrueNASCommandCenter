@@ -261,6 +261,36 @@ public sealed class PersistenceAndNotificationTests
     }
 
     [TestMethod]
+    public async Task Dispatcher_OperationsInboxIncident_DeliversOnlyPush()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync(settings =>
+        {
+            settings.EmailEnabled = true;
+            settings.WebhookEnabled = true;
+            settings.WebhookUrl = "https://hooks.example.test/operations";
+        });
+        var email = new FakeEmailSender();
+        var webhook = new FakeWebhookSender();
+        var push = new FakeWebPushSender(hasSubscriptions: true);
+        var dispatcher = new NotificationDispatcher(
+            database,
+            email,
+            webhook,
+            push,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 30, 18, 0, 0, TimeSpan.Zero)));
+
+        await dispatcher.DispatchAsync(Event(NotificationEventType.OperationsInboxIncident, "operations|alert|active"));
+
+        Assert.AreEqual(0, email.Calls);
+        Assert.AreEqual(0, webhook.Calls);
+        Assert.AreEqual(1, push.Calls);
+        await using var db = await database.CreateDbContextAsync();
+        var record = await db.Notifications.SingleAsync();
+        Assert.AreEqual(NotificationProvider.Push, record.Provider);
+    }
+
+    [TestMethod]
     public async Task RunLock_RejectsOverlapUntilReleased()
     {
         var runLock = new RunLock();
