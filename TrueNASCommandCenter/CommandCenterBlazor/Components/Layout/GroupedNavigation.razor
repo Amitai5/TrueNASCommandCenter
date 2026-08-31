@@ -1,0 +1,150 @@
+@implements IDisposable
+@inject NavigationManager NavigationManager
+
+<nav class="grouped-navigation" aria-label="Main navigation">
+    <div class="navigation-primary-links">
+        <NavLink href="/" Match="NavLinkMatch.All" @onclick="NotifyNavigationAsync">
+            <NavIcon Name="dashboard" />
+            <span>Dashboard</span>
+        </NavLink>
+        <NavLink href="/inbox" @onclick="NotifyNavigationAsync">
+            <NavIcon Name="inbox" />
+            <span>Inbox</span>
+        </NavLink>
+    </div>
+
+    <section class="navigation-folder @(IsExpanded(NavigationFolder.Applications) ? "open" : string.Empty)">
+        <button type="button" class="navigation-folder-toggle" aria-expanded="@AriaExpanded(NavigationFolder.Applications)" aria-controls="@FolderId("applications")" @onclick="() => ToggleFolder(NavigationFolder.Applications)">
+            <NavIcon Name="@(IsExpanded(NavigationFolder.Applications) ? "folder-open" : "folder")" />
+            <span>Applications</span>
+            <NavIcon Name="chevron" />
+        </button>
+        <div id="@FolderId("applications")" class="navigation-folder-items" hidden="@(!IsExpanded(NavigationFolder.Applications))">
+            <NavLink href="/apps" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="apps" />
+                <span>Apps</span>
+            </NavLink>
+            <NavLink href="/discover" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="discover" />
+                <span>Discover</span>
+            </NavLink>
+        </div>
+    </section>
+
+    <section class="navigation-folder @(IsExpanded(NavigationFolder.StorageAndProtection) ? "open" : string.Empty)">
+        <button type="button" class="navigation-folder-toggle" aria-expanded="@AriaExpanded(NavigationFolder.StorageAndProtection)" aria-controls="@FolderId("storage-protection")" @onclick="() => ToggleFolder(NavigationFolder.StorageAndProtection)">
+            <NavIcon Name="@(IsExpanded(NavigationFolder.StorageAndProtection) ? "folder-open" : "folder")" />
+            <span>Storage &amp; protection</span>
+            <NavIcon Name="chevron" />
+        </button>
+        <div id="@FolderId("storage-protection")" class="navigation-folder-items" hidden="@(!IsExpanded(NavigationFolder.StorageAndProtection))">
+            <NavLink href="/system" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="system" />
+                <span>System</span>
+            </NavLink>
+            <NavLink href="/protection" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="protection" />
+                <span>Data protection</span>
+            </NavLink>
+            <NavLink href="/storage-health" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="storage-health" />
+                <span>Drive health</span>
+            </NavLink>
+        </div>
+    </section>
+
+    <section class="navigation-folder @(IsExpanded(NavigationFolder.Observability) ? "open" : string.Empty)">
+        <button type="button" class="navigation-folder-toggle" aria-expanded="@AriaExpanded(NavigationFolder.Observability)" aria-controls="@FolderId("observability")" @onclick="() => ToggleFolder(NavigationFolder.Observability)">
+            <NavIcon Name="@(IsExpanded(NavigationFolder.Observability) ? "folder-open" : "folder")" />
+            <span>Observability</span>
+            <NavIcon Name="chevron" />
+        </button>
+        <div id="@FolderId("observability")" class="navigation-folder-items" hidden="@(!IsExpanded(NavigationFolder.Observability))">
+            <NavLink href="/monitoring" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="monitoring" />
+                <span>Monitoring</span>
+            </NavLink>
+            <NavLink href="/history" @onclick="NotifyNavigationAsync">
+                <NavIcon Name="history" />
+                <span>History</span>
+            </NavLink>
+        </div>
+    </section>
+
+    <div class="navigation-divider" aria-hidden="true"></div>
+    <NavLink href="/settings" @onclick="NotifyNavigationAsync">
+        <NavIcon Name="settings" />
+        <span>Settings</span>
+    </NavLink>
+</nav>
+
+@code {
+    private NavigationFolder? expandedFolder;
+
+    /// <summary>Gets or sets the unique prefix used for controlled folder element identifiers.</summary>
+    [Parameter]
+    public string IdPrefix { get; set; } = "main-navigation";
+
+    /// <summary>Gets or sets the callback invoked after a navigation link is selected.</summary>
+    [Parameter]
+    public EventCallback OnNavigate { get; set; }
+
+    protected override void OnInitialized()
+    {
+        OpenFolderForLocation(NavigationManager.Uri);
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private bool IsExpanded(NavigationFolder folder) => expandedFolder == folder;
+
+    private string AriaExpanded(NavigationFolder folder) => IsExpanded(folder) ? "true" : "false";
+
+    private string FolderId(string folderName) => $"{IdPrefix}-{folderName}";
+
+    private void ToggleFolder(NavigationFolder folder)
+    {
+        expandedFolder = IsExpanded(folder) ? null : folder;
+    }
+
+    private async Task NotifyNavigationAsync()
+    {
+        if (OnNavigate.HasDelegate)
+        {
+            await OnNavigate.InvokeAsync();
+        }
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        OpenFolderForLocation(args.Location);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OpenFolderForLocation(string location)
+    {
+        var path = NavigationManager.ToBaseRelativePath(location).Split('?', '#')[0].Trim('/');
+        expandedFolder = path switch
+        {
+            "apps" or "discover" => NavigationFolder.Applications,
+            _ when path.StartsWith("apps/", StringComparison.OrdinalIgnoreCase) => NavigationFolder.Applications,
+            _ when path.StartsWith("discover/", StringComparison.OrdinalIgnoreCase) => NavigationFolder.Applications,
+            "system" or "protection" or "storage-health" => NavigationFolder.StorageAndProtection,
+            "monitoring" or "history" => NavigationFolder.Observability,
+            _ => null
+        };
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+        GC.SuppressFinalize(this);
+    }
+
+    private enum NavigationFolder
+    {
+        Applications,
+        StorageAndProtection,
+        Observability
+    }
+}

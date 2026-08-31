@@ -6,38 +6,7 @@
             <span class="brand-mark">TC</span>
             <span>TrueNAS<br /><strong>Command Center</strong></span>
         </a>
-        <nav>
-            <NavLink href="/" Match="NavLinkMatch.All">
-                <NavIcon Name="dashboard" /> Dashboard
-            </NavLink>
-            <NavLink href="/inbox">
-                <NavIcon Name="inbox" /> Inbox
-            </NavLink>
-            <NavLink href="/apps">
-                <NavIcon Name="apps" /> Apps
-            </NavLink>
-            <NavLink href="/discover">
-                <NavIcon Name="discover" /> Discover
-            </NavLink>
-            <NavLink href="/system">
-                <NavIcon Name="system" /> System
-            </NavLink>
-            <NavLink href="/protection">
-                <NavIcon Name="protection" /> Data protection
-            </NavLink>
-            <NavLink href="/storage-health">
-                <NavIcon Name="storage-health" /> Drive health
-            </NavLink>
-            <NavLink href="/monitoring">
-                <NavIcon Name="monitoring" /> Monitoring
-            </NavLink>
-            <NavLink href="/history">
-                <NavIcon Name="history" /> History
-            </NavLink>
-            <NavLink href="/settings">
-                <NavIcon Name="settings" /> Settings
-            </NavLink>
-        </nav>
+        <GroupedNavigation IdPrefix="desktop-navigation" />
         <div class="sidebar-footer">
             <div class="server-address-summary" title="Configured TrueNAS host: @(_serverAddress?.HostName ?? "Resolving")">
                 <span>TrueNAS IP</span>
@@ -134,25 +103,16 @@
         <button type="button" class="mobile-menu-backdrop" aria-label="Close navigation" @onclick="CloseMobileMenu"></button>
         <aside id="mobile-navigation" class="mobile-menu-panel" aria-label="Mobile navigation">
             <div class="mobile-menu-heading">
-                <div>
-                    <span class="eyebrow">TrueNAS</span>
-                    <strong>Command Center</strong>
+                <div class="mobile-menu-brand">
+                    <span class="brand-mark">TC</span>
+                    <span>
+                        <small>TrueNAS</small>
+                        <strong>Command Center</strong>
+                    </span>
                 </div>
                 <button type="button" class="mobile-menu-close" aria-label="Close navigation" @onclick="CloseMobileMenu"><NavIcon Name="close" /></button>
             </div>
-            <nav>
-                <NavLink href="/" Match="NavLinkMatch.All" @onclick="CloseMobileMenu"><NavIcon Name="dashboard" /> Dashboard</NavLink>
-                <NavLink href="/inbox" @onclick="CloseMobileMenu"><NavIcon Name="inbox" /> Inbox</NavLink>
-                <NavLink href="/apps" @onclick="CloseMobileMenu"><NavIcon Name="apps" /> Apps</NavLink>
-                <NavLink href="/discover" @onclick="CloseMobileMenu"><NavIcon Name="discover" /> Discover</NavLink>
-                <NavLink href="/system" @onclick="CloseMobileMenu"><NavIcon Name="system" /> System</NavLink>
-                <NavLink href="/protection" @onclick="CloseMobileMenu"><NavIcon Name="protection" /> Data protection</NavLink>
-                <NavLink href="/storage-health" @onclick="CloseMobileMenu"><NavIcon Name="storage-health" /> Drive health</NavLink>
-                <NavLink href="/monitoring" @onclick="CloseMobileMenu"><NavIcon Name="monitoring" /> Monitoring</NavLink>
-                <NavLink href="/history" @onclick="CloseMobileMenu"><NavIcon Name="history" /> History</NavLink>
-                <NavLink href="/settings" @onclick="CloseMobileMenu"><NavIcon Name="settings" /> Settings</NavLink>
-                <NavLink href="/help" @onclick="CloseMobileMenu"><NavIcon Name="help" /> Help</NavLink>
-            </nav>
+            <GroupedNavigation IdPrefix="mobile-navigation" OnNavigate="CloseMobileMenu" />
             <div class="mobile-menu-footer">
                 <div class="mobile-menu-meta">
                     <span>TrueNAS IP <strong>@(_serverAddress?.DisplayAddress ?? "Resolving…")</strong></span>
@@ -166,6 +126,9 @@
                     <span data-theme-icon aria-hidden="true">◐</span>
                     <span data-theme-label>Theme</span>
                 </button>
+                <NavLink class="sidebar-utility" href="/help" @onclick="CloseMobileMenu">
+                    <NavIcon Name="help" /> Help
+                </NavLink>
             </div>
         </aside>
     }
