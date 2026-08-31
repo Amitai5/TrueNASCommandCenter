@@ -96,11 +96,11 @@ public sealed record TrueNasVdevDto
 public sealed record TrueNasVdevStatsDto
 {
     [JsonPropertyName("read_errors")]
-    public long ReadErrors { get; init; }
+    public long? ReadErrors { get; init; }
 
     [JsonPropertyName("write_errors")]
-    public long WriteErrors { get; init; }
+    public long? WriteErrors { get; init; }
 
     [JsonPropertyName("checksum_errors")]
-    public long ChecksumErrors { get; init; }
+    public long? ChecksumErrors { get; init; }
 }

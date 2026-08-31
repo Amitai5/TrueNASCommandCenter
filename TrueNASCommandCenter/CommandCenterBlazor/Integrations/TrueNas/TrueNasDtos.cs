@@ -135,10 +135,10 @@ public sealed record TrueNasPoolDto
 public sealed record TrueNasPoolScanDto
 {
     [JsonPropertyName("function")]
-    public string Function { get; init; } = string.Empty;
+    public string? Function { get; init; }
 
     [JsonPropertyName("state")]
-    public string State { get; init; } = string.Empty;
+    public string? State { get; init; }
 
     [JsonPropertyName("start_time")]
     public JsonElement StartTime { get; init; }
@@ -150,7 +150,7 @@ public sealed record TrueNasPoolScanDto
     public double? Percentage { get; init; }
 
     [JsonPropertyName("errors")]
-    public int Errors { get; init; }
+    public int? Errors { get; init; }
 
     [JsonPropertyName("total_secs_left")]
     public long? TotalSecondsLeft { get; init; }

@@ -5646,8 +5646,8 @@ th {
 }
 
 .capability-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 1px;
     overflow: hidden;
     border: 1px solid var(--border);
@@ -5658,6 +5658,7 @@ th {
 
 .capability-chip {
     display: grid;
+    flex: 1 1 230px;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 0.65rem;
@@ -5777,6 +5778,87 @@ th {
     overflow-wrap: anywhere;
 }
 
+.protection-dataset-table {
+    table-layout: fixed;
+}
+
+.protection-dataset-table th:nth-child(1) {
+    width: 34%;
+}
+
+.protection-dataset-table th:nth-child(2) {
+    width: 24%;
+}
+
+.protection-dataset-table th:nth-child(3) {
+    width: 27%;
+}
+
+.protection-dataset-table th:nth-child(4) {
+    width: 15%;
+}
+
+.protection-dataset-table td {
+    vertical-align: top;
+}
+
+.dataset-identity,
+.dataset-mobile-identity,
+.snapshot-history,
+.dataset-status {
+    min-width: 0;
+}
+
+.dataset-path,
+.dataset-type,
+.snapshot-history > span,
+.snapshot-history small {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.dataset-path {
+    margin-top: 0.2rem;
+    font-family: var(--mono);
+}
+
+.dataset-type {
+    margin-top: 0.1rem;
+    text-transform: capitalize;
+}
+
+.dataset-mobile-identity {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.snapshot-history {
+    display: grid;
+    gap: 0.14rem;
+}
+
+.snapshot-history strong {
+    font-size: 0.9rem;
+}
+
+.snapshot-history strong span {
+    color: var(--secondary);
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.snapshot-history small {
+    line-height: 1.35;
+}
+
+.dataset-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
 .coverage-badges {
     display: flex;
     flex-wrap: wrap;
@@ -5793,6 +5875,32 @@ tr.row-warning td {
     gap: 0.8rem;
 }
 
+.protection-task-groups,
+.protection-task-group {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.protection-task-groups {
+    margin-top: 1rem;
+}
+
+.protection-task-group + .protection-task-group {
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.task-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.task-group-heading h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
 .protection-task-card,
 .pool-health-card,
 .health-mobile-card {
@@ -5804,9 +5912,14 @@ tr.row-warning td {
 }
 
 .protection-task-card h3,
+.protection-task-card h4,
 .pool-health-card h3 {
     margin: 0.45rem 0;
     overflow-wrap: anywhere;
+}
+
+.protection-task-card h4 {
+    font-size: 1rem;
 }
 
 .protection-task-card .row,
@@ -6000,10 +6113,6 @@ tr.row-warning td {
 }
 
 @media (max-width: 900px) {
-    .capability-strip {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .pool-health-grid {
         grid-template-columns: 1fr;
     }
@@ -6015,13 +6124,13 @@ tr.row-warning td {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .capability-strip,
     .protection-task-grid,
     .protection-toolbar {
         grid-template-columns: 1fr;
     }
 
     .capability-chip {
+        flex-basis: 100%;
         grid-template-columns: auto minmax(0, 1fr);
     }
 

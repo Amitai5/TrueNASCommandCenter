@@ -277,13 +277,13 @@ public sealed class OperationsInboxService(
             foreach (var pool in pools.Where(pool => pool.Scan is not null))
             {
                 var scan = pool.Scan!;
-                var function = scan.Function.ToUpperInvariant();
+                var function = scan.Function?.ToUpperInvariant() ?? string.Empty;
                 if (function is not "SCRUB" and not "RESILVER")
                 {
                     continue;
                 }
 
-                var state = scan.State.ToUpperInvariant();
+                var state = scan.State?.ToUpperInvariant() ?? string.Empty;
                 var startedUtc = ReadDateTime(scan.StartTime) ?? now;
                 var isActive = state is "SCANNING" or "RUNNING" or "PAUSED";
                 var isFinished = state is "FINISHED" or "CANCELED" or "CANCELLED";
@@ -294,8 +294,9 @@ public sealed class OperationsInboxService(
 
                 var kind = function == "RESILVER" ? OperationsInboxKind.PoolResilver : OperationsInboxKind.PoolScrub;
                 var noun = function == "RESILVER" ? "resilver" : "scrub";
-                var severity = scan.Errors > 0 ? OperationsInboxSeverity.Error : function == "RESILVER" && isActive ? OperationsInboxSeverity.Warning : OperationsInboxSeverity.Info;
-                var summary = isActive ? $"{pool.Name} {noun} is {state.ToLowerInvariant()}." : $"{pool.Name} {noun} {state.ToLowerInvariant()} with {scan.Errors} error{(scan.Errors == 1 ? string.Empty : "s")}.";
+                var errorCount = scan.Errors ?? 0;
+                var severity = errorCount > 0 ? OperationsInboxSeverity.Error : function == "RESILVER" && isActive ? OperationsInboxSeverity.Warning : OperationsInboxSeverity.Info;
+                var summary = isActive ? $"{pool.Name} {noun} is {state.ToLowerInvariant()}." : $"{pool.Name} {noun} {state.ToLowerInvariant()} with {errorCount} error{(errorCount == 1 ? string.Empty : "s")}.";
                 observations.Add(new ObservedOperation(
                     Fingerprint("pool-scan", $"{pool.Name}:{function}:{startedUtc:O}"),
                     isActive ? PoolScansGroup : null,
@@ -304,7 +305,7 @@ public sealed class OperationsInboxService(
                     severity,
                     $"{pool.Name} {noun}",
                     summary,
-                    BuildDetails(("Pool", pool.Name), ("State", state), ("Errors", scan.Errors.ToString(CultureInfo.InvariantCulture)), ("Estimated seconds remaining", scan.TotalSecondsLeft?.ToString(CultureInfo.InvariantCulture))),
+                    BuildDetails(("Pool", pool.Name), ("State", state), ("Errors", errorCount.ToString(CultureInfo.InvariantCulture)), ("Estimated seconds remaining", scan.TotalSecondsLeft?.ToString(CultureInfo.InvariantCulture))),
                     pool.Name,
                     null,
                     "/system#storage-pools",

@@ -31,7 +31,7 @@
             <a class="summary-item summary-link" href="#protection-tasks"><strong>@_overview.FailedTaskCount</strong><span>Failed tasks</span></a>
         </section>
 
-        <section class="capability-strip" aria-label="Data source permissions">
+        <section class="capability-strip protection-capability-strip" aria-label="Data source permissions">
             @foreach (var source in _overview.Sources)
             {
                 <div class="capability-chip @(source.IsAvailable ? "available" : "unavailable")"><span class="status-dot @(source.IsAvailable ? "success" : "warning")"></span><div><strong>@source.Name</strong><span>@(source.IsAvailable ? "Available" : source.Error)</span></div><code>@source.RequiredRole</code></div>
@@ -93,17 +93,16 @@
             else
             {
                 <div class="table-wrap health-desktop-table">
-                    <table>
-                        <thead><tr><th>Dataset</th><th>Protection</th><th>Snapshots</th><th>Newest snapshot</th><th>State</th></tr></thead>
+                    <table class="protection-dataset-table">
+                        <thead><tr><th>Dataset</th><th>Protection paths</th><th>Snapshot history</th><th>Status</th></tr></thead>
                         <tbody>
                             @foreach (var dataset in FilteredDatasets())
                             {
                                 <tr class="@(dataset.IsUnprotected ? "row-warning" : null)">
-                                    <td><div class="dataset-tree-name" style="@DatasetIndent(dataset)"><span class="dataset-tree-branch" aria-hidden="true"></span><strong>@DatasetLeaf(dataset.Name)</strong></div><span class="app-meta">@dataset.Name · @dataset.Type</span></td>
+                                    <td class="dataset-identity"><div class="dataset-tree-name" style="@DatasetIndent(dataset)"><span class="dataset-tree-branch" aria-hidden="true"></span><strong>@DatasetLeaf(dataset.Name)</strong></div><span class="dataset-path">@dataset.Name</span><span class="dataset-type">@dataset.Type</span></td>
                                     <td><div class="coverage-badges">@if (dataset.HasSnapshotTask) { <span class="badge info">Snapshot</span> } @if (dataset.HasReplicationTask) { <span class="badge info">Replication</span> } @if (dataset.HasCloudSyncTask) { <span class="badge info">Cloud</span> } @if (!dataset.IsProtected) { <span class="muted">None</span> }</div></td>
-                                    <td><strong>@dataset.SnapshotCount</strong></td>
-                                    <td><strong>@FormatAge(dataset.NewestSnapshotUtc)</strong><span class="app-meta">@FormatDate(dataset.NewestSnapshotUtc)</span></td>
-                                    <td><span class="badge @CoverageClass(dataset)">@CoverageText(dataset)</span>@if (dataset.IsLocked) { <span class="app-meta">Locked</span> }</td>
+                                    <td><div class="snapshot-history"><strong>@dataset.SnapshotCount <span>@(dataset.SnapshotCount == 1 ? "snapshot" : "snapshots")</span></strong><span>@FormatAge(dataset.NewestSnapshotUtc)</span><small>@FormatDate(dataset.NewestSnapshotUtc)</small></div></td>
+                                    <td><div class="dataset-status"><span class="badge @CoverageClass(dataset)">@CoverageText(dataset)</span>@if (dataset.IsLocked) { <span class="badge warning">Locked</span> }</div></td>
                                 </tr>
                             }
                         </tbody>
@@ -113,9 +112,9 @@
                     @foreach (var dataset in FilteredDatasets())
                     {
                         <article class="health-mobile-card @(dataset.IsUnprotected ? "warning-card" : null)">
-                            <div class="row"><div><strong>@dataset.Name</strong><span class="app-meta">@dataset.Type</span></div><span class="badge @CoverageClass(dataset)">@CoverageText(dataset)</span></div>
+                            <div class="row"><div class="dataset-mobile-identity"><strong>@DatasetLeaf(dataset.Name)</strong><span class="dataset-path">@dataset.Name</span><span class="dataset-type">@dataset.Type</span></div><span class="badge @CoverageClass(dataset)">@CoverageText(dataset)</span></div>
                             <div class="coverage-badges">@if (dataset.HasSnapshotTask) { <span class="badge info">Snapshot</span> } @if (dataset.HasReplicationTask) { <span class="badge info">Replication</span> } @if (dataset.HasCloudSyncTask) { <span class="badge info">Cloud</span> }</div>
-                            <dl class="details-list compact-details"><dt>Snapshots</dt><dd>@dataset.SnapshotCount</dd><dt>Newest</dt><dd>@FormatAge(dataset.NewestSnapshotUtc)</dd><dt>Locked</dt><dd>@(dataset.IsLocked ? "Yes" : "No")</dd></dl>
+                            <dl class="details-list compact-details"><dt>Snapshots</dt><dd>@dataset.SnapshotCount</dd><dt>Newest</dt><dd>@FormatAge(dataset.NewestSnapshotUtc)</dd><dt>Captured</dt><dd>@FormatDate(dataset.NewestSnapshotUtc)</dd><dt>Locked</dt><dd>@(dataset.IsLocked ? "Yes" : "No")</dd></dl>
                         </article>
                     }
                 </div>
@@ -130,23 +129,31 @@
             }
             else
             {
-                <div class="protection-task-grid">
-                    @foreach (var task in _overview.Tasks)
+                <div class="protection-task-groups">
+                    @foreach (var taskGroup in _overview.Tasks.GroupBy(task => task.Kind))
                     {
-                        <article class="protection-task-card">
-                            <div class="row"><span class="eyebrow">@TaskKind(task.Kind)</span><span class="badge @TaskStateClass(task)">@TaskStateText(task)</span></div>
-                            <h3>@task.Name</h3>
-                            <p class="task-route"><strong>@task.Source</strong>@if (!string.IsNullOrWhiteSpace(task.Destination)) { <span>→ @task.Destination</span> }</p>
-                            @if (task.ProgressPercent is { } progress && task.State == "RUNNING")
+                        <section class="protection-task-group" aria-label="@TaskKind(taskGroup.Key) tasks">
+                            <div class="task-group-heading"><h3>@TaskKind(taskGroup.Key)</h3><span class="badge info">@taskGroup.Count()</span></div>
+                            <div class="protection-task-grid">
+                            @foreach (var task in taskGroup)
                             {
-                                <div class="pool-capacity-track" role="progressbar" aria-label="@task.Name progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(progress)"><span style="width:@(progress.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                                <article class="protection-task-card">
+                                    <div class="row"><span class="eyebrow">Task #@task.Id</span><span class="badge @TaskStateClass(task)">@TaskStateText(task)</span></div>
+                                    <h4>@task.Name</h4>
+                                    <p class="task-route"><strong>@task.Source</strong>@if (!string.IsNullOrWhiteSpace(task.Destination)) { <span>→ @task.Destination</span> }</p>
+                                    @if (task.ProgressPercent is { } progress && task.State == "RUNNING")
+                                    {
+                                        <div class="pool-capacity-track" role="progressbar" aria-label="@task.Name progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(progress)"><span style="width:@(progress.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                                    }
+                                    <dl class="details-list compact-details"><dt>Last success</dt><dd>@FormatDate(task.LastSuccessUtc)</dd><dt>Next run</dt><dd>@FormatDate(task.NextRunUtc, "Manual / event driven")</dd><dt>Schedule</dt><dd><code>@task.Schedule</code></dd></dl>
+                                    @if (!string.IsNullOrWhiteSpace(task.Error))
+                                    {
+                                        <p class="inline-error">@task.Error</p>
+                                    }
+                                </article>
                             }
-                            <dl class="details-list compact-details"><dt>Last success</dt><dd>@FormatDate(task.LastSuccessUtc)</dd><dt>Next run</dt><dd>@FormatDate(task.NextRunUtc, "Manual / event driven")</dd><dt>Schedule</dt><dd><code>@task.Schedule</code></dd></dl>
-                            @if (!string.IsNullOrWhiteSpace(task.Error))
-                            {
-                                <p class="inline-error">@task.Error</p>
-                            }
-                        </article>
+                            </div>
+                        </section>
                     }
                 </div>
             }

@@ -452,7 +452,7 @@ public sealed class TrueNasJsonRpcClientTests
                 loadavg = new[] { 0.25, 0.5, 0.75 },
                 uptime = "4 days, 2 hours",
                 uptime_seconds = 352_800d,
-                boottime = "2026-08-23T16:00:00Z",
+                boottime = new Dictionary<string, long> { ["$date"] = new DateTimeOffset(2026, 8, 23, 16, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() },
                 timezone = "America/Los_Angeles",
                 system_manufacturer = "Example Systems",
                 system_product = "Storage Server",
@@ -471,6 +471,7 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.AreEqual(16, host.CoreCount);
         Assert.HasCount(3, host.LoadAverage);
         Assert.AreEqual(0.5, host.LoadAverage[1]);
+        Assert.AreEqual(new DateTimeOffset(2026, 8, 23, 16, 0, 0, TimeSpan.Zero), host.BootTime);
         Assert.IsTrue(host.HasEccMemory);
     }
 
@@ -492,8 +493,8 @@ public sealed class TrueNasJsonRpcClientTests
                     source = "Disk",
                     klass = "Smartd",
                     node = "atlas",
-                    datetime = "2026-08-27T17:00:00Z",
-                    last_occurrence = "2026-08-27T18:00:00Z",
+                    datetime = new Dictionary<string, long> { ["$date"] = new DateTimeOffset(2026, 8, 27, 17, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() },
+                    last_occurrence = new Dictionary<string, long> { ["$date"] = new DateTimeOffset(2026, 8, 27, 18, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() },
                     dismissed = false,
                     text = "Disk fault detected",
                     level = "CRITICAL",
@@ -577,6 +578,61 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.HasCount(1, pool.Topology!.Data);
         Assert.AreEqual("sda", pool.Topology.Data[0].Disk);
         Assert.AreEqual(1L, pool.Topology.Data[0].Stats!.ReadErrors);
+    }
+
+    /// <summary>Verifies that an idle pool scan with nullable fields does not make the complete pool response unavailable.</summary>
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task QueryPools_IdleScanWithNullFields_ReturnsPoolHealth()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("pool.query", request.GetProperty("method").GetString());
+            transport.Respond(request.GetProperty("id").GetInt64(), new[]
+            {
+                new
+                {
+                    name = "archive",
+                    status = "ONLINE",
+                    healthy = true,
+                    warning = false,
+                    scan = new { function = (string?)null, state = (string?)null, start_time = (object?)null, end_time = (object?)null, percentage = (double?)null, errors = (int?)null, total_secs_left = (long?)null },
+                    topology = new { data = new[] { new { name = "sdb", type = "DISK", status = "ONLINE", disk = "sdb", stats = new { read_errors = (long?)null, write_errors = (long?)null, checksum_errors = (long?)null }, children = Array.Empty<object>() } }, log = Array.Empty<object>(), cache = Array.Empty<object>(), spare = Array.Empty<object>(), special = Array.Empty<object>(), dedup = Array.Empty<object>() }
+                }
+            });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var pools = await client.QueryPoolsAsync();
+
+        Assert.HasCount(1, pools);
+        Assert.AreEqual("archive", pools[0].Name);
+        var scan = pools[0].Scan;
+        Assert.IsNotNull(scan);
+        Assert.IsNull(scan.Function);
+        Assert.IsNull(scan.Errors);
+        Assert.IsNull(pools[0].Topology!.Data[0].Stats!.ReadErrors);
+    }
+
+    /// <summary>Verifies incompatible TrueNAS timestamp payloads produce a stable diagnostic error code.</summary>
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task GetSystemInfo_UnsupportedTimestamp_ThrowsInvalidResponse()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            transport.Respond(request.GetProperty("id").GetInt64(), new { hostname = "atlas", boottime = new { unsupported = true } });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var exception = await Assert.ThrowsAsync<TrueNasClientException>(() => client.GetSystemInfoAsync());
+
+        Assert.AreEqual("INVALID_RESPONSE", exception.Code);
+        StringAssert.Contains(exception.Message, "system.info");
     }
 
     /// <summary>Verifies the data-protection client calls the five focused TrueNAS query methods.</summary>

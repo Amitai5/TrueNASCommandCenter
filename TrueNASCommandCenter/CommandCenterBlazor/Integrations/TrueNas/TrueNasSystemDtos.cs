@@ -33,6 +33,7 @@ public sealed record TrueNasSystemInfoDto
     public double UptimeSeconds { get; init; }
 
     [JsonPropertyName("boottime")]
+    [JsonConverter(typeof(TrueNasDateTimeOffsetJsonConverter))]
     public DateTimeOffset BootTime { get; init; }
 
     [JsonPropertyName("timezone")]
@@ -67,9 +68,11 @@ public sealed record TrueNasAlertDto
     public string Node { get; init; } = string.Empty;
 
     [JsonPropertyName("datetime")]
+    [JsonConverter(typeof(TrueNasDateTimeOffsetJsonConverter))]
     public DateTimeOffset CreatedAt { get; init; }
 
     [JsonPropertyName("last_occurrence")]
+    [JsonConverter(typeof(TrueNasDateTimeOffsetJsonConverter))]
     public DateTimeOffset LastOccurrence { get; init; }
 
     [JsonPropertyName("dismissed")]

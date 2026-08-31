@@ -55,6 +55,31 @@ public sealed class OperationsInboxServiceTests
         Assert.IsTrue(snapshot.Items.Where(item => item.Source != OperationsInboxSource.Notifications && item.Severity >= OperationsInboxSeverity.Warning).All(item => item.PushState == OperationsInboxPushState.Delivered));
     }
 
+    /// <summary>Verifies a normal idle pool scan does not make the pool-scan inbox source fail.</summary>
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task RefreshAsync_IdlePoolScan_DoesNotReportSourceWarning()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        var now = new DateTimeOffset(2026, 8, 30, 18, 0, 0, TimeSpan.Zero);
+        var client = new FakeOperationsSystemClient
+        {
+            Pools =
+            [
+                new TrueNasPoolDto { Name = "Main", Status = "ONLINE", Healthy = true, Scan = new TrueNasPoolScanDto() }
+            ]
+        };
+        await using var provider = CreateProvider(database, new FakeWebPushSender(), now);
+        var service = CreateService(database, client, provider, now);
+
+        var result = await service.RefreshAsync();
+        var snapshot = await service.GetSnapshotAsync(new OperationsInboxQuery());
+
+        Assert.IsEmpty(result.Warnings);
+        Assert.IsFalse(snapshot.Items.Any(item => item.Kind is OperationsInboxKind.PoolScrub or OperationsInboxKind.PoolResilver));
+    }
+
     [TestMethod]
     [TestCategory("Regression")]
     public async Task RefreshAsync_SourceRecoversThenFailsAgain_ResolvesAndReopensOccurrence()

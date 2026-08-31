@@ -671,6 +671,11 @@ public sealed class TrueNasJsonRpcClient(
         {
             throw new TrueNasClientException("TIMEOUT", $"TrueNAS did not respond to {method} in time.", exception);
         }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(exception, "TrueNAS RPC response for method {Method} could not be deserialized", method);
+            throw new TrueNasClientException("INVALID_RESPONSE", $"TrueNAS returned incompatible data for {method}.", exception);
+        }
         finally
         {
             pending.TryRemove(id, out _);
