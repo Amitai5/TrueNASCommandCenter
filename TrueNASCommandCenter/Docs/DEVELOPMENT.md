@@ -162,9 +162,9 @@ Do not infer catalog access from `APPS_READ`. TrueNAS assigns `catalog.apps`, `c
 
 ## Container publishing
 
-[`VERSION`](../VERSION) is the canonical semantic release version. It is embedded into the .NET assembly, UI, startup logs, version endpoint, response headers, and OCI image metadata. Increment it before merging the next production release. Verification rejects malformed versions, and publishing rejects a version tag that already belongs to another commit.
+[`VERSION`](../VERSION) is the canonical semantic release version. It is embedded into the .NET assembly, UI, startup logs, version endpoint, response headers, and OCI image metadata. Increment it before merging the next production release. Verification rejects malformed versions. When an unchanged version already belongs to another commit, publishing reports a successful no-op and leaves every container tag unchanged instead of failing the workflow or overwriting the immutable release tag.
 
-GitHub Actions validates every branch and pull request without publishing it. A successful push to `production` publishes to GitHub Container Registry and creates the matching `v<version>` Git tag.
+GitHub Actions validates every branch and pull request without publishing it. A successful push to `production` publishes to GitHub Container Registry and creates the matching `v<version>` Git tag only when `VERSION` identifies a new release.
 
 Published tags are:
 
