@@ -183,6 +183,84 @@ public sealed class TrueNasJsonRpcClientTests
         Assert.IsTrue(result.HasReadAccess);
         Assert.IsTrue(result.HasWriteAccess);
         Assert.AreEqual("Connected and app discovery succeeded.", result.Message);
+        CollectionAssert.AreEqual(new[] { "APPS_READ", "APPS_WRITE" }, result.AvailableRoles.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ConnectionTest_ReturnsOnlySortedRolesFromAuthenticatedUserInfo()
+    {
+        var setup = await TestClientFactory.CreateAsync();
+        setup.Transport.OnSend = request =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "auth.login_ex":
+                    setup.Transport.Respond(id, new
+                    {
+                        response_type = "SUCCESS",
+                        user_info = new
+                        {
+                            pw_name = "service-account",
+                            privilege = new { roles = new[] { "POOL_READ", "APPS_WRITE", "CATALOG_READ", "APPS_READ" } },
+                            account_attributes = new[] { "SYS_ADMIN" }
+                        }
+                    });
+                    break;
+                case "core.ping":
+                    setup.Transport.Respond(id, "pong");
+                    break;
+                case "app.query":
+                    setup.Transport.Respond(id, Array.Empty<object>());
+                    break;
+            }
+
+            return Task.CompletedTask;
+        };
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var result = await client.TestConnectionAsync();
+
+        Assert.IsTrue(result.Success);
+        CollectionAssert.AreEqual(new[] { "APPS_READ", "APPS_WRITE", "CATALOG_READ", "POOL_READ" }, result.AvailableRoles.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ConnectionTest_WithFullAdminRole_ReportsAppReadAndWriteAccess()
+    {
+        var setup = await TestClientFactory.CreateAsync();
+        setup.Transport.OnSend = request =>
+        {
+            var id = request.GetProperty("id").GetInt64();
+            switch (request.GetProperty("method").GetString())
+            {
+                case "auth.login_ex":
+                    setup.Transport.Respond(id, new
+                    {
+                        response_type = "SUCCESS",
+                        user_info = new { privilege = new { roles = new[] { "FULL_ADMIN" } } }
+                    });
+                    break;
+                case "core.ping":
+                    setup.Transport.Respond(id, "pong");
+                    break;
+                case "app.query":
+                    setup.Transport.Respond(id, Array.Empty<object>());
+                    break;
+            }
+
+            return Task.CompletedTask;
+        };
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var result = await client.TestConnectionAsync();
+
+        Assert.IsTrue(result.Success);
+        Assert.IsTrue(result.HasReadAccess);
+        Assert.IsTrue(result.HasWriteAccess);
+        CollectionAssert.AreEqual(new[] { "FULL_ADMIN" }, result.AvailableRoles.ToArray());
     }
 
     [TestMethod]

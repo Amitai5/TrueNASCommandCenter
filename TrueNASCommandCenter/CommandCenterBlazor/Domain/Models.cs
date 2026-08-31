@@ -53,7 +53,11 @@ public sealed record ConnectionTestResult(
     bool HasReadAccess,
     bool HasWriteAccess,
     string? ErrorCode = null,
-    string? DiagnosticId = null);
+    string? DiagnosticId = null)
+{
+    /// <summary>Gets the effective TrueNAS roles reported for the authenticated API session.</summary>
+    public IReadOnlyList<string> AvailableRoles { get; init; } = [];
+}
 
 public sealed record VersionParts(int Major, int Minor, int Patch);
 

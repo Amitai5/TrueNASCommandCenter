@@ -66,19 +66,19 @@
             <div class="form-grid">
                 <div class="field">
                     <label for="truenas-user">Username</label>
-                    <input id="truenas-user" autocomplete="username" @bind="_model.TrueNasUsername" />
+                    <input id="truenas-user" autocomplete="username" @bind="_model.TrueNasUsername" @bind:after="ClearConnectionTestResult" />
                 </div>
                 <div class="field">
                     <label for="truenas-key">API key</label>
                     <input id="truenas-key" type="password" autocomplete="new-password"
                            placeholder="@(_model.HasSavedTrueNasApiKey ? "Saved — enter to replace" : "Enter API key")"
-                           @bind="_model.NewTrueNasApiKey" />
+                           @bind="_model.NewTrueNasApiKey" @bind:after="ClearConnectionTestResult" />
                     <p class="field-help">Stored encrypted and never returned to the browser after save.</p>
                 </div>
             </div>
 
             <div class="toggle-row" style="margin-top:1rem">
-                <input id="verify-tls" type="checkbox" @bind="_model.VerifyTls" />
+                <input id="verify-tls" type="checkbox" @bind="_model.VerifyTls" @bind:after="ClearConnectionTestResult" />
                 <div>
                     <label for="verify-tls">Verify TLS certificate</label>
                     <p class="field-help">Keep enabled when the TrueNAS certificate is trusted and covers <code>@TrueNasEndpoint.ServerUri.Host</code>.</p>
@@ -95,6 +95,34 @@
             <div class="actions" style="margin-top:1rem">
                 <button disabled="@_busy" @onclick="TestConnectionAsync">Test connection</button>
             </div>
+
+            @if (_connectionTestResult is { Success: true } connectionResult)
+            {
+                <div class="connection-permission-report" role="status" aria-live="polite">
+                    <div class="connection-permission-report-header">
+                        <div>
+                            <span class="permission-label">Connection test</span>
+                            <h3>Available API permissions</h3>
+                        </div>
+                        <span class="badge success">@(connectionResult.AvailableRoles.Count == 1 ? "1 role" : $"{connectionResult.AvailableRoles.Count} roles")</span>
+                    </div>
+
+                    @if (connectionResult.AvailableRoles.Count > 0)
+                    {
+                        <p>TrueNAS reports these roles for the authenticated API session.</p>
+                        <div class="permission-role-list connection-permission-list" aria-label="Available TrueNAS API permissions">
+                            @foreach (var role in connectionResult.AvailableRoles)
+                            {
+                                <code><span class="connection-permission-check" aria-hidden="true">✓</span>@role</code>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="connection-permission-unavailable">The connection and installed-app discovery succeeded, but TrueNAS did not return role details for this API session.</p>
+                    }
+                </div>
+            }
         </section>
     }
     else if (_tab == "monitoring")
@@ -505,6 +533,7 @@
     private string? _message;
     private bool _error;
     private bool _busy;
+    private ConnectionTestResult? _connectionTestResult;
     private string _exportPassword = string.Empty;
     private string _confirmExportPassword = string.Empty;
     private string _importPassword = string.Empty;
@@ -606,11 +635,13 @@
         }
 
         _busy = true;
+        _connectionTestResult = null;
         try
         {
             await SettingsService.SaveAsync(_model);
             await TrueNasClient.ResetConnectionAsync();
             var result = await TrueNasClient.TestConnectionAsync();
+            _connectionTestResult = result;
             _message = result.Message;
             _error = !result.Success;
             await ReloadAsync();
@@ -624,6 +655,11 @@
         {
             _busy = false;
         }
+    }
+
+    private void ClearConnectionTestResult()
+    {
+        _connectionTestResult = null;
     }
 
     private async Task TestEmailAsync()

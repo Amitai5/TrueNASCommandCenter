@@ -39,6 +39,7 @@ public sealed class TrueNasJsonRpcClient(
     private bool rolesDetected;
     private bool hasReadAccess;
     private bool hasWriteAccess;
+    private IReadOnlyList<string> availableRoles = [];
     private long nextRequestId;
 
     public bool? HasWriteAccess => rolesDetected ? hasWriteAccess : null;
@@ -72,11 +73,15 @@ public sealed class TrueNasJsonRpcClient(
                 ? "Connected and app discovery succeeded."
                 : "Connected, but APPS_WRITE was not detected.";
             logger.LogInformation(
-                "TrueNAS connection test {DiagnosticId} succeeded. ReadAccess={HasReadAccess} WriteAccess={HasWriteAccess}",
+                "TrueNAS connection test {DiagnosticId} succeeded. ReadAccess={HasReadAccess} WriteAccess={HasWriteAccess} AvailableRoleCount={AvailableRoleCount}",
                 diagnosticId,
                 hasReadAccess,
-                !rolesDetected || hasWriteAccess);
-            return new ConnectionTestResult(true, writeMessage, true, !rolesDetected || hasWriteAccess, DiagnosticId: diagnosticId);
+                !rolesDetected || hasWriteAccess,
+                availableRoles.Count);
+            return new ConnectionTestResult(true, writeMessage, true, !rolesDetected || hasWriteAccess, DiagnosticId: diagnosticId)
+            {
+                AvailableRoles = availableRoles
+            };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -816,6 +821,7 @@ public sealed class TrueNasJsonRpcClient(
         rolesDetected = false;
         hasReadAccess = false;
         hasWriteAccess = false;
+        availableRoles = [];
         if (userInfo is null)
         {
             return;
@@ -823,10 +829,14 @@ public sealed class TrueNasJsonRpcClient(
 
         var roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         CollectRoleStrings(userInfo.Value, roles);
-        rolesDetected = roles.Any(role => role.EndsWith("_READ", StringComparison.OrdinalIgnoreCase) ||
-                                          role.EndsWith("_WRITE", StringComparison.OrdinalIgnoreCase));
-        hasReadAccess = roles.Contains("APPS_READ") || roles.Contains("APPS_WRITE");
-        hasWriteAccess = roles.Contains("APPS_WRITE");
+        availableRoles = roles.OrderBy(role => role, StringComparer.OrdinalIgnoreCase).ToArray();
+        rolesDetected = availableRoles.Count > 0;
+        hasReadAccess = roles.Contains("APPS_READ") ||
+                        roles.Contains("APPS_WRITE") ||
+                        roles.Contains("FULL_ADMIN") ||
+                        roles.Contains("READONLY_ADMIN") ||
+                        roles.Contains("SHARING_ADMIN");
+        hasWriteAccess = roles.Contains("APPS_WRITE") || roles.Contains("FULL_ADMIN");
     }
 
     private static void CollectRoleStrings(JsonElement element, ISet<string> roles)
@@ -836,7 +846,14 @@ public sealed class TrueNasJsonRpcClient(
             case JsonValueKind.Object:
                 foreach (var property in element.EnumerateObject())
                 {
-                    CollectRoleStrings(property.Value, roles);
+                    if (property.NameEquals("roles"))
+                    {
+                        CollectRoleValues(property.Value, roles);
+                    }
+                    else
+                    {
+                        CollectRoleStrings(property.Value, roles);
+                    }
                 }
 
                 break;
@@ -845,13 +862,26 @@ public sealed class TrueNasJsonRpcClient(
                 {
                     CollectRoleStrings(item, roles);
                 }
+                break;
+        }
+    }
+
+    private static void CollectRoleValues(JsonElement element, ISet<string> roles)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    CollectRoleValues(item, roles);
+                }
 
                 break;
             case JsonValueKind.String:
                 var value = element.GetString();
                 if (!string.IsNullOrWhiteSpace(value))
                 {
-                    roles.Add(value);
+                    roles.Add(value.Trim());
                 }
 
                 break;
@@ -885,6 +915,10 @@ public sealed class TrueNasJsonRpcClient(
     {
         authenticated = false;
         connectionFingerprint = null;
+        rolesDetected = false;
+        hasReadAccess = false;
+        hasWriteAccess = false;
+        availableRoles = [];
         receiveCancellation?.Cancel();
         foreach (var subscription in subscriptions.Values.Distinct())
         {
