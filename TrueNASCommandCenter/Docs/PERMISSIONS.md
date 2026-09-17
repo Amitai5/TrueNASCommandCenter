@@ -35,6 +35,8 @@ For app management and the Discover gallery, grant:
 
 The Operations Inbox reuses these permissions: `ALERT_LIST_READ` supplies native alerts and `POOL_READ` supplies pool scrub/resilver activity. Local update failures, notification failures, and Uptime Kuma outages need no additional TrueNAS role. The authenticated `core.get_jobs` call returns jobs owned by the current API session for a scoped account. Seeing jobs owned by every TrueNAS session requires a **Full Admin account**, not an additional focused role. Full Admin is optional and substantially broader than the profiles below.
 
+Updates and mail delivery also use `core.get_jobs` to wait for the jobs started by that same API session. This does **not** require Full Admin or another role. If the connection is replaced and a job is no longer visible, Command Center reports that completion could not be verified instead of assuming success.
+
 TrueNAS systems enforcing a STIG profile do not permit write roles. Such a connection can provide read-only visibility but cannot perform lifecycle or update actions.
 
 ## Recommended privilege profiles

@@ -309,6 +309,7 @@ public sealed class OperationsInboxServiceTests
             {
                 Id = appId,
                 Name = "Immich",
+                State = "RUNNING",
                 InstalledVersion = "1.14.35",
                 CatalogUpdateAvailable = true,
                 IsInstalled = true,
@@ -364,7 +365,14 @@ public sealed class OperationsInboxServiceTests
         var history = await service.GetSnapshotAsync(new OperationsInboxQuery());
 
         Assert.IsFalse(active.Items.Any(item => item.SourceReference == attemptId.ToString("N")));
-        Assert.AreEqual(OperationsInboxStatus.Resolved, history.Items.Single(item => item.SourceReference == attemptId.ToString("N")).Status);
+        var resolved = history.Items.Single(item => item.SourceReference == attemptId.ToString("N"));
+        Assert.AreEqual(OperationsInboxStatus.Resolved, resolved.Status);
+        Assert.AreEqual(OperationsInboxSeverity.Info, resolved.Severity);
+        Assert.AreEqual("Immich update verified", resolved.Title);
+        Assert.IsFalse(resolved.IsSourceActive);
+        await using var verifiedDb = await database.CreateDbContextAsync();
+        Assert.AreEqual(AttemptStatus.Succeeded, (await verifiedDb.UpdateAttempts.SingleAsync(item => item.Id == attemptId)).Status);
+        Assert.AreEqual(RunStatus.Succeeded, (await verifiedDb.UpdateRuns.SingleAsync()).Status);
     }
 
     private static async Task SeedLocalSourcesAsync(TestDatabase database, DateTime now)
@@ -384,13 +392,14 @@ public sealed class OperationsInboxServiceTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<IWebPushNotificationSender>(pushSender);
+        services.AddSingleton(new UpdateHistoryReconciliationService(database));
         services.AddScoped<IEmailNotificationSender, FakeEmailSender>();
         services.AddScoped<IWebhookNotificationSender, FakeWebhookSender>();
         services.AddScoped<INotificationDispatcher>(provider => new NotificationDispatcher(database, provider.GetRequiredService<IEmailNotificationSender>(), provider.GetRequiredService<IWebhookNotificationSender>(), provider.GetRequiredService<IWebPushNotificationSender>(), new FixedTimeProvider(now)));
         return services.BuildServiceProvider();
     }
 
-    private static OperationsInboxService CreateService(TestDatabase database, ITrueNasSystemClient client, IServiceProvider services, DateTimeOffset now) => new(database, client, services.GetRequiredService<IServiceScopeFactory>(), new FixedTimeProvider(now), NullLogger<OperationsInboxService>.Instance);
+    private static OperationsInboxService CreateService(TestDatabase database, ITrueNasSystemClient client, IServiceProvider services, DateTimeOffset now) => new(database, client, services.GetRequiredService<IServiceScopeFactory>(), new FixedTimeProvider(now), NullLogger<OperationsInboxService>.Instance, services.GetRequiredService<UpdateHistoryReconciliationService>());
 
     private static JsonElement Json(string json)
     {

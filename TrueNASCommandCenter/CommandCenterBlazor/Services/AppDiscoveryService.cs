@@ -22,10 +22,7 @@ public interface IAppDiscoveryService
     Task<Domain.AppRecord> DiscoverAppAsync(string appId, CancellationToken cancellationToken = default);
 }
 
-public sealed class AppDiscoveryService(
-    ITrueNasClient trueNasClient,
-    IDbContextFactory<AppDbContext> dbFactory,
-    TimeProvider timeProvider) : IAppDiscoveryService
+public sealed class AppDiscoveryService(ITrueNasClient trueNasClient, IDbContextFactory<AppDbContext> dbFactory, TimeProvider timeProvider, UpdateHistoryReconciliationService historyReconciliation) : IAppDiscoveryService
 {
     public async Task<Domain.InventoryRefreshResult> RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -61,13 +58,16 @@ public sealed class AppDiscoveryService(
             discovered.Add(await UpsertAsync(app, cancellationToken));
         }
 
+        await historyReconciliation.ReconcileAsync(cancellationToken);
         return discovered;
     }
 
     public async Task<Domain.AppRecord> DiscoverAppAsync(string appId, CancellationToken cancellationToken = default)
     {
         var app = await trueNasClient.GetAppAsync(appId, cancellationToken);
-        return await UpsertAsync(app, cancellationToken);
+        var discovered = await UpsertAsync(app, cancellationToken);
+        await historyReconciliation.ReconcileAsync(cancellationToken);
+        return discovered;
     }
 
     private async Task<Domain.AppRecord> UpsertAsync(TrueNasAppDto source, CancellationToken cancellationToken)

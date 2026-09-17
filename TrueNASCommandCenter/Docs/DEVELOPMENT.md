@@ -149,7 +149,7 @@ Execution and jobs (`APPS_WRITE` for lifecycle methods; authenticated core metho
 - `app.upgrade`
 - `app.pull_images`
 - `app.rollback`
-- `core.job_wait`
+- `core.get_jobs` filtered to the original job ID, polling `WAITING`/`RUNNING` until `SUCCESS`, `FAILED`, or `ABORTED`
 - `core.subscribe`
 - `core.unsubscribe`
 - `core.ping`
@@ -157,6 +157,10 @@ Execution and jobs (`APPS_WRITE` for lifecycle methods; authenticated core metho
 - `mail.send`
 
 API DTOs are intentionally narrow. Validate the installed TrueNAS API schemas when adding support for a new TrueNAS release.
+
+`core.job_wait` is itself a job, so its acknowledgement must not be taken as proof that the original upgrade completed. Poll only the original job's ID; missing or unrecognized job state is not success. Post-job verification waits through transient stopped/deploying states within the configured timeout.
+
+`UpdateHistoryReconciliationService` corrects premature catalog verification failures from fresh inventory only when the requested version is running, the attempt recorded job success, and no later operation could explain that version. It preserves the original diagnostic and observation timestamps, recalculates finished run totals, and never sends retrospective notifications. Inbox observations retain the same identity and become resolved informational history. Confirmed job failures and ambiguous later retries are not rewritten as successful attempts.
 
 Do not infer catalog access from `APPS_READ`. TrueNAS assigns `catalog.apps`, `catalog.get_app_details`, and `app.similar` to `CATALOG_READ`. Keep [the permission guide](PERMISSIONS.md) synchronized whenever the middleware surface changes.
 
@@ -182,3 +186,4 @@ After the first successful publish, the GitHub package must be public if anonymo
 4. Run restore, build, and tests.
 5. For frontend changes, publish and inspect the real static-asset responses as well as the rendered desktop and mobile UI.
 6. Never commit API keys, notification secrets, encryption keys, databases, or user-specific deployment configuration.
+7. Verify that the **Build and publish image** step actually ran and that the release tag points at the intended commit. A green publishing workflow can be a no-op when `VERSION` was not incremented; check `/version` after updating the TrueNAS container.

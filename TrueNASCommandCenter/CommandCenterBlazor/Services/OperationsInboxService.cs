@@ -42,12 +42,7 @@ public interface IOperationsInboxService
     Task<bool> ResolveAsync(Guid itemId, CancellationToken cancellationToken = default);
 }
 
-public sealed class OperationsInboxService(
-    IDbContextFactory<AppDbContext> dbFactory,
-    ITrueNasSystemClient trueNasClient,
-    IServiceScopeFactory scopeFactory,
-    TimeProvider timeProvider,
-    ILogger<OperationsInboxService> logger) : IOperationsInboxService
+public sealed class OperationsInboxService(IDbContextFactory<AppDbContext> dbFactory, ITrueNasSystemClient trueNasClient, IServiceScopeFactory scopeFactory, TimeProvider timeProvider, ILogger<OperationsInboxService> logger, UpdateHistoryReconciliationService historyReconciliation) : IOperationsInboxService
 {
     private const string TrueNasAlertsGroup = "truenas-alerts";
     private const string TrueNasJobsGroup = "truenas-active-jobs";
@@ -66,6 +61,7 @@ public sealed class OperationsInboxService(
             var successfulGroups = new HashSet<string>(StringComparer.Ordinal);
             var warnings = new List<string>();
 
+            await historyReconciliation.ReconcileAsync(cancellationToken);
             await CollectTrueNasAlertsAsync(observations, successfulGroups, warnings, cancellationToken);
             await CollectTrueNasJobsAsync(observations, successfulGroups, warnings, now, cancellationToken);
             await CollectPoolScansAsync(observations, successfulGroups, warnings, now, cancellationToken);
@@ -332,20 +328,21 @@ public sealed class OperationsInboxService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var cutoff = now.AddDays(-90);
         var apps = await db.Apps.AsNoTracking().ToDictionaryAsync(app => app.Id, cancellationToken);
-        var attempts = await db.UpdateAttempts.AsNoTracking().Where(attempt => attempt.StartedUtc >= cutoff && (attempt.Status == AttemptStatus.Failed || attempt.Status == AttemptStatus.Succeeded)).OrderBy(attempt => attempt.StartedUtc).ToListAsync(cancellationToken);
-        foreach (var attempt in attempts.Where(attempt => attempt.Status == AttemptStatus.Failed))
+        var attempts = await db.UpdateAttempts.AsNoTracking().Where(attempt => (attempt.StartedUtc >= cutoff || attempt.ReasonCode == UpdateHistoryReconciliationService.VerifiedAfterRefresh) && (attempt.Status == AttemptStatus.Failed || attempt.Status == AttemptStatus.Succeeded)).OrderBy(attempt => attempt.StartedUtc).ToListAsync(cancellationToken);
+        foreach (var attempt in attempts.Where(attempt => attempt.Status == AttemptStatus.Failed || attempt.ReasonCode == UpdateHistoryReconciliationService.VerifiedAfterRefresh))
         {
             apps.TryGetValue(attempt.AppId, out var app);
-            var recovered = HasLaterSuccessfulAttempt(attempt, attempts) || HasObservedCompletedUpdate(attempt, app);
+            var verifiedLater = attempt.Status == AttemptStatus.Succeeded;
+            var recovered = verifiedLater || HasLaterSuccessfulAttempt(attempt, attempts);
             var appName = app?.Name ?? attempt.AppId;
             observations.Add(new ObservedOperation(
                 Fingerprint("app-update-failure", attempt.Id.ToString("N")),
                 null,
                 OperationsInboxSource.Apps,
                 OperationsInboxKind.AppUpdateFailure,
-                OperationsInboxSeverity.Error,
-                $"{appName} update failed",
-                Sanitize(attempt.ReasonMessage, 1024) ?? "The app update failed.",
+                recovered ? OperationsInboxSeverity.Info : OperationsInboxSeverity.Error,
+                verifiedLater ? $"{appName} update verified" : recovered ? $"{appName} update recovered" : $"{appName} update failed",
+                Sanitize(verifiedLater || !recovered ? attempt.ReasonMessage : $"A later update succeeded. Original attempt: {attempt.ReasonMessage}", 1024) ?? "The app update failed.",
                 BuildDetails(("Reason code", attempt.ReasonCode), ("Target", attempt.ToVersion), ("TrueNAS job", attempt.TrueNasJobId?.ToString(CultureInfo.InvariantCulture)), ("Diagnostic", attempt.ErrorDetails)),
                 attempt.Id.ToString("N"),
                 attempt.AppId,
@@ -413,29 +410,6 @@ public sealed class OperationsInboxService(
             candidate.Kind == failedAttempt.Kind &&
             candidate.Status == AttemptStatus.Succeeded &&
             candidate.StartedUtc > failedAttempt.StartedUtc);
-
-    private static bool HasObservedCompletedUpdate(UpdateAttempt attempt, AppRecord? app)
-    {
-        if (app is null ||
-            !app.IsInstalled ||
-            attempt.Kind != AttemptKind.CatalogUpgrade ||
-            attempt.ReasonCode is not ("STATE_VERIFICATION_FAILED" or "VERSION_VERIFICATION_FAILED" or "VERIFICATION_TIMEOUT") ||
-            !string.Equals(attempt.TrueNasJobState, "SUCCESS", StringComparison.OrdinalIgnoreCase) ||
-            app.LastCheckUtc is null ||
-            app.LastCheckUtc <= (attempt.EndedUtc ?? attempt.StartedUtc) ||
-            string.IsNullOrWhiteSpace(app.InstalledVersion))
-        {
-            return false;
-        }
-
-        if (string.Equals(app.InstalledVersion, attempt.ToVersion, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return !app.CatalogUpdateAvailable &&
-               !string.Equals(app.InstalledVersion, attempt.FromVersion, StringComparison.Ordinal);
-    }
 
     private async Task<ReconciliationResult> ReconcileAsync(IReadOnlyCollection<ObservedOperation> observations, ISet<string> successfulGroups, DateTime now, CancellationToken cancellationToken)
     {

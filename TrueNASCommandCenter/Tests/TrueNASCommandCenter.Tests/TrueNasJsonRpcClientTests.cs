@@ -387,20 +387,16 @@ public sealed class TrueNasJsonRpcClientTests
     }
 
     [TestMethod]
-    public async Task JobFailure_UsesCoreGetJobsDiagnosticFallback()
+    [DataRow("FAILED")]
+    [DataRow("ABORTED")]
+    [TestCategory("Regression")]
+    public async Task WaitForJobAsync_UnsuccessfulTerminalState_PreservesJobDiagnostic(string state)
     {
         var setup = await TestClientFactory.CreateAsync((transport, request) =>
         {
             var id = request.GetProperty("id").GetInt64();
-            switch (request.GetProperty("method").GetString())
-            {
-                case "core.job_wait":
-                    transport.Error(id, -32001, "Job failed");
-                    break;
-                case "core.get_jobs":
-                    transport.Respond(id, new { id = 42, state = "FAILED", error = "Image pull failed" });
-                    break;
-            }
+            Assert.AreEqual("core.get_jobs", request.GetProperty("method").GetString());
+            transport.Respond(id, new[] { new { id = 42, state, error = "Image pull failed" } });
 
             return Task.CompletedTask;
         });
@@ -409,8 +405,112 @@ public sealed class TrueNasJsonRpcClientTests
 
         var exception = await Assert.ThrowsAsync<TrueNasClientException>(() => client.WaitForJobAsync(42));
 
-        StringAssert.Contains(exception.Message, "TrueNAS job FAILED");
+        Assert.AreEqual($"JOB_{state}", exception.Code);
+        StringAssert.Contains(exception.Message, $"TrueNAS job {state}");
         StringAssert.Contains(exception.Message, "Image pull failed");
+    }
+
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task WaitForJobAsync_WaitingThenRunning_DoesNotCompleteUntilOriginalJobSucceeds()
+    {
+        var finalPoll = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pollCount = 0;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("core.get_jobs", request.GetProperty("method").GetString());
+            Assert.AreEqual(42L, request.GetProperty("params")[0][0][2].GetInt64());
+            var id = request.GetProperty("id").GetInt64();
+            pollCount++;
+            if (pollCount < 3)
+            {
+                transport.Respond(id, new[] { new { id = 42, state = pollCount == 1 ? "WAITING" : "RUNNING" } });
+            }
+            else
+            {
+                finalPoll.SetResult(id);
+            }
+
+            return Task.CompletedTask;
+        }, timeProvider: new ImmediateTimeProvider());
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var wait = client.WaitForJobAsync(42);
+        var responseId = await finalPoll.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.IsFalse(wait.IsCompleted, "A job acknowledgement or RUNNING state must not be treated as completion.");
+        setup.Transport.Respond(responseId, new[] { new { id = 42, state = "SUCCESS" } });
+        await wait;
+        Assert.AreEqual(3, pollCount);
+    }
+
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task WaitForJobAsync_CancelledWhilePolling_DoesNotContinueOrReportSuccess()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var secondPoll = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pollCount = 0;
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("core.get_jobs", request.GetProperty("method").GetString());
+            pollCount++;
+            if (pollCount == 1)
+            {
+                transport.Respond(request.GetProperty("id").GetInt64(), new[] { new { id = 42, state = "RUNNING" } });
+            }
+            else
+            {
+                secondPoll.SetResult();
+            }
+
+            return Task.CompletedTask;
+        }, timeProvider: new ImmediateTimeProvider());
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var wait = client.WaitForJobAsync(42, cancellation.Token);
+        await secondPoll.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => wait);
+        Assert.AreEqual(2, pollCount);
+    }
+
+    [TestMethod]
+    [DataRow("[]", "JOB_NOT_VISIBLE")]
+    [DataRow("[{\"id\":43,\"state\":\"SUCCESS\"}]", "JOB_NOT_VISIBLE")]
+    [DataRow("[{\"id\":42,\"state\":\"UNKNOWN\"}]", "JOB_STATE_UNKNOWN")]
+    [DataRow("[{\"id\":42,\"state\":null}]", "JOB_STATE_UNKNOWN")]
+    [DataRow("[{\"id\":42}]", "JOB_STATE_UNKNOWN")]
+    [TestCategory("Regression")]
+    public async Task WaitForJobAsync_UnverifiableJob_DoesNotReportSuccess(string response, string code)
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("core.get_jobs", request.GetProperty("method").GetString());
+            transport.Respond(request.GetProperty("id").GetInt64(), JsonSerializer.Deserialize<JsonElement>(response));
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var exception = await Assert.ThrowsAsync<TrueNasClientException>(() => client.WaitForJobAsync(42));
+
+        Assert.AreEqual(code, exception.Code);
+    }
+
+    [TestMethod]
+    [DataRow(0L)]
+    [DataRow(-1L)]
+    public async Task WaitForJobAsync_InvalidId_IsRejectedWithoutApiCall(long jobId)
+    {
+        var setup = await TestClientFactory.CreateAsync((_, _) => throw new AssertFailedException("No API call is expected."));
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.WaitForJobAsync(jobId));
     }
 
     [TestMethod]
@@ -438,6 +538,25 @@ public sealed class TrueNasJsonRpcClientTests
 
         Assert.AreEqual("first", firstResult.Single().Id);
         Assert.AreEqual("second", secondResult.Single().Id);
+    }
+
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task DisposeAsync_SharedServiceIsDisposedRepeatedly_ClosesWithoutThrowing()
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            transport.Respond(request.GetProperty("id").GetInt64(), new[] { new { id = 42, state = "SUCCESS" } });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+        await client.WaitForJobAsync(42);
+
+        await client.DisposeAsync();
+        await client.DisposeAsync();
+
+        Assert.AreNotEqual(WebSocketState.Open, setup.Transport.State);
     }
 
     /// <summary>Verifies that app lifecycle operations use the expected TrueNAS job methods.</summary>
@@ -486,9 +605,9 @@ public sealed class TrueNasJsonRpcClientTests
                     capturedPayload = request.GetProperty("params")[0].Clone();
                     transport.Respond(id, 73L);
                     break;
-                case "core.job_wait":
-                    waitedForJob = request.GetProperty("params")[0].GetInt64() == 73L;
-                    transport.Respond(id, new { });
+                case "core.get_jobs":
+                    waitedForJob = request.GetProperty("params")[0][0][2].GetInt64() == 73L;
+                    transport.Respond(id, new[] { new { id = 73, state = "SUCCESS" } });
                     break;
             }
 

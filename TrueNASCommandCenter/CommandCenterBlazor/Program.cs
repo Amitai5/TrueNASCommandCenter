@@ -65,6 +65,7 @@ builder.Services.AddSingleton<IDrivePoolHealthService, DrivePoolHealthService>()
 builder.Services.AddScoped<DashboardOverviewService>();
 builder.Services.AddScoped<DashboardRefreshService>();
 builder.Services.AddSingleton<IOperationsInboxService, OperationsInboxService>();
+builder.Services.AddSingleton<UpdateHistoryReconciliationService>();
 builder.Services.AddSingleton<AppResourceMonitorService>();
 builder.Services.AddSingleton<IAppResourceMonitor>(services => services.GetRequiredService<AppResourceMonitorService>());
 builder.Services.AddSingleton<SystemPerformanceMonitorService>();

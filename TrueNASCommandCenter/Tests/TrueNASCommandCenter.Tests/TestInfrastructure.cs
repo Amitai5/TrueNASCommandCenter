@@ -307,7 +307,7 @@ internal sealed class SequenceWebSocketTransportFactory(params FakeWebSocketTran
 
 internal static class TestClientFactory
 {
-    public static async Task<(TrueNasJsonRpcClient Client, FakeWebSocketTransport Transport, TestDatabase Database)> CreateAsync(Func<FakeWebSocketTransport, JsonElement, Task>? responder = null, ILogger<TrueNasJsonRpcClient>? logger = null)
+    public static async Task<(TrueNasJsonRpcClient Client, FakeWebSocketTransport Transport, TestDatabase Database)> CreateAsync(Func<FakeWebSocketTransport, JsonElement, Task>? responder = null, ILogger<TrueNasJsonRpcClient>? logger = null, TimeProvider? timeProvider = null)
     {
         var database = new TestDatabase();
         var protector = database.CreateProtector();
@@ -345,7 +345,7 @@ internal static class TestClientFactory
             new FakeWebSocketTransportFactory(transport),
             new SettingsService(database, protector, TestDatabase.TrueNasEndpoint),
             database,
-            new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)),
+            timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero)),
             logger ?? NullLogger<TrueNasJsonRpcClient>.Instance);
         return (client, transport, database);
     }

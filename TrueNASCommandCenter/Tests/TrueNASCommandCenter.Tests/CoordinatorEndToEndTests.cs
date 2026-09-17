@@ -187,6 +187,30 @@ public sealed class CoordinatorEndToEndTests
     }
 
     [TestMethod]
+    [DataRow("JOB_FAILED", "FAILED")]
+    [DataRow("JOB_ABORTED", "ABORTED")]
+    [DataRow("JOB_NOT_VISIBLE", "UNKNOWN")]
+    [DataRow("TIMEOUT", "UNKNOWN")]
+    [TestCategory("Regression")]
+    public async Task CheckAndUpdate_JobWaitDoesNotSucceed_PreservesActualJobStateAndDoesNotVerifyEarly(string errorCode, string jobState)
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        await SeedPoliciesAsync(database);
+        var trueNas = new FakeTrueNasClient { CatalogJobFailureCode = errorCode };
+        var coordinator = CreateCoordinator(database, trueNas);
+
+        await coordinator.RunAsync(RunTrigger.CheckAndUpdateNow, executeUpdates: true);
+
+        await using var db = await database.CreateDbContextAsync();
+        var attempt = await db.UpdateAttempts.SingleAsync(item => item.AppId == "catalog");
+        Assert.AreEqual(AttemptStatus.Failed, attempt.Status);
+        Assert.AreEqual(errorCode, attempt.ReasonCode);
+        Assert.AreEqual(jobState, attempt.TrueNasJobState);
+        Assert.AreEqual(0, trueNas.CatalogVerificationReads, "App verification must not start before the job succeeds.");
+    }
+
+    [TestMethod]
     [DataRow(5, "busy")]
     [DataRow(6, "busy")]
     [DataRow(8, "not writable")]
@@ -213,7 +237,7 @@ public sealed class CoordinatorEndToEndTests
     {
         var time = timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 8, 12, 18, 0, 0, TimeSpan.Zero));
         var settings = database.CreateSettingsService();
-        var discovery = discoveryOverride ?? new AppDiscoveryService(trueNas, database, time);
+        var discovery = discoveryOverride ?? new AppDiscoveryService(trueNas, database, time, new UpdateHistoryReconciliationService(database));
         var executor = new UpdateExecutor(
             trueNas,
             discovery,
@@ -273,6 +297,7 @@ public sealed class CoordinatorEndToEndTests
         private long nextJob;
 
         public bool FailCatalogJob { get; init; }
+        public string? CatalogJobFailureCode { get; init; }
         public bool FailCatalogForServer { get; init; }
         public bool WriteAccess { get; init; } = true;
         public int CatalogVerificationStaleReads { get; init; }
@@ -380,6 +405,11 @@ public sealed class CoordinatorEndToEndTests
                 if (appId == "catalog" && FailCatalogJob)
                 {
                     throw new TrueNasClientException("JOB_FAILED", "The catalog job failed.");
+                }
+
+                if (appId == "catalog" && CatalogJobFailureCode is not null)
+                {
+                    throw new TrueNasClientException(CatalogJobFailureCode, "The job wait did not succeed.");
                 }
 
                 var current = apps[appId];

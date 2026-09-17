@@ -65,6 +65,10 @@ public interface ITrueNasClient
     /// <summary>Waits for a TrueNAS job to finish and throws when the job fails.</summary>
     /// <param name="jobId">The TrueNAS job identifier.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <summary>Waits for the original TrueNAS job to succeed, throwing for failed, aborted, or unverifiable jobs.</summary>
+    /// <param name="jobId">The positive identifier returned when starting the operation.</param>
+    /// <param name="cancellationToken">A token that bounds the wait and cancels polling.</param>
+    /// <returns>A task that completes only after the job reports success.</returns>
     Task WaitForJobAsync(long jobId, CancellationToken cancellationToken = default);
     /// <summary>Sends an email using the TrueNAS mail service.</summary>
     /// <param name="message">The message and optional explicit recipients.</param>

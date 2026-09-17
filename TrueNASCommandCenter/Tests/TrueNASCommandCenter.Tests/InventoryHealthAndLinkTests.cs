@@ -22,7 +22,8 @@ public sealed class InventoryHealthAndLinkTests
 
         var client = new InventoryTrueNasClient([AppWithWorkloads()]);
         var now = new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero);
-        var service = new AppDiscoveryService(client, database, new FixedTimeProvider(now));
+        using var reconciliation = new UpdateHistoryReconciliationService(database);
+        var service = new AppDiscoveryService(client, database, new FixedTimeProvider(now), reconciliation);
 
         var result = await service.RefreshAsync();
 
@@ -50,7 +51,8 @@ public sealed class InventoryHealthAndLinkTests
     {
         await using var database = new TestDatabase();
         await database.InitializeAsync();
-        var service = new AppDiscoveryService(new InventoryTrueNasClient([AppWithWorkloads()]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)));
+        using var reconciliation = new UpdateHistoryReconciliationService(database);
+        var service = new AppDiscoveryService(new InventoryTrueNasClient([AppWithWorkloads()]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)), reconciliation);
 
         await service.RefreshAsync();
         await service.RefreshAsync();
@@ -72,7 +74,8 @@ public sealed class InventoryHealthAndLinkTests
             seed.Apps.Add(new AppRecord { Id = "immich", Name = "Immich", State = "RUNNING", HealthState = AppHealthState.Degraded, LastSeenUtc = DateTime.UtcNow });
             await seed.SaveChangesAsync();
         }
-        var service = new AppDiscoveryService(new InventoryTrueNasClient([AppWithWorkloads()]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)));
+        using var reconciliation = new UpdateHistoryReconciliationService(database);
+        var service = new AppDiscoveryService(new InventoryTrueNasClient([AppWithWorkloads()]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)), reconciliation);
 
         await service.RefreshAsync();
 
@@ -94,7 +97,8 @@ public sealed class InventoryHealthAndLinkTests
         {
             ActiveWorkloads = Json($$"""{"container_details":[{"id":"container-1","service_name":"permissions","image":"example.test/permissions:latest","state":"{{containerState}}","port_config":[],"volume_mounts":[]}]}""")
         };
-        var service = new AppDiscoveryService(new InventoryTrueNasClient([app]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)));
+        using var reconciliation = new UpdateHistoryReconciliationService(database);
+        var service = new AppDiscoveryService(new InventoryTrueNasClient([app]), database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 21, 0, 0, TimeSpan.Zero)), reconciliation);
 
         await service.RefreshAsync();
 

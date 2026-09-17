@@ -286,7 +286,12 @@ public sealed class UpdateExecutor(
         attempt.EndedUtc = timeProvider.GetUtcNow().UtcDateTime;
         attempt.ReasonCode = code;
         attempt.ReasonMessage = message;
-        attempt.TrueNasJobState ??= "FAILED";
+        attempt.TrueNasJobState ??= code switch
+        {
+            "JOB_FAILED" => "FAILED",
+            "JOB_ABORTED" => "ABORTED",
+            _ => "UNKNOWN"
+        };
         attempt.ErrorDetails = exception is null ? null : exception.GetType().Name;
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

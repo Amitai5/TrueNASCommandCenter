@@ -1,5 +1,6 @@
 @page "/history"
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject UpdateHistoryReconciliationService HistoryReconciliation
 
 <PageTitle>History · TrueNAS Command Center</PageTitle>
 
@@ -177,6 +178,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        await HistoryReconciliation.ReconcileAsync();
         await LoadAsync();
     }
 

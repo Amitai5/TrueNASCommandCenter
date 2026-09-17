@@ -41,6 +41,7 @@ public sealed class TrueNasJsonRpcClient(
     private bool hasWriteAccess;
     private IReadOnlyList<string> availableRoles = [];
     private long nextRequestId;
+    private int disposalStarted;
 
     public bool? HasWriteAccess => rolesDetected ? hasWriteAccess : null;
 
@@ -302,26 +303,38 @@ public sealed class TrueNasJsonRpcClient(
             [appId, new { app_version = targetVersion, rollback_snapshot = true }],
             cancellationToken);
 
+    /// <inheritdoc />
     public async Task WaitForJobAsync(long jobId, CancellationToken cancellationToken = default)
     {
-        await EnsureConnectedAsync(cancellationToken);
-        try
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(jobId);
+
+        // core.job_wait is itself a job. Its acknowledgement is not evidence that
+        // the original operation finished; query that operation's terminal state.
+        while (true)
         {
-            _ = await SendRequestAsync<JsonElement>(
-                "core.job_wait",
-                [jobId],
-                cancellationToken,
-                disableTimeout: true);
-        }
-        catch (TrueNasClientException exception)
-        {
-            var diagnostic = await TryGetJobDiagnosticAsync(jobId, cancellationToken);
-            if (diagnostic is not null)
+            cancellationToken.ThrowIfCancellationRequested();
+            var jobs = await CallAsync<IReadOnlyList<JobCompletionStatus>>("core.get_jobs", [new object[] { new object[] { "id", "=", jobId } }, new { select = new[] { "id", "state", "error" } }], cancellationToken);
+            var job = jobs.SingleOrDefault(candidate => candidate.Id == jobId);
+            if (job is null)
             {
-                throw new TrueNasClientException(exception.Code, diagnostic, exception);
+                throw new TrueNasClientException("JOB_NOT_VISIBLE", $"TrueNAS job {jobId} is no longer visible to this API session. Its completion could not be verified.");
             }
 
-            throw;
+            var state = job.State?.Trim().ToUpperInvariant();
+            switch (state)
+            {
+                case "SUCCESS":
+                    return;
+                case "FAILED":
+                case "ABORTED":
+                    throw new TrueNasClientException($"JOB_{state}", Sanitize($"TrueNAS job {state}: {job.Error ?? "No additional diagnostic was returned."}"));
+                case "WAITING":
+                case "RUNNING":
+                    await Task.Delay(TimeSpan.FromSeconds(2), timeProvider, cancellationToken);
+                    break;
+                default:
+                    throw new TrueNasClientException("JOB_STATE_UNKNOWN", $"TrueNAS job {jobId} did not report a recognized state. Its completion could not be verified.");
+            }
         }
     }
 
@@ -697,12 +710,7 @@ public sealed class TrueNasJsonRpcClient(
         }
     }
 
-    private async Task<T> SendRequestAsync<T>(
-        string method,
-        object?[] parameters,
-        CancellationToken cancellationToken,
-        bool disableTimeout = false,
-        string? diagnosticId = null)
+    private async Task<T> SendRequestAsync<T>(string method, object?[] parameters, CancellationToken cancellationToken, string? diagnosticId = null)
     {
         var activeTransport = transport;
         if (activeTransport?.State != WebSocketState.Open)
@@ -745,9 +753,7 @@ public sealed class TrueNasJsonRpcClient(
                 sendGate.Release();
             }
 
-            var result = disableTimeout
-                ? await completion.Task.WaitAsync(cancellationToken)
-                : await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+            var result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
             logger.LogDebug(
                 "TrueNAS RPC request {RequestId} for method {Method} completed. DiagnosticId={DiagnosticId}",
                 id,
@@ -868,37 +874,6 @@ public sealed class TrueNasJsonRpcClient(
             {
                 request.Completion.TrySetException(error);
             }
-        }
-    }
-
-    private async Task<string?> TryGetJobDiagnosticAsync(long jobId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var job = await CallAsync<JsonElement>(
-                "core.get_jobs",
-                [
-                    new object[] { new object[] { "id", "=", jobId } },
-                    new Dictionary<string, object?> { ["get"] = true }
-                ],
-                cancellationToken);
-            if (job.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            var state = job.TryGetProperty("state", out var stateElement)
-                ? stateElement.GetString()
-                : "FAILED";
-            var error = job.TryGetProperty("error", out var errorElement)
-                ? errorElement.GetString()
-                : null;
-            return Sanitize($"TrueNAS job {state}: {error ?? "No additional diagnostic was returned."}");
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogDebug(exception, "Unable to retrieve diagnostic details for TrueNAS job {JobId}", jobId);
-            return null;
         }
     }
 
@@ -1267,8 +1242,17 @@ public sealed class TrueNasJsonRpcClient(
 
     private sealed record PendingRequest(string Method, string? DiagnosticId, TaskCompletionSource<JsonElement> Completion);
 
+    private sealed record JobCompletionStatus([property: JsonPropertyName("id")] long Id, [property: JsonPropertyName("state")] string? State, [property: JsonPropertyName("error")] string? Error);
+
+    /// <summary>Closes the shared API client once, including when multiple service aliases dispose it.</summary>
+    /// <returns>A task that completes when client resources have been released.</returns>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref disposalStarted, 1) != 0)
+        {
+            return;
+        }
+
         await ResetConnectionAsync();
         connectionGate.Dispose();
         sendGate.Dispose();

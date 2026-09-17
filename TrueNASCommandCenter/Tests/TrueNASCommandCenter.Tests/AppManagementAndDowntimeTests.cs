@@ -19,7 +19,8 @@ public sealed class AppManagementAndDowntimeTests
         var trueNas = new LifecycleTrueNasClient { State = "STOPPED" };
         var notifications = new NoopNotificationDispatcher();
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero));
-        var discovery = new AppDiscoveryService(trueNas, database, time);
+        using var reconciliation = new UpdateHistoryReconciliationService(database);
+        var discovery = new AppDiscoveryService(trueNas, database, time, reconciliation);
         var management = new AppManagementService(trueNas, database, time, NullLogger<AppManagementService>.Instance);
         var health = new AppHealthMonitorService(database, management, notifications, time);
 
@@ -81,7 +82,8 @@ public sealed class AppManagementAndDowntimeTests
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero));
         var service = new AppManagementService(trueNas, database, time, NullLogger<AppManagementService>.Instance);
         var notifications = new NoopNotificationDispatcher();
-        var discovery = new AppDiscoveryService(trueNas, database, time);
+        using var reconciliation = new UpdateHistoryReconciliationService(database);
+        var discovery = new AppDiscoveryService(trueNas, database, time, reconciliation);
 
         await service.ExecuteAsync("immich", AppLifecycleAction.Stop);
         await discovery.DiscoverAsync();

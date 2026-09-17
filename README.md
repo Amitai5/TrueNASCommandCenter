@@ -304,7 +304,8 @@ Back up the external key separately from `/data`. Losing it makes saved secrets 
 - Transitional states are skipped.
 - Version parsing fails closed outside Any Version scope.
 - Persistence failure stops unattended execution before an app lifecycle call.
-- TrueNAS job success is followed by state, version, and image verification.
+- TrueNAS jobs are polled by their original job ID until they actually succeed; an acknowledgement is not completion. State, version, and image verification then wait through temporary restart states.
+- A later inventory refresh can correct a premature catalog-update verification failure when the requested version is running and no intervening operation could have installed it. History retains the original diagnostic, corrects run totals, and resolves the Inbox entry without resending notifications. Genuine job failures and ambiguous retries remain historical failures.
 
 Host networking is intentionally enabled so this single-purpose manager can reach TrueNAS middleware. Keep privileged mode disabled, do not mount `/var/run/docker.sock`, retain the dropped capabilities and read-only root filesystem, and grant write access only to `/data`.
 
