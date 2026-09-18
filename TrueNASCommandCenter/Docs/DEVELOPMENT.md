@@ -100,9 +100,9 @@ Do not add secrets, server-specific URLs, schedules, policies, recipients, or ho
 - Catalog metadata, sanitized README text, safe external links, and optional public active-deployment telemetry are mapped into immutable discovery models before reaching Blazor components. Telemetry has its own bounded response, timeout, and cache and never gates catalog availability.
 - Docker Hub custom-app discovery is an independent outbound-HTTPS integration. Its Hot apps and text searches enforce Linux plus Docker Official Image or Verified Publisher constraints at the service boundary. It uses bounded anonymous search, repository, and tag requests; validates repository identities and native filter values; sanitizes overview text; limits external logo hosts; and maps public data into immutable models before rendering.
 - Complete inventory refresh and missing-app reconciliation always run before update evaluation.
-- Per-app health incidents persist a single recovery-attempt marker so scheduled retries cannot loop.
+- Per-app health incidents persist a single recovery-attempt marker until fresh inventory confirms `RUNNING` and healthy workloads. Transitional/unknown states and a successful lifecycle return do not clear it. A persisted 15-minute cooldown between automatic recovery jobs also bounds flapping across incidents; deferred preflight checks without a job do not consume the cooldown.
 - GitHub enrichment accepts only canonical public `github.com` sources, uses ETags and a 24-hour SQLite cache, and never gates TrueNAS operations.
-- Scheduled and manual update executions are serialized.
+- Scheduled/manual updates, inventory health evaluation, and manual lifecycle actions share `RunLock`. Automatic recovery runs inside the coordinator's existing lease and must not reacquire it. Health evaluation skips apps with unfinished update attempts rather than interrupting an operation whose completion is uncertain.
 - Policy evaluation fails closed when app state, semantic version parsing, or persistence is uncertain.
 - API, Authorization, and secret-header values are encrypted before persistence.
 
@@ -159,6 +159,10 @@ Execution and jobs (`APPS_WRITE` for lifecycle methods; authenticated core metho
 API DTOs are intentionally narrow. Validate the installed TrueNAS API schemas when adding support for a new TrueNAS release.
 
 `core.job_wait` is itself a job, so its acknowledgement must not be taken as proof that the original upgrade completed. Poll only the original job's ID; missing or unrecognized job state is not success. Post-job verification waits through transient stopped/deploying states within the configured timeout.
+
+Lifecycle jobs use the same completion check and a bounded, injected-clock state-verification loop. Automatic recovery rechecks live state before acting: stopped/crashed apps receive a start only, already healthy or transitional apps are deferred, and degraded running apps receive an ordered stop/wait/start/wait. Keep successful job completion separate from successful application health in the audit. `AppRecoverySafetyTests` covers transitional states, notification deduplication, cooldown boundaries, overlapping actions, job/state timeouts, and cancellation using in-memory SQLite and controlled time.
+
+An explicitly reported pull-rate-limit error from a failed TrueNAS job maps to `REGISTRY_RATE_LIMIT`, retains job state `FAILED`, includes registry-authentication guidance, and stops the remaining update batch. Do not classify a generic HTTP 429 or an unrelated image pull/authentication failure as exhausted pull quota. This classification uses existing job diagnostics; it does not read, store, or change registry credentials and adds no API-role requirement. Notification consumers may receive the new reason code; the notification schema is unchanged.
 
 `UpdateHistoryReconciliationService` corrects premature catalog verification failures from fresh inventory only when the requested version is running, the attempt recorded job success, and no later operation could explain that version. It preserves the original diagnostic and observation timestamps, recalculates finished run totals, and never sends retrospective notifications. Inbox observations retain the same identity and become resolved informational history. Confirmed job failures and ambiguous later retries are not rewritten as successful attempts.
 

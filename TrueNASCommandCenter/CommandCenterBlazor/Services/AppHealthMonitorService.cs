@@ -16,6 +16,8 @@ public interface IAppHealthMonitorService
 
 public sealed class AppHealthMonitorService(IDbContextFactory<AppDbContext> dbFactory, IAppManagementService appManagementService, INotificationDispatcher notifications, TimeProvider timeProvider) : IAppHealthMonitorService
 {
+    private static readonly TimeSpan RecoveryCooldown = TimeSpan.FromMinutes(15);
+
     /// <inheritdoc cref="IAppHealthMonitorService.EvaluateAsync"/>
     public async Task<AppHealthEvaluationResult> EvaluateAsync(IReadOnlyCollection<string> appIds, CancellationToken cancellationToken = default)
     {
@@ -48,12 +50,17 @@ public sealed class AppHealthMonitorService(IDbContextFactory<AppDbContext> dbFa
 
             restartAttempts++;
             var result = await appManagementService.ExecuteAutomaticRecoveryAsync(appId, cancellationToken);
-            await DispatchAsync(transition.App, result.Success ? NotificationEventType.AppRecoverySucceeded : NotificationEventType.AppRecoveryFailed, transition.IncidentId, result.Success ? "APP_RECOVERY_SUCCEEDED" : result.ErrorCode ?? "APP_RECOVERY_FAILED", result.Message, cancellationToken);
-            if (result.Success)
+            if (!result.Success && result.ErrorCode == "RECOVERY_DEFERRED")
             {
-                recovered++;
-                await ClearIncidentAfterRecoveryAsync(appId, cancellationToken);
+                await ReleaseRecoveryClaimAsync(appId, transition.IncidentId, cancellationToken);
             }
+            else if (!result.Success)
+            {
+                await DispatchAsync(transition.App, NotificationEventType.AppRecoveryFailed, transition.IncidentId, result.ErrorCode ?? "APP_RECOVERY_FAILED", result.Message, cancellationToken);
+            }
+
+            // A successful lifecycle call is not a new inventory observation. Keep the incident
+            // and its one-attempt guard until a subsequent refresh confirms the app is healthy.
         }
 
         return new AppHealthEvaluationResult(checkedCount, incidentsOpened, recovered, restartAttempts);
@@ -65,12 +72,25 @@ public sealed class AppHealthMonitorService(IDbContextFactory<AppDbContext> dbFa
         var app = await db.Apps.SingleAsync(item => item.Id == appId, cancellationToken);
         var wasActive = app.HealthIncidentId is not null;
         var incidentId = app.HealthIncidentId ?? Guid.NewGuid();
+        var operationInProgress = await db.UpdateAttempts.AnyAsync(attempt => attempt.AppId == appId && attempt.EndedUtc == null && (attempt.Status == AttemptStatus.Running || attempt.Status == AttemptStatus.Verifying), cancellationToken);
+        if (!app.IsInstalled || operationInProgress)
+        {
+            return new HealthTransition(app, incidentId, false, false, false);
+        }
+
         var unhealthy = app.HealthState is AppHealthState.Stopped or AppHealthState.Degraded;
         var monitorsDowntime = app.DowntimeAction != DowntimeAction.Ignore && !app.MaintenanceMode;
         var opened = unhealthy && monitorsDowntime && !wasActive;
-        var recovered = !unhealthy && wasActive && !app.MaintenanceMode;
+        var freshlyHealthy = app.HealthState == AppHealthState.Running && string.Equals(app.State, "RUNNING", StringComparison.OrdinalIgnoreCase) &&
+            (app.RecoveryAttemptedUtc is null || app.LastHealthCheckUtc > app.RecoveryAttemptedUtc);
+        var recovered = freshlyHealthy && wasActive && !app.MaintenanceMode;
         var maintenanceClearsIncident = app.MaintenanceMode && wasActive;
         var shouldRestart = unhealthy && monitorsDowntime && app.DowntimeAction == DowntimeAction.RestartAndNotify && app.RecoveryAttemptedUtc is null;
+        if (shouldRestart)
+        {
+            var cooldownStart = timeProvider.GetUtcNow().UtcDateTime - RecoveryCooldown;
+            shouldRestart = !await db.UpdateAttempts.AnyAsync(attempt => attempt.AppId == appId && attempt.Kind == AttemptKind.AutomaticRecovery && attempt.TrueNasJobId != null && (attempt.EndedUtc == null || attempt.EndedUtc > cooldownStart), cancellationToken);
+        }
         if (opened)
         {
             app.HealthIncidentId = incidentId;
@@ -93,15 +113,15 @@ public sealed class AppHealthMonitorService(IDbContextFactory<AppDbContext> dbFa
         return new HealthTransition(app, incidentId, opened, recovered, shouldRestart);
     }
 
-    private async Task ClearIncidentAfterRecoveryAsync(string appId, CancellationToken cancellationToken)
+    private async Task ReleaseRecoveryClaimAsync(string appId, Guid incidentId, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var app = await db.Apps.SingleAsync(item => item.Id == appId, cancellationToken);
-        app.HealthIncidentId = null;
-        app.RecoveryAttemptedUtc = null;
-        app.DowntimeNotificationActive = false;
-        app.HealthState = AppHealthState.Running;
-        app.HealthMessage = "The app is running after one automatic recovery attempt.";
+        if (app.HealthIncidentId == incidentId)
+        {
+            app.RecoveryAttemptedUtc = null;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

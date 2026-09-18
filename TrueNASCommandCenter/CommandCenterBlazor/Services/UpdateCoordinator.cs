@@ -476,6 +476,7 @@ public sealed class UpdateCoordinator(
             "CONNECTION_CLOSED" or
             "AUTHENTICATION_FAILED" or
             "TLS_FAILURE" or
+            "REGISTRY_RATE_LIMIT" or
             "TIMEOUT";
 
     private static string Truncate(string value) => value.Length <= 1024 ? value : value[..1024];

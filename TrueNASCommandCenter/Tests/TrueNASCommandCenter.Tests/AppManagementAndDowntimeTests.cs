@@ -21,7 +21,7 @@ public sealed class AppManagementAndDowntimeTests
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero));
         using var reconciliation = new UpdateHistoryReconciliationService(database);
         var discovery = new AppDiscoveryService(trueNas, database, time, reconciliation);
-        var management = new AppManagementService(trueNas, database, time, NullLogger<AppManagementService>.Instance);
+        var management = new AppManagementService(trueNas, database, time, NullLogger<AppManagementService>.Instance, new RunLock());
         var health = new AppHealthMonitorService(database, management, notifications, time);
 
         await discovery.DiscoverAsync();
@@ -55,7 +55,7 @@ public sealed class AppManagementAndDowntimeTests
         await database.InitializeAsync();
         await SeedAppAsync(database, notifyOnDowntime: true, downtimeNotificationActive: true);
         var trueNas = new LifecycleTrueNasClient();
-        var service = new AppManagementService(trueNas, database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero)), NullLogger<AppManagementService>.Instance);
+        var service = new AppManagementService(trueNas, database, new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero)), NullLogger<AppManagementService>.Instance, new RunLock());
 
         var result = await service.ExecuteAsync("immich", action);
 
@@ -80,7 +80,7 @@ public sealed class AppManagementAndDowntimeTests
         await SeedAppAsync(database, notifyOnDowntime: true);
         var trueNas = new LifecycleTrueNasClient();
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero));
-        var service = new AppManagementService(trueNas, database, time, NullLogger<AppManagementService>.Instance);
+        var service = new AppManagementService(trueNas, database, time, NullLogger<AppManagementService>.Instance, new RunLock());
         var notifications = new NoopNotificationDispatcher();
         using var reconciliation = new UpdateHistoryReconciliationService(database);
         var discovery = new AppDiscoveryService(trueNas, database, time, reconciliation);

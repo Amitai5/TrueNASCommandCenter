@@ -288,7 +288,7 @@ public sealed class UpdateExecutor(
         attempt.ReasonMessage = message;
         attempt.TrueNasJobState ??= code switch
         {
-            "JOB_FAILED" => "FAILED",
+            "JOB_FAILED" or "REGISTRY_RATE_LIMIT" => "FAILED",
             "JOB_ABORTED" => "ABORTED",
             _ => "UNKNOWN"
         };

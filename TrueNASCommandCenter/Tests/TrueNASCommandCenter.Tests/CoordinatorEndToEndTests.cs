@@ -188,6 +188,7 @@ public sealed class CoordinatorEndToEndTests
 
     [TestMethod]
     [DataRow("JOB_FAILED", "FAILED")]
+    [DataRow("REGISTRY_RATE_LIMIT", "FAILED")]
     [DataRow("JOB_ABORTED", "ABORTED")]
     [DataRow("JOB_NOT_VISIBLE", "UNKNOWN")]
     [DataRow("TIMEOUT", "UNKNOWN")]
@@ -208,6 +209,33 @@ public sealed class CoordinatorEndToEndTests
         Assert.AreEqual(errorCode, attempt.ReasonCode);
         Assert.AreEqual(jobState, attempt.TrueNasJobState);
         Assert.AreEqual(0, trueNas.CatalogVerificationReads, "App verification must not start before the job succeeds.");
+    }
+
+    /// <summary>Verifies that a shared registry quota failure stops later updates before they disrupt other apps.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    [TestCategory("Regression")]
+    public async Task CheckAndUpdate_RegistryPullLimit_StopsRemainingUpdatesAndRecordsRealFailure()
+    {
+        await using var database = new TestDatabase();
+        await database.InitializeAsync();
+        await SeedPoliciesAsync(database);
+        var trueNas = new FakeTrueNasClient { CatalogJobFailureCode = "REGISTRY_RATE_LIMIT" };
+        var coordinator = CreateCoordinator(database, trueNas);
+
+        var result = await coordinator.RunAsync(RunTrigger.CheckAndUpdateNow, executeUpdates: true);
+
+        Assert.AreEqual(RunStatus.Failed, result.Status);
+        Assert.AreEqual(1, result.Failed);
+        Assert.AreEqual(0, result.Succeeded);
+        CollectionAssert.AreEqual(new[] { "catalog" }, trueNas.StartOrder);
+        await using var db = await database.CreateDbContextAsync();
+        var failure = await db.UpdateAttempts.SingleAsync(attempt => attempt.AppId == "catalog");
+        Assert.AreEqual("REGISTRY_RATE_LIMIT", failure.ReasonCode);
+        Assert.AreEqual("FAILED", failure.TrueNasJobState);
+        var skipped = await db.UpdateAttempts.SingleAsync(attempt => attempt.AppId == "image");
+        Assert.AreEqual(AttemptStatus.Skipped, skipped.Status);
+        Assert.AreEqual("SERVER_CONDITION", skipped.ReasonCode);
     }
 
     [TestMethod]

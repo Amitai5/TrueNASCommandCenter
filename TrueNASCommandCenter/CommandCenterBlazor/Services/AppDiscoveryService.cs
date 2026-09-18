@@ -129,7 +129,7 @@ public sealed class AppDiscoveryService(ITrueNasClient trueNasClient, IDbContext
         app.LastCheckUtc = now;
         MapMetadata(app, source.Metadata);
         ReplaceWorkloads(db, app, source);
-        app.HealthState = DetermineHealth(app, source.ActiveWorkloads);
+        app.HealthState = DetermineHealth(app.State, source.ActiveWorkloads, app.MaintenanceMode);
         app.LastHealthCheckUtc = now;
         app.HealthMessage = HealthMessage(app.HealthState);
         SetStatus(app);
@@ -309,19 +309,19 @@ public sealed class AppDiscoveryService(ITrueNasClient trueNasClient, IDbContext
         return result;
     }
 
-    private static Domain.AppHealthState DetermineHealth(Domain.AppRecord app, JsonElement workloads)
+    internal static Domain.AppHealthState DetermineHealth(string state, JsonElement workloads, bool maintenanceMode = false)
     {
-        if (app.MaintenanceMode)
+        if (maintenanceMode)
         {
             return Domain.AppHealthState.Maintenance;
         }
 
-        if (IsDown(app.State))
+        if (IsDown(state))
         {
             return Domain.AppHealthState.Stopped;
         }
 
-        if (!string.Equals(app.State, "RUNNING", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(state, "RUNNING", StringComparison.OrdinalIgnoreCase))
         {
             return Domain.AppHealthState.Unknown;
         }
@@ -340,7 +340,7 @@ public sealed class AppDiscoveryService(ITrueNasClient trueNasClient, IDbContext
         return state is not null && (state.Equals("CRASHED", StringComparison.OrdinalIgnoreCase) || state.Equals("FAILED", StringComparison.OrdinalIgnoreCase) || state.Equals("ERROR", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string HealthMessage(Domain.AppHealthState state) => state switch
+    internal static string HealthMessage(Domain.AppHealthState state) => state switch
     {
         Domain.AppHealthState.Running => "TrueNAS reports the app running. Completed one-shot containers may remain exited.",
         Domain.AppHealthState.Degraded => "The app is running, but TrueNAS reports at least one failed container.",

@@ -410,6 +410,39 @@ public sealed class TrueNasJsonRpcClientTests
         StringAssert.Contains(exception.Message, "Image pull failed");
     }
 
+    /// <summary>Verifies that registry quota failures have actionable diagnostics without masking other failures.</summary>
+    /// <param name="diagnostic">The original TrueNAS job error.</param>
+    /// <param name="code">The expected error classification.</param>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    [DataRow("[EFAULT] Failed 'up' action for 'immich' app. It appears you have reached your pull rate limit.", "REGISTRY_RATE_LIMIT")]
+    [DataRow("toomanyrequests: You have reached your unauthenticated pull rate limit.", "REGISTRY_RATE_LIMIT")]
+    [DataRow("PULL RATE LIMIT exceeded", "REGISTRY_RATE_LIMIT")]
+    [DataRow("Image pull failed: access denied", "JOB_FAILED")]
+    [DataRow("429 Too Many Requests from an application endpoint", "JOB_FAILED")]
+    [TestCategory("Regression")]
+    public async Task WaitForJobAsync_RegistryPullLimit_ReportsSpecificRemediation(string diagnostic, string code)
+    {
+        var setup = await TestClientFactory.CreateAsync((transport, request) =>
+        {
+            Assert.AreEqual("core.get_jobs", request.GetProperty("method").GetString());
+            transport.Respond(request.GetProperty("id").GetInt64(), new[] { new { id = 42, state = "FAILED", error = diagnostic } });
+            return Task.CompletedTask;
+        });
+        await using var client = setup.Client;
+        await using var database = setup.Database;
+
+        var exception = await Assert.ThrowsAsync<TrueNasClientException>(() => client.WaitForJobAsync(42));
+
+        Assert.AreEqual(code, exception.Code);
+        StringAssert.Contains(exception.Message, diagnostic);
+        if (code == "REGISTRY_RATE_LIMIT")
+        {
+            StringAssert.Contains(exception.Message, "Sign-in to a Docker registry");
+            StringAssert.Contains(exception.Message, "quota to reset");
+        }
+    }
+
     [TestMethod]
     [TestCategory("Regression")]
     public async Task WaitForJobAsync_WaitingThenRunning_DoesNotCompleteUntilOriginalJobSucceeds()

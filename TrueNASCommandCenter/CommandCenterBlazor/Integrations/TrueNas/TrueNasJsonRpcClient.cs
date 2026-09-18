@@ -325,6 +325,8 @@ public sealed class TrueNasJsonRpcClient(
             {
                 case "SUCCESS":
                     return;
+                case "FAILED" when job.Error?.Contains("pull rate limit", StringComparison.OrdinalIgnoreCase) == true:
+                    throw new TrueNasClientException("REGISTRY_RATE_LIMIT", Sanitize($"Image pull rate limit reached (TrueNAS job {jobId}). Configure registry credentials under TrueNAS Apps > Configuration > Sign-in to a Docker registry, and wait for the quota to reset before retrying. TrueNAS diagnostic: {job.Error}"));
                 case "FAILED":
                 case "ABORTED":
                     throw new TrueNasClientException($"JOB_{state}", Sanitize($"TrueNAS job {state}: {job.Error ?? "No additional diagnostic was returned."}"));
